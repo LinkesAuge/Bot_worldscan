@@ -68,25 +68,25 @@ class ConfigManager:
             "rect_color_r": "170",
             "rect_color_g": "0",
             "rect_color_b": "255",
-            "rect_thickness": "8",  # Updated
-            "rect_scale": "2.0",  # Updated
+            "rect_thickness": "8",
+            "rect_scale": "2.0",
             "font_color_r": "255",
             "font_color_g": "0",
             "font_color_b": "0",
-            "font_size": "24",  # Updated
-            "text_thickness": "2",  # Updated
+            "font_size": "24",
+            "text_thickness": "2",
             "cross_color_r": "255",
             "cross_color_g": "85",
             "cross_color_b": "127",
             "cross_size": "28",
-            "cross_thickness": "5",  # Updated
-            "cross_scale": "1.0"  # Updated
+            "cross_thickness": "5",
+            "cross_scale": "1.0"
         }
         
         self.config["PatternMatching"] = {
             "active": "true",  # Default to ON
-            "confidence": "0.90",  # Updated (90%)
-            "target_fps": "1",  # Updated
+            "confidence": "0.90",  # 90%
+            "target_frequency": "1.0",  # 1 update per second
             "grouping_threshold": "10",
             "sound_enabled": "true",  # Default to ON
             "sound_cooldown": "5.0"
@@ -142,7 +142,7 @@ class ConfigManager:
         settings = {
             "active": self.config.getboolean("PatternMatching", "active", fallback=False),
             "confidence": self.config.getfloat("PatternMatching", "confidence", fallback=0.81),
-            "target_fps": self.config.getfloat("PatternMatching", "target_fps", fallback=5.0),
+            "target_frequency": self.config.getfloat("PatternMatching", "target_frequency", fallback=1.0),
             "grouping_threshold": self.config.getint("PatternMatching", "grouping_threshold", fallback=10),
             "sound_enabled": self.config.getboolean("PatternMatching", "sound_enabled", fallback=False),
             "sound_cooldown": self.config.getfloat("PatternMatching", "sound_cooldown", fallback=5.0)
@@ -212,14 +212,14 @@ class ConfigManager:
         self.save_config()
 
     def update_pattern_matching_settings(self, active: bool, confidence: float, 
-                                      target_fps: float, sound_enabled: bool) -> None:
+                                      target_frequency: float, sound_enabled: bool) -> None:
         """Update pattern matching settings in config."""
         if "PatternMatching" not in self.config:
             self.config.add_section("PatternMatching")
             
         self.config["PatternMatching"]["active"] = str(active).lower()
         self.config["PatternMatching"]["confidence"] = str(confidence)
-        self.config["PatternMatching"]["target_fps"] = str(target_fps)
+        self.config["PatternMatching"]["target_frequency"] = str(target_frequency)
         self.config["PatternMatching"]["sound_enabled"] = str(sound_enabled).lower()
         
         self.save_config()

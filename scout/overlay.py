@@ -35,8 +35,8 @@ class Overlay(QWidget):
     - Configurable visual elements
     """
     
-    def __init__(self, target_window_title: str, window_manager: WindowManager, 
-                 settings: Dict[str, Any], pattern_settings: Dict[str, Any]) -> None:
+    def __init__(self, window_manager: WindowManager, 
+                 pattern_settings: Dict[str, Any], overlay_settings: Dict[str, Any]) -> None:
         """
         Initialize the overlay window with specified settings.
         
@@ -44,41 +44,40 @@ class Overlay(QWidget):
         The overlay uses OpenCV for drawing and Win32 API for window management.
         
         Args:
-            target_window_title: Title of the game window to overlay
             window_manager: Manager for tracking the game window
-            settings: Visual settings (colors, sizes, etc.)
             pattern_settings: Pattern matching configuration
+            overlay_settings: Visual settings (colors, sizes, etc.)
         """
         super().__init__()
         self.window_manager = window_manager
         self.window_name = "TB Scout Overlay"
-        self.active = False
+        self.active = overlay_settings.get("active", False)
         self.pattern_matching_active = False
         self.pattern_matching_timer = QTimer()
         self.pattern_matching_timer.timeout.connect(self._update_pattern_matching)
         
         # Convert QColor to BGR format for OpenCV
-        rect_color = settings["rect_color"]
-        font_color = settings["font_color"]
-        cross_color = settings["cross_color"]
+        rect_color = overlay_settings["rect_color"]
+        font_color = overlay_settings["font_color"]
+        cross_color = overlay_settings["cross_color"]
         
         # Drawing settings (in BGR format for OpenCV)
         self.rect_color = (rect_color.blue(), rect_color.green(), rect_color.red())
-        self.rect_thickness = settings["rect_thickness"]
-        self.rect_scale = settings["rect_scale"]
+        self.rect_thickness = overlay_settings["rect_thickness"]
+        self.rect_scale = overlay_settings["rect_scale"]
         self.font_color = (font_color.blue(), font_color.green(), font_color.red())
-        self.font_size = settings["font_size"]
-        self.text_thickness = settings["text_thickness"]
+        self.font_size = overlay_settings["font_size"]
+        self.text_thickness = overlay_settings["text_thickness"]
         self.cross_color = (cross_color.blue(), cross_color.green(), cross_color.red())
-        self.cross_size = settings["cross_size"]
-        self.cross_thickness = settings["cross_thickness"]
-        self.cross_scale = settings.get("cross_scale", 1.0)  # Default to 1.0 if not set
+        self.cross_size = overlay_settings["cross_size"]
+        self.cross_thickness = overlay_settings["cross_thickness"]
+        self.cross_scale = overlay_settings.get("cross_scale", 1.0)  # Default to 1.0 if not set
         
         # Create pattern matcher and make it accessible
         self.pattern_matcher = PatternMatcher(
             window_manager=self.window_manager,
             confidence=pattern_settings["confidence"],
-            target_fps=pattern_settings["target_fps"],
+            target_frequency=pattern_settings["target_frequency"],
             sound_enabled=pattern_settings["sound_enabled"]
         )
         
@@ -159,9 +158,31 @@ class Overlay(QWidget):
             self.create_overlay_window()
         
         # Start timer for pattern matching updates
-        interval = max(int(1000 / self.pattern_matcher.target_fps), 16)  # Minimum 16ms (60 FPS max)
-        self.pattern_matching_timer.start(interval)
-        logger.debug(f"Pattern matching timer started with interval: {interval}ms")
+        self.update_timer_interval()
+        logger.debug("Pattern matching timer started")
+
+    def update_timer_interval(self) -> None:
+        """Update the pattern matching timer interval based on target frequency."""
+        if not hasattr(self.pattern_matcher, 'target_frequency'):
+            logger.warning("Pattern matcher has no target_frequency attribute")
+            return
+            
+        interval = max(int(1000 / self.pattern_matcher.target_frequency), 16)  # Minimum 16ms (60 FPS max)
+        logger.debug(
+            f"Updating pattern matching timer interval: "
+            f"target_frequency={self.pattern_matcher.target_frequency:.2f} updates/sec -> "
+            f"interval={interval}ms"
+        )
+        
+        if self.pattern_matching_active:
+            # Stop the timer if it's running
+            if self.pattern_matching_timer.isActive():
+                self.pattern_matching_timer.stop()
+            
+            # Set new interval and start timer
+            self.pattern_matching_timer.setInterval(interval)
+            self.pattern_matching_timer.start()
+            logger.info(f"Timer restarted with new interval: {interval}ms")
 
     def _destroy_window_safely(self) -> None:
         """Safely destroy the overlay window if it exists."""

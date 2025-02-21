@@ -90,7 +90,7 @@ class OverlayController(QMainWindow):
         
         # Create FPS update timer
         self.fps_timer = QTimer()
-        self.fps_timer.timeout.connect(self._update_fps_display)
+        self.fps_timer.timeout.connect(self.update_fps_display)
         self.fps_timer.start(500)  # Update every 500ms
         
         logger.debug("GUI initialized")
@@ -220,53 +220,70 @@ class OverlayController(QMainWindow):
         )
         layout.addLayout(confidence_layout)
         
-        # FPS controls with decimal values
-        fps_layout = QVBoxLayout()
+        # Update frequency controls with decimal values
+        freq_layout = QVBoxLayout()
         
-        # FPS slider with range (we'll multiply by 10 to handle decimals)
-        self.fps_slider = QSlider(Qt.Orientation.Horizontal)
-        self.fps_input = QDoubleSpinBox()  # Change to QDoubleSpinBox for decimals
+        # Frequency slider with range (we'll multiply by 10 to handle decimals)
+        self.freq_slider = QSlider(Qt.Orientation.Horizontal)
+        self.freq_input = QDoubleSpinBox()  # Change to QDoubleSpinBox for decimals
         
-        # Set up FPS controls
-        self.fps_slider.setRange(1, 20)  # Range 0.1 to 2.0 (multiplied by 10)
-        self.fps_slider.setValue(int(settings["target_fps"] * 10))
+        # Set up frequency controls
+        self.freq_slider.setRange(1, 20)  # Range 0.1 to 2.0 (multiplied by 10)
+        self.freq_slider.setValue(int(settings["target_frequency"] * 10))
         
-        self.fps_input.setRange(0.1, 2.0)  # Actual decimal range
-        self.fps_input.setSingleStep(0.1)  # Step by 0.1
-        self.fps_input.setValue(settings["target_fps"])
+        self.freq_input.setRange(0.1, 2.0)  # Actual decimal range
+        self.freq_input.setSingleStep(0.1)  # Step by 0.1
+        self.freq_input.setValue(settings["target_frequency"])
         
-        fps_slider_layout = QHBoxLayout()
-        fps_label = QLabel("Target FPS:")
-        range_label = QLabel("Range: 0.1-2.0")
+        freq_slider_layout = QHBoxLayout()
+        freq_label = QLabel("Target frequency:")
+        range_label = QLabel("Range: 0.1-2.0 updates/sec")
         range_label.setStyleSheet("color: gray; font-size: 8pt;")
         
         label_layout = QVBoxLayout()
-        label_layout.addWidget(fps_label)
+        label_layout.addWidget(freq_label)
         label_layout.addWidget(range_label)
         
-        fps_slider_layout.addLayout(label_layout)
-        fps_slider_layout.addWidget(self.fps_slider, stretch=1)
-        fps_slider_layout.addWidget(self.fps_input)
-        fps_layout.addLayout(fps_slider_layout)
+        freq_slider_layout.addLayout(label_layout)
+        freq_slider_layout.addWidget(self.freq_slider, stretch=1)
+        freq_slider_layout.addWidget(self.freq_input)
+        freq_layout.addLayout(freq_slider_layout)
         
-        # Add FPS display
-        self.fps_display = QLabel(f"Target: {settings['target_fps']} FPS")
-        self.fps_display.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        fps_layout.addWidget(self.fps_display)
+        # Add frequency display
+        self.freq_display = QLabel(f"Target: {settings['target_frequency']} updates/sec")
+        self.freq_display.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        freq_layout.addWidget(self.freq_display)
         
-        layout.addLayout(fps_layout)
+        layout.addLayout(freq_layout)
         
-        # Connect FPS controls
+        # Connect frequency controls
         def on_slider_change(value: int) -> None:
-            self.fps_input.setValue(value / 10.0)
+            freq = value / 10.0
+            logger.debug(f"Frequency slider changed: {value} -> {freq} updates/sec")
+            self.freq_input.setValue(freq)
+            if hasattr(self.pattern_matcher, 'target_frequency'):
+                self.pattern_matcher.target_frequency = freq
+                logger.debug(f"Updated pattern matcher target_frequency to: {freq}")
+                # Update overlay timer interval
+                if hasattr(self.overlay, 'update_timer_interval'):
+                    self.overlay.update_timer_interval()
+                    logger.debug("Updated overlay timer interval")
             self.save_settings()
-        
+
         def on_spinbox_change(value: float) -> None:
-            self.fps_slider.setValue(int(value * 10))
+            logger.debug(f"Frequency spinbox changed to: {value} updates/sec")
+            self.freq_slider.setValue(int(value * 10))
+            if hasattr(self.pattern_matcher, 'target_frequency'):
+                self.pattern_matcher.target_frequency = value
+                logger.debug(f"Updated pattern matcher target_frequency to: {value}")
+                # Update overlay timer interval
+                if hasattr(self.overlay, 'update_timer_interval'):
+                    self.overlay.update_timer_interval()
+                    logger.debug("Updated overlay timer interval")
             self.save_settings()
         
-        self.fps_slider.valueChanged.connect(on_slider_change)
-        self.fps_input.valueChanged.connect(on_spinbox_change)
+        self.freq_slider.valueChanged.connect(on_slider_change)
+        self.freq_input.valueChanged.connect(on_spinbox_change)
         
         # Reload templates button
         self.reload_btn = QPushButton("Reload Templates")
@@ -402,9 +419,31 @@ class OverlayController(QMainWindow):
         self._update_toggle_button_color(overlay_active)  # Update button color
         self.toggle_btn.setText(f"Toggle TB Scout Overlay (F10): {state}")  # Update button text
     
-    def update_fps_display(self, target_fps: float, actual_fps: float) -> None:
-        """Update FPS display label."""
-        self.fps_display.setText(f"Target: {target_fps:.1f} FPS, Actual: {actual_fps:.1f} FPS")
+    def update_fps_display(self) -> None:
+        """Update the frequency display with current values."""
+        if hasattr(self.pattern_matcher, 'update_frequency'):
+            actual_freq = self.pattern_matcher.update_frequency
+            target_freq = self.freq_input.value()
+            
+            logger.debug(f"Updating frequency display - Target: {target_freq:.1f}, Actual: {actual_freq:.1f}")
+            
+            # Update display with frequency values
+            self.freq_display.setText(f"Target: {target_freq:.1f} updates/sec, Actual: {actual_freq:.1f} updates/sec")
+            
+            # Color code the display based on performance
+            if actual_freq >= target_freq * 0.9:  # Within 90% of target
+                self.freq_display.setStyleSheet("color: green;")
+                logger.debug("Performance good (>90%) - display green")
+            elif actual_freq >= target_freq * 0.7:  # Within 70% of target
+                self.freq_display.setStyleSheet("color: orange;")
+                logger.debug("Performance moderate (70-90%) - display orange")
+            else:  # Below 70% of target
+                self.freq_display.setStyleSheet("color: red;")
+                logger.debug("Performance poor (<70%) - display red")
+        else:
+            logger.warning("Pattern matcher has no update_frequency attribute")
+            self.freq_display.setText("Updates/sec: N/A")
+            self.freq_display.setStyleSheet("")
     
     def _handle_quit(self) -> None:
         """Handle quit button click."""
@@ -431,7 +470,7 @@ class OverlayController(QMainWindow):
             self.config_manager.update_pattern_matching_settings(
                 active=self.pattern_btn.text().endswith("ON"),
                 confidence=self.confidence_slider.value() / 100.0,
-                target_fps=self.fps_input.value(),
+                target_frequency=self.freq_input.value(),
                 sound_enabled=self.sound_btn.text().endswith("ON")
             )
             
@@ -442,7 +481,7 @@ class OverlayController(QMainWindow):
     
     def connect_settings_handlers(self) -> None:
         """Connect all interactive elements to save settings."""
-        # Connect sliders to input boxes and vice versa (except FPS which is handled separately)
+        # Connect sliders to input boxes and vice versa (except frequency which is handled separately)
         def on_thickness_change(value: int) -> None:
             self.thickness_input.setValue(value)
             self.overlay.rect_thickness = value
@@ -569,47 +608,6 @@ class OverlayController(QMainWindow):
                 "background-color: #8B0000; color: white; padding: 8px; font-weight: bold;"  # Dark red
             )
 
-    def _create_slider_with_range(self, label: str, slider: QSlider, input_box: QSpinBox, 
-                                min_val: int, max_val: int, current_val: int) -> QHBoxLayout:
-        """
-        Create a slider layout with range indicators.
-        
-        Args:
-            label: Label text for the control
-            slider: The slider widget
-            input_box: The input spin box
-            min_val: Minimum value
-            max_val: Maximum value
-            current_val: Current value
-        
-        Returns:
-            QHBoxLayout: The complete layout
-        """
-        layout = QHBoxLayout()
-        
-        # Set up slider
-        slider.setRange(min_val, max_val)
-        slider.setValue(current_val)
-        
-        # Set up input box
-        input_box.setRange(min_val, max_val)
-        input_box.setValue(current_val)
-        
-        # Left side with label and range
-        label_layout = QVBoxLayout()
-        main_label = QLabel(label)
-        range_label = QLabel(f"Range: {min_val}-{max_val}")
-        range_label.setStyleSheet("color: gray; font-size: 8pt;")
-        label_layout.addWidget(main_label)
-        label_layout.addWidget(range_label)
-        
-        # Add components to main layout
-        layout.addLayout(label_layout)
-        layout.addWidget(slider, stretch=1)  # Give slider more space
-        layout.addWidget(input_box)
-        
-        return layout 
-
     def _toggle_scan(self) -> None:
         """Toggle world scanning."""
         if self.scan_btn.isChecked():
@@ -647,7 +645,7 @@ class OverlayController(QMainWindow):
                 self.config_manager.update_pattern_matching_settings(
                     active=True,
                     confidence=self.confidence_slider.value() / 100.0,
-                    target_fps=self.fps_input.value(),
+                    target_frequency=self.freq_input.value(),
                     sound_enabled=self.sound_btn.text().endswith("ON")
                 )
                 # Actually start pattern matching in overlay
@@ -814,7 +812,7 @@ class OverlayController(QMainWindow):
         self.config_manager.update_pattern_matching_settings(
             active=new_state,
             confidence=self.confidence_slider.value() / 100.0,
-            target_fps=self.fps_input.value(),
+            target_frequency=self.freq_input.value(),
             sound_enabled=self.sound_btn.text().endswith("ON")
         )
 
@@ -839,24 +837,6 @@ class OverlayController(QMainWindow):
             self.pattern_matcher.sound_manager.play_if_ready()
             
         logger.info(f"Sound alerts {'enabled' if new_state else 'disabled'}")
-
-    def _update_fps_display(self) -> None:
-        """Update the FPS display with current values."""
-        if hasattr(self.pattern_matcher, 'fps'):
-            actual_fps = self.pattern_matcher.fps
-            target_fps = self.fps_input.value()
-            self.fps_display.setText(f"Target: {target_fps:.1f} FPS, Actual: {actual_fps:.1f} FPS")
-            
-            # Color code the display based on performance
-            if actual_fps >= target_fps * 0.9:  # Within 90% of target
-                self.fps_display.setStyleSheet("color: green;")
-            elif actual_fps >= target_fps * 0.7:  # Within 70% of target
-                self.fps_display.setStyleSheet("color: orange;")
-            else:  # Below 70% of target
-                self.fps_display.setStyleSheet("color: red;")
-        else:
-            self.fps_display.setText("FPS: N/A")
-            self.fps_display.setStyleSheet("")
 
     def _toggle_debug_mode(self) -> None:
         """Toggle debug mode on/off."""
@@ -890,6 +870,60 @@ class OverlayController(QMainWindow):
             self.debug_btn.setStyleSheet(
                 "background-color: #8B0000; color: white; padding: 8px; font-weight: bold;"  # Dark red
             )
+
+    def update_frequency_display(self, target_freq: float, actual_freq: float) -> None:
+        """Update the frequency display label."""
+        self.freq_display.setText(f"Target: {target_freq:.1f} updates/sec, Actual: {actual_freq:.1f} updates/sec")
+        
+        # Color code the display based on performance
+        if actual_freq >= target_freq * 0.9:  # Within 90% of target
+            self.freq_display.setStyleSheet("color: green;")
+        elif actual_freq >= target_freq * 0.7:  # Within 70% of target
+            self.freq_display.setStyleSheet("color: orange;")
+        else:  # Below 70% of target
+            self.freq_display.setStyleSheet("color: red;")
+
+    def _create_slider_with_range(self, label_text: str, slider: 'QSlider', 
+                                spinbox: 'QSpinBox', min_val: int, max_val: int, 
+                                default_val: int) -> 'QHBoxLayout':
+        """
+        Create a horizontal layout with a label, range indicator, slider and spinbox.
+        
+        Args:
+            label_text: Text for the label
+            slider: QSlider instance to configure
+            spinbox: QSpinBox instance to configure
+            min_val: Minimum value for the range
+            max_val: Maximum value for the range
+            default_val: Default/initial value
+            
+        Returns:
+            QHBoxLayout: Layout containing all the configured widgets
+        """
+        layout = QHBoxLayout()
+        
+        # Create label layout with range
+        label_layout = QVBoxLayout()
+        label = QLabel(label_text)
+        range_label = QLabel(f"Range: {min_val}-{max_val}")
+        range_label.setStyleSheet("color: gray; font-size: 8pt;")
+        label_layout.addWidget(label)
+        label_layout.addWidget(range_label)
+        
+        # Configure slider
+        slider.setRange(min_val, max_val)
+        slider.setValue(default_val)
+        
+        # Configure spinbox
+        spinbox.setRange(min_val, max_val)
+        spinbox.setValue(default_val)
+        
+        # Add widgets to layout
+        layout.addLayout(label_layout)
+        layout.addWidget(slider, stretch=1)
+        layout.addWidget(spinbox)
+        
+        return layout
 
 class DebugImageViewer(QWidget):
     """Window for displaying debug images."""

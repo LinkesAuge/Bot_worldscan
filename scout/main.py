@@ -85,10 +85,9 @@ def main() -> None:
         
         # Create overlay with window manager and settings
         overlay = Overlay(
-            target_window_title="Total Battle",
             window_manager=window_manager,
-            settings=overlay_settings,
-            pattern_settings=pattern_settings
+            pattern_settings=pattern_settings,
+            overlay_settings=overlay_settings
         )
         
         # Create controller

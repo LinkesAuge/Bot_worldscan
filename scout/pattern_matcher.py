@@ -74,7 +74,7 @@ class PatternMatcher:
     2. Capturing the game window for analysis
     3. Using OpenCV to find matches between templates and the game window
     4. Grouping nearby matches to avoid duplicates
-    5. Maintaining performance metrics (FPS)
+    5. Maintaining performance metrics (updates per second)
     
     The pattern matcher can be configured for different sensitivity levels
     and performance targets. It works with the overlay system to visualize
@@ -82,7 +82,7 @@ class PatternMatcher:
     """
     
     def __init__(self, window_manager: WindowManager, confidence: float = 0.8, 
-                 target_fps: float = 1.0, sound_enabled: bool = False,
+                 target_frequency: float = 1.0, sound_enabled: bool = False,
                  images_dir: str = "scout/images", grouping_threshold: int = 10) -> None:
         """
         Initialize pattern matcher.
@@ -90,19 +90,19 @@ class PatternMatcher:
         Args:
             window_manager: Window manager instance for capturing
             confidence: Minimum confidence threshold for matches
-            target_fps: Target frames per second for scanning
+            target_frequency: Target updates per second for scanning
             sound_enabled: Whether to enable sound alerts
             images_dir: Directory containing template images (relative to workspace root)
             grouping_threshold: Pixel distance threshold for grouping matches
         """
         self.window_manager = window_manager
         self.confidence = confidence
-        self.target_fps = target_fps
+        self.target_frequency = target_frequency
         self.sound_enabled = sound_enabled
         self.images_dir = Path(images_dir)
         self.templates: Dict[str, np.ndarray] = {}
-        self.fps = 0.0
-        self.last_capture_time = 0.0
+        self.update_frequency = 0.0
+        self.last_update_time = 0.0
         self.grouping_threshold = grouping_threshold
         self.client_offset_x = 0
         self.client_offset_y = 0
@@ -194,12 +194,18 @@ class PatternMatcher:
             # Convert to grayscale
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
             
-            # Calculate FPS
+            # Calculate update frequency
             current_time = time()
-            if self.last_capture_time > 0:
-                self.fps = 1.0 / (current_time - self.last_capture_time)
-                logger.debug(f"Current FPS: {self.fps:.2f}")
-            self.last_capture_time = current_time
+            if self.last_update_time > 0:
+                time_diff = current_time - self.last_update_time
+                self.update_frequency = 1.0 / time_diff if time_diff > 0 else 0.0
+                logger.debug(
+                    f"Pattern matcher frequency calculation: "
+                    f"time_diff={time_diff:.3f}s, "
+                    f"update_frequency={self.update_frequency:.2f} updates/sec, "
+                    f"target_frequency={self.target_frequency:.2f} updates/sec"
+                )
+            self.last_update_time = current_time
             
             # Process each template
             all_matches = []
