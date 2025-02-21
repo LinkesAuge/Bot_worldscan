@@ -170,7 +170,7 @@ class PatternMatcher:
                 logger.error(f"Error loading template {file}: {str(e)}", exc_info=True)
         
         logger.info(f"Successfully loaded {len(self.templates)} templates")
-    
+
     def set_debug_mode(self, enabled: bool) -> None:
         """
         Enable or disable debug mode.
@@ -198,7 +198,7 @@ class PatternMatcher:
         else:
             # Hide debug window when disabled
             self.debug_window.hide()
-    
+
     def capture_window(self) -> Optional[np.ndarray]:
         """
         Capture the game window using WindowCapture.

@@ -19,6 +19,7 @@ from scout.selector_tool import SelectorTool
 import cv2
 import mss
 from pathlib import Path
+from scout.text_ocr import TextOCR
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +68,6 @@ class OverlayController(QMainWindow):
         # Create control groups
         self.create_overlay_controls(layout, overlay_settings)
         self.create_pattern_matching_controls(layout, pattern_settings)
-        self.create_color_controls(layout)
         self.create_scan_controls(layout)
         
         # Add quit button at the bottom
@@ -80,11 +80,12 @@ class OverlayController(QMainWindow):
         self.status_bar = self.statusBar()
         self.status_bar.showMessage("Ready")
         
-        # Connect settings handlers
+        # Now that all controls are created, connect their handlers
         self.connect_settings_handlers()
         
         # Add debug image viewer
         self.debug_window = DebugWindow()
+        self.debug_window.window_closed.connect(self._on_debug_window_closed)
         
         # Initialize scan controls with current region
         scanner_settings = self.config_manager.get_scanner_settings()
@@ -98,33 +99,106 @@ class OverlayController(QMainWindow):
         self.fps_timer.timeout.connect(self.update_fps_display)
         self.fps_timer.start(500)  # Update every 500ms
         
+        # Initialize TextOCR
+        self.text_ocr = TextOCR(self.debug_window)
+        
+        # Load OCR settings
+        ocr_settings = self.config_manager.get_ocr_settings()
+        if ocr_settings['region']['width'] > 0:
+            self.text_ocr.set_region(ocr_settings['region'])
+            self.text_ocr.set_frequency(ocr_settings['frequency'])
+            self.ocr_status.setText(
+                f"OCR region: ({ocr_settings['region']['left']}, {ocr_settings['region']['top']})"
+            )
+        
+        # Connect OCR frequency controls
+        def on_ocr_slider_change(value: int) -> None:
+            freq = value / 10.0
+            logger.debug(f"OCR frequency slider changed: {value} -> {freq} updates/sec")
+            self.ocr_freq_input.setValue(freq)
+            self.text_ocr.set_frequency(freq)
+            self.ocr_freq_display.setText(f"Target: {freq:.1f} updates/sec")
+            
+            # Save to config
+            ocr_settings = self.config_manager.get_ocr_settings()
+            ocr_settings['frequency'] = freq
+            self.config_manager.update_ocr_settings(ocr_settings)
+        
+        def on_ocr_spinbox_change(value: float) -> None:
+            logger.debug(f"OCR frequency spinbox changed to: {value} updates/sec")
+            self.ocr_freq_slider.setValue(int(value * 10))
+            self.text_ocr.set_frequency(value)
+            self.ocr_freq_display.setText(f"Target: {value:.1f} updates/sec")
+            
+            # Save to config
+            ocr_settings = self.config_manager.get_ocr_settings()
+            ocr_settings['frequency'] = value
+            self.config_manager.update_ocr_settings(ocr_settings)
+        
+        self.ocr_freq_slider.valueChanged.connect(on_ocr_slider_change)
+        self.ocr_freq_input.valueChanged.connect(on_ocr_spinbox_change)
+        
         logger.debug("GUI initialized")
     
     def create_overlay_controls(self, parent_layout: QVBoxLayout, settings: Dict[str, Any]) -> None:
-        """Create overlay control widgets."""
+        """
+        Create overlay control widgets.
+        
+        Args:
+            parent_layout: Parent layout to add controls to
+            settings: Dictionary containing overlay settings
+        """
         overlay_group = QGroupBox("TB Scout Overlay Controls")
         layout = QVBoxLayout()
         
         # Toggle button - initialize state from settings
-        is_active = settings.get("active", False)  # Get initial state from settings
+        is_active = settings.get("active", False)
         self.toggle_btn = QPushButton(f"Toggle TB Scout Overlay (F10): {'ON' if is_active else 'OFF'}")
         self.toggle_btn.clicked.connect(self._handle_toggle)
-        self._update_toggle_button_color(is_active)  # Set initial color
-        self.overlay.active = is_active  # Set initial state in overlay
+        self._update_toggle_button_color(is_active)
+        self.overlay.active = is_active
         layout.addWidget(self.toggle_btn)
         
-        # Thickness controls
+        # Color controls
+        color_group = QGroupBox("Colors")
+        color_layout = QVBoxLayout()
+        
+        # Rectangle color
+        self.rect_color_btn = QPushButton("Set Rectangle Color")
+        self.rect_color_btn.clicked.connect(self._choose_rect_color)
+        self.rect_color_btn.setStyleSheet(f"background-color: {self.current_color.name()}; font-weight: bold;")
+        color_layout.addWidget(self.rect_color_btn)
+        
+        # Font color
+        self.font_color_btn = QPushButton("Set Font Color")
+        self.font_color_btn.clicked.connect(self._choose_font_color)
+        self.font_color_btn.setStyleSheet(f"background-color: {self.font_color.name()}; font-weight: bold;")
+        color_layout.addWidget(self.font_color_btn)
+        
+        # Cross color
+        self.cross_color_btn = QPushButton("Set Cross Color")
+        self.cross_color_btn.clicked.connect(self._choose_cross_color)
+        self.cross_color_btn.setStyleSheet(f"background-color: {self.cross_color.name()}; font-weight: bold;")
+        color_layout.addWidget(self.cross_color_btn)
+        
+        color_group.setLayout(color_layout)
+        layout.addWidget(color_group)
+        
+        # Rectangle Thickness controls
         self.thickness_slider = QSlider(Qt.Orientation.Horizontal)
         self.thickness_input = QSpinBox()
         thickness_layout = self._create_slider_with_range(
-            "Thickness:", self.thickness_slider, self.thickness_input,
-            1, 20, settings["rect_thickness"]
+            "Rectangle Thickness:", self.thickness_slider, self.thickness_input,
+            1, 20, settings.get("rect_thickness", 2)
         )
+        # Connect thickness controls bidirectionally
+        self.thickness_slider.valueChanged.connect(self.thickness_input.setValue)
+        self.thickness_input.valueChanged.connect(self.thickness_slider.setValue)
         layout.addLayout(thickness_layout)
         
-        # Scale controls
+        # Rectangle Scale controls
         self.scale_slider = QSlider(Qt.Orientation.Horizontal)
-        self.scale_input = QDoubleSpinBox()  # Use QDoubleSpinBox for decimal values
+        self.scale_input = QDoubleSpinBox()
         scale_layout = QHBoxLayout()
         
         # Left side with label and range
@@ -135,40 +209,23 @@ class OverlayController(QMainWindow):
         scale_label_layout.addWidget(scale_label)
         scale_label_layout.addWidget(scale_range)
         
-        # Set up scale controls (multiply by 10 for slider)
+        # Set up rectangle scale controls (multiply by 10 for slider)
+        rect_scale = settings.get("rect_scale", 1.0)
         self.scale_slider.setRange(5, 50)  # 0.5 to 5.0
-        self.scale_slider.setValue(int(settings["rect_scale"] * 10))
+        self.scale_slider.setValue(int(rect_scale * 10))
         
         self.scale_input.setRange(0.5, 5.0)
         self.scale_input.setSingleStep(0.1)
-        self.scale_input.setValue(settings["rect_scale"])
+        self.scale_input.setValue(rect_scale)
         
         scale_layout.addLayout(scale_label_layout)
         scale_layout.addWidget(self.scale_slider, stretch=1)
         scale_layout.addWidget(self.scale_input)
         layout.addLayout(scale_layout)
         
-        # Font size controls
-        self.font_size_slider = QSlider(Qt.Orientation.Horizontal)
-        self.font_size_input = QSpinBox()
-        font_layout = self._create_slider_with_range(
-            "Font Size:", self.font_size_slider, self.font_size_input,
-            1, 100, settings["font_size"]
-        )
-        layout.addLayout(font_layout)
-        
-        # Font thickness controls (renamed from confidence)
-        self.text_thickness_slider = QSlider(Qt.Orientation.Horizontal)
-        self.text_thickness_input = QSpinBox()
-        text_thickness_layout = self._create_slider_with_range(
-            "Font Thickness:", self.text_thickness_slider, self.text_thickness_input,
-            1, 20, settings["text_thickness"]
-        )
-        layout.addLayout(text_thickness_layout)
-        
-        # Cross scale controls
+        # Cross Scale controls
         self.cross_scale_slider = QSlider(Qt.Orientation.Horizontal)
-        self.cross_scale_input = QDoubleSpinBox()  # Use QDoubleSpinBox for decimal values
+        self.cross_scale_input = QDoubleSpinBox()
         cross_scale_layout = QHBoxLayout()
         
         # Left side with label and range
@@ -180,32 +237,66 @@ class OverlayController(QMainWindow):
         cross_scale_label_layout.addWidget(cross_scale_range)
         
         # Set up cross scale controls (multiply by 10 for slider)
+        cross_scale = settings.get("cross_scale", 1.0)
         self.cross_scale_slider.setRange(5, 50)  # 0.5 to 5.0
-        self.cross_scale_slider.setValue(int(settings["cross_scale"] if "cross_scale" in settings else 1.0 * 10))
+        self.cross_scale_slider.setValue(int(cross_scale * 10))
         
         self.cross_scale_input.setRange(0.5, 5.0)
         self.cross_scale_input.setSingleStep(0.1)
-        self.cross_scale_input.setValue(settings["cross_scale"] if "cross_scale" in settings else 1.0)
+        self.cross_scale_input.setValue(cross_scale)
         
         cross_scale_layout.addLayout(cross_scale_label_layout)
         cross_scale_layout.addWidget(self.cross_scale_slider, stretch=1)
         cross_scale_layout.addWidget(self.cross_scale_input)
         layout.addLayout(cross_scale_layout)
         
+        # Font size controls
+        self.font_size_slider = QSlider(Qt.Orientation.Horizontal)
+        self.font_size_input = QSpinBox()
+        font_size_layout = self._create_slider_with_range(
+            "Font Size:", self.font_size_slider, self.font_size_input,
+            8, 72, settings.get("font_size", 12)
+        )
+        # Connect font size controls bidirectionally
+        self.font_size_slider.valueChanged.connect(self.font_size_input.setValue)
+        self.font_size_input.valueChanged.connect(self.font_size_slider.setValue)
+        layout.addLayout(font_size_layout)
+        
+        # Text thickness controls
+        self.text_thickness_slider = QSlider(Qt.Orientation.Horizontal)
+        self.text_thickness_input = QSpinBox()
+        text_thickness_layout = self._create_slider_with_range(
+            "Text Thickness:", self.text_thickness_slider, self.text_thickness_input,
+            1, 10, settings.get("text_thickness", 1)
+        )
+        # Connect text thickness controls bidirectionally
+        self.text_thickness_slider.valueChanged.connect(self.text_thickness_input.setValue)
+        self.text_thickness_input.valueChanged.connect(self.text_thickness_slider.setValue)
+        layout.addLayout(text_thickness_layout)
+        
         # Cross thickness controls
         self.cross_thickness_slider = QSlider(Qt.Orientation.Horizontal)
         self.cross_thickness_input = QSpinBox()
-        cross_layout = self._create_slider_with_range(
+        cross_thickness_layout = self._create_slider_with_range(
             "Cross Thickness:", self.cross_thickness_slider, self.cross_thickness_input,
-            1, 20, settings["cross_thickness"]
+            1, 10, settings.get("cross_thickness", 1)
         )
-        layout.addLayout(cross_layout)
+        # Connect cross thickness controls bidirectionally
+        self.cross_thickness_slider.valueChanged.connect(self.cross_thickness_input.setValue)
+        self.cross_thickness_input.valueChanged.connect(self.cross_thickness_slider.setValue)
+        layout.addLayout(cross_thickness_layout)
         
         overlay_group.setLayout(layout)
         parent_layout.addWidget(overlay_group)
     
     def create_pattern_matching_controls(self, parent_layout: QVBoxLayout, settings: Dict[str, Any]) -> None:
-        """Create pattern matching control widgets."""
+        """
+        Create pattern matching control widgets.
+        
+        Args:
+            parent_layout: Parent layout to add controls to
+            settings: Dictionary containing pattern matching settings
+        """
         pattern_group = QGroupBox("Pattern Matching")
         layout = QVBoxLayout()
         
@@ -216,13 +307,32 @@ class OverlayController(QMainWindow):
         self._update_pattern_button_color(is_active)
         layout.addWidget(self.pattern_btn)
         
-        # Confidence slider
+        # Confidence controls
+        confidence_layout = QHBoxLayout()
+        
+        # Left side with label and range
+        confidence_label_layout = QVBoxLayout()
+        confidence_label = QLabel("Confidence:")
+        confidence_range = QLabel("Range: 0.1-1.0")
+        confidence_range.setStyleSheet("color: gray; font-size: 8pt;")
+        confidence_label_layout.addWidget(confidence_label)
+        confidence_label_layout.addWidget(confidence_range)
+        
+        # Create and configure confidence slider (0-100 for percentage)
         self.confidence_slider = QSlider(Qt.Orientation.Horizontal)
-        self.confidence_input = QSpinBox()
-        confidence_layout = self._create_slider_with_range(
-            "Confidence:", self.confidence_slider, self.confidence_input,
-            10, 100, int(settings["confidence"] * 100)
-        )
+        self.confidence_slider.setRange(10, 100)  # 10% to 100%
+        self.confidence_slider.setValue(int(settings["confidence"] * 100))
+        
+        # Create and configure confidence spinbox (0.1-1.0 for decimal)
+        self.confidence_input = QDoubleSpinBox()
+        self.confidence_input.setRange(0.1, 1.0)
+        self.confidence_input.setSingleStep(0.05)
+        self.confidence_input.setDecimals(2)
+        self.confidence_input.setValue(settings["confidence"])
+        
+        confidence_layout.addLayout(confidence_label_layout)
+        confidence_layout.addWidget(self.confidence_slider, stretch=1)
+        confidence_layout.addWidget(self.confidence_input)
         layout.addLayout(confidence_layout)
         
         # Update frequency controls with decimal values
@@ -302,9 +412,6 @@ class OverlayController(QMainWindow):
         self._update_debug_button_color(debug_settings['enabled'])  # Initialize color from config
         layout.addWidget(self.debug_btn)
         
-        # Set callback for pattern matcher to update debug button state
-        self.pattern_matcher.set_gui_callback(self._on_debug_window_closed)
-        
         # Sound toggle button
         self.sound_btn = QPushButton("Sound Alerts: ON" if settings["sound_enabled"] else "Sound Alerts: OFF")
         self.sound_btn.clicked.connect(self._toggle_sound)  # Connect click handler
@@ -314,59 +421,90 @@ class OverlayController(QMainWindow):
         pattern_group.setLayout(layout)
         parent_layout.addWidget(pattern_group)
     
-    def create_color_controls(self, parent_layout: QVBoxLayout) -> None:
-        """Create color selection controls."""
-        color_group = QGroupBox("Colors")
-        layout = QVBoxLayout()
-        
-        # Rectangle color
-        self.rect_color_btn = QPushButton("Set Rectangle Color")
-        self.rect_color_btn.clicked.connect(self._choose_rect_color)
-        self.rect_color_btn.setStyleSheet(f"background-color: {self.current_color.name()}; font-weight: bold;")
-        layout.addWidget(self.rect_color_btn)
-        
-        # Font color
-        self.font_color_btn = QPushButton("Set Font Color")
-        self.font_color_btn.clicked.connect(self._choose_font_color)
-        self.font_color_btn.setStyleSheet(f"background-color: {self.font_color.name()}; font-weight: bold;")
-        layout.addWidget(self.font_color_btn)
-        
-        # Cross color
-        self.cross_color_btn = QPushButton("Set Cross Color")
-        self.cross_color_btn.clicked.connect(self._choose_cross_color)
-        self.cross_color_btn.setStyleSheet(f"background-color: {self.cross_color.name()}; font-weight: bold;")
-        layout.addWidget(self.cross_color_btn)
-        
-        color_group.setLayout(layout)
-        parent_layout.addWidget(color_group)
-    
     def create_scan_controls(self, layout: QVBoxLayout) -> None:
-        """Create controls for world scanning."""
-        group = QGroupBox("World Scanner")
-        group_layout = QVBoxLayout()
+        """
+        Create controls for world scanning and OCR functionality.
         
-        # Scan button
+        This method sets up:
+        1. World scanning controls (toggle button, status)
+        2. OCR controls (toggle button, frequency slider, region selection)
+        
+        Args:
+            layout: Parent layout to add controls to
+        """
+        # Get OCR settings from config manager
+        config = ConfigManager()
+        ocr_settings = config.get_ocr_settings()
+        
+        # Create group box for world scanning
+        scan_group = QGroupBox("World Scanning")
+        scan_layout = QVBoxLayout()
+        
+        # Create scan toggle button
         self.scan_btn = QPushButton("Start World Scan")
         self.scan_btn.setCheckable(True)
         self.scan_btn.clicked.connect(self._toggle_scan)
-        group_layout.addWidget(self.scan_btn)
+        scan_layout.addWidget(self.scan_btn)
         
-        # Add region selection button
-        self.select_region_btn = QPushButton("Select Minimap Region")
-        self.select_region_btn.clicked.connect(self._start_region_selection)
-        group_layout.addWidget(self.select_region_btn)
+        # Create scan status label
+        self.scan_status = QLabel("World Scan: Inactive")
+        scan_layout.addWidget(self.scan_status)
         
-        # Status label
-        self.scan_status = QLabel("Scanner: Inactive")
-        group_layout.addWidget(self.scan_status)
+        scan_group.setLayout(scan_layout)
+        layout.addWidget(scan_group)
         
-        # Add input field configuration button
-        self.input_field_btn = QPushButton("Set Coordinate Input Location")
-        self.input_field_btn.clicked.connect(self._start_input_field_selection)
-        group_layout.addWidget(self.input_field_btn)
+        # Create group box for OCR
+        ocr_group = QGroupBox("Text OCR")
+        ocr_layout = QVBoxLayout()
         
-        group.setLayout(group_layout)
-        layout.addWidget(group)
+        # Create OCR toggle button
+        self.ocr_btn = QPushButton("Start Text OCR")
+        self.ocr_btn.setCheckable(True)
+        self.ocr_btn.clicked.connect(self._toggle_ocr)
+        ocr_layout.addWidget(self.ocr_btn)
+        
+        # Create OCR frequency controls
+        freq_layout = QHBoxLayout()
+        
+        # Create vertical layout for label and range
+        label_layout = QVBoxLayout()
+        freq_label = QLabel("OCR Frequency:")
+        range_label = QLabel("(0.1 - 2.0 updates/sec)")
+        range_label.setStyleSheet("QLabel { color: gray; }")
+        label_layout.addWidget(freq_label)
+        label_layout.addWidget(range_label)
+        freq_layout.addLayout(label_layout)
+        
+        # Create slider for frequency
+        self.ocr_freq_slider = QSlider(Qt.Orientation.Horizontal)
+        self.ocr_freq_slider.setMinimum(1)  # 0.1 updates/sec
+        self.ocr_freq_slider.setMaximum(20)  # 2.0 updates/sec
+        self.ocr_freq_slider.setValue(int(ocr_settings['frequency'] * 10))
+        self.ocr_freq_slider.valueChanged.connect(self.on_ocr_slider_change)
+        freq_layout.addWidget(self.ocr_freq_slider)
+        
+        # Create spinbox for precise input
+        self.ocr_freq_input = QDoubleSpinBox()
+        self.ocr_freq_input.setMinimum(0.1)
+        self.ocr_freq_input.setMaximum(2.0)
+        self.ocr_freq_input.setSingleStep(0.1)
+        self.ocr_freq_input.setValue(ocr_settings['frequency'])
+        self.ocr_freq_input.valueChanged.connect(self.on_ocr_spinbox_change)
+        freq_layout.addWidget(self.ocr_freq_input)
+        
+        ocr_layout.addLayout(freq_layout)
+        
+        # Create OCR region selection button
+        self.select_ocr_region_btn = QPushButton("Select OCR Region")
+        self.select_ocr_region_btn.clicked.connect(self._start_ocr_region_selection)
+        ocr_layout.addWidget(self.select_ocr_region_btn)
+        
+        # Create OCR status label
+        self.ocr_status = QLabel("Text OCR: Inactive")
+        ocr_layout.addWidget(self.ocr_status)
+        
+        ocr_group.setLayout(ocr_layout)
+        layout.addWidget(ocr_group)
     
     def _choose_rect_color(self) -> None:
         """Open color picker for rectangle color."""
@@ -459,118 +597,168 @@ class OverlayController(QMainWindow):
             self.quit_callback()
     
     def save_settings(self) -> None:
-        """Save current settings to config."""
+        """
+        Save current settings to config.
+        
+        This method saves all current GUI values to the configuration file, including:
+        - Overlay settings (colors, sizes, scales, etc.)
+        - Pattern matching settings (confidence, frequency, etc.)
+        - OCR settings (frequency, region, etc.)
+        """
         try:
-            self.config_manager.update_overlay_settings(
-                active=self.overlay.active,
-                rect_color=self.current_color,
-                rect_thickness=self.thickness_slider.value(),
-                rect_scale=self.scale_input.value(),
-                font_color=self.font_color,
-                font_size=self.font_size_slider.value(),
-                text_thickness=self.text_thickness_slider.value(),
-                cross_color=self.cross_color,
-                cross_size=self.overlay.cross_size,
-                cross_thickness=self.cross_thickness_slider.value(),
-                cross_scale=self.cross_scale_input.value()
-            )
+            # Create overlay settings dictionary
+            overlay_settings = {
+                "active": self.overlay.active,
+                "rect_color": self.current_color,
+                "rect_thickness": self.thickness_slider.value(),
+                "rect_scale": self.scale_input.value(),
+                "font_color": self.font_color,
+                "font_size": self.font_size_slider.value(),
+                "text_thickness": self.text_thickness_slider.value(),
+                "cross_color": self.cross_color,
+                "cross_size": self.overlay.cross_size,
+                "cross_thickness": self.cross_thickness_slider.value(),
+                "cross_scale": self.cross_scale_input.value()
+            }
             
-            self.config_manager.update_pattern_matching_settings(
-                active=self.pattern_btn.text().endswith("ON"),
-                confidence=self.confidence_slider.value() / 100.0,
-                target_frequency=self.freq_input.value(),
-                sound_enabled=self.sound_btn.text().endswith("ON")
-            )
+            # Create pattern matching settings dictionary
+            pattern_settings = {
+                "active": self.pattern_btn.text().endswith("ON"),
+                "confidence": self.confidence_input.value(),
+                "target_frequency": self.freq_input.value(),
+                "sound_enabled": self.sound_btn.text().endswith("ON")
+            }
             
-            logger.debug("Settings saved to config")
+            # Create OCR settings dictionary
+            ocr_settings = self.config_manager.get_ocr_settings()  # Get existing settings first
+            ocr_settings.update({
+                "active": self.ocr_btn.isChecked(),
+                "frequency": self.ocr_freq_input.value()
+            })
+            
+            # Save all settings
+            self.config_manager.update_overlay_settings(overlay_settings)
+            self.config_manager.update_pattern_matching_settings(pattern_settings)
+            self.config_manager.update_ocr_settings(ocr_settings)
+            
+            logger.debug("All settings saved to config")
             
         except Exception as e:
             logger.error(f"Error saving settings: {str(e)}", exc_info=True)
     
     def connect_settings_handlers(self) -> None:
-        """Connect all interactive elements to save settings."""
-        # Connect sliders to input boxes and vice versa (except frequency which is handled separately)
-        def on_thickness_change(value: int) -> None:
-            self.thickness_input.setValue(value)
-            self.overlay.rect_thickness = value
-            self.save_settings()
-            
-        def on_font_size_change(value: int) -> None:
-            self.font_size_input.setValue(value)
-            self.overlay.font_size = value
-            self.save_settings()
-            
-        def on_text_thickness_change(value: int) -> None:
-            self.text_thickness_input.setValue(value)
-            self.overlay.text_thickness = value
-            self.save_settings()
-            
-        def on_cross_thickness_change(value: int) -> None:
-            self.cross_thickness_input.setValue(value)
-            self.overlay.cross_thickness = value
-            self.save_settings()
-            
-        # Connect confidence controls
-        def on_confidence_slider_change(value: int) -> None:
-            self.confidence_input.setValue(value)
-            # Convert from percentage (0-100) to decimal (0.0-1.0)
-            confidence = value / 100.0
-            self.pattern_matcher.confidence = confidence
-            self.save_settings()
-            logger.debug(f"Confidence updated to: {confidence:.2f}")
-            
-        def on_confidence_spinbox_change(value: int) -> None:
-            self.confidence_slider.setValue(value)
-            # Convert from percentage (0-100) to decimal (0.0-1.0)
-            confidence = value / 100.0
-            self.pattern_matcher.confidence = confidence
-            self.save_settings()
-            logger.debug(f"Confidence updated to: {confidence:.2f}")
-            
-        # Connect scale controls
-        def on_rect_scale_slider_change(value: int) -> None:
-            scale = value / 10.0
-            self.scale_input.setValue(scale)
-            self.overlay.rect_scale = scale
-            self.save_settings()
-        
-        def on_rect_scale_spinbox_change(value: float) -> None:
-            self.scale_slider.setValue(int(value * 10))
-            self.overlay.rect_scale = value
-            self.save_settings()
-            
-        def on_cross_scale_slider_change(value: int) -> None:
-            scale = value / 10.0
-            self.cross_scale_input.setValue(scale)
-            self.overlay.cross_scale = scale
-            self.save_settings()
-            
-        def on_cross_scale_spinbox_change(value: float) -> None:
-            self.cross_scale_slider.setValue(int(value * 10))
-            self.overlay.cross_scale = value
-            self.save_settings()
-        
-        # Connect all sliders to their handlers
-        self.thickness_slider.valueChanged.connect(on_thickness_change)
-        self.font_size_slider.valueChanged.connect(on_font_size_change)
-        self.text_thickness_slider.valueChanged.connect(on_text_thickness_change)
-        self.cross_thickness_slider.valueChanged.connect(on_cross_thickness_change)
-        self.confidence_slider.valueChanged.connect(on_confidence_slider_change)
-        self.confidence_input.valueChanged.connect(on_confidence_spinbox_change)
-        self.scale_slider.valueChanged.connect(on_rect_scale_slider_change)
-        self.scale_input.valueChanged.connect(on_rect_scale_spinbox_change)
-        self.cross_scale_slider.valueChanged.connect(on_cross_scale_spinbox_change)
-        self.cross_scale_input.valueChanged.connect(on_cross_scale_spinbox_change)
-        
-        # Connect input boxes to their sliders
-        self.thickness_input.valueChanged.connect(self.thickness_slider.setValue)
-        self.font_size_input.valueChanged.connect(self.font_size_slider.setValue)
-        self.text_thickness_input.valueChanged.connect(self.text_thickness_slider.setValue)
-        self.cross_thickness_input.valueChanged.connect(self.cross_thickness_slider.setValue)
-        
-        # Connect reload templates button
-        self.reload_btn.clicked.connect(self._reload_templates)
-        
+        """Connect all settings handlers to their respective UI elements."""
+        try:
+            # Handler for confidence slider
+            def on_confidence_slider_change(value: int) -> None:
+                """
+                Handle changes to the confidence slider.
+                
+                Args:
+                    value: Integer value from slider (0-100)
+                """
+                # Convert slider value (0-100) to confidence (0.0-1.0)
+                confidence = value / 100.0
+                # Update spinbox with the float value
+                self.confidence_input.setValue(confidence)
+                # Update pattern matcher
+                if hasattr(self.overlay, 'pattern_matcher'):
+                    self.overlay.pattern_matcher.confidence = confidence
+                    self.save_settings()
+                    logger.debug(f"Confidence updated to {confidence:.2f}")
+
+            # Handler for confidence spinbox
+            def on_confidence_spinbox_change(value: float) -> None:
+                """
+                Handle changes to the confidence spinbox.
+                
+                Args:
+                    value: Float value from spinbox (0.0-1.0)
+                """
+                # Convert confidence (0.0-1.0) to slider value (0-100)
+                slider_value = int(value * 100)
+                # Update slider with the integer value
+                self.confidence_slider.setValue(slider_value)
+                # Update pattern matcher
+                if hasattr(self.overlay, 'pattern_matcher'):
+                    self.overlay.pattern_matcher.confidence = value
+                    self.save_settings()
+                    logger.debug(f"Confidence updated to {value:.2f}")
+
+            # Connect confidence handlers if elements exist
+            if hasattr(self, 'confidence_slider') and hasattr(self, 'confidence_input'):
+                self.confidence_slider.valueChanged.connect(on_confidence_slider_change)
+                self.confidence_input.valueChanged.connect(on_confidence_spinbox_change)
+                logger.debug("Connected confidence handlers")
+
+            # Define handler functions
+            def on_thickness_change(value: int) -> None:
+                """Handle rectangle thickness change."""
+                self.overlay.rect_thickness = value
+                self.save_settings()
+
+            def on_font_size_change(value: int) -> None:
+                """Handle font size change."""
+                self.overlay.font_size = value
+                self.save_settings()
+
+            def on_text_thickness_change(value: int) -> None:
+                """Handle text thickness change."""
+                self.overlay.text_thickness = value
+                self.save_settings()
+
+            def on_cross_thickness_change(value: int) -> None:
+                """Handle cross thickness change."""
+                self.overlay.cross_thickness = value
+                self.save_settings()
+
+            def on_rect_scale_slider_change(value: int) -> None:
+                """Handle rectangle scale slider change."""
+                scale = value / 10.0
+                self.scale_input.setValue(scale)
+                self.overlay.rect_scale = scale
+                self.save_settings()
+
+            def on_rect_scale_spinbox_change(value: float) -> None:
+                """Handle rectangle scale spinbox change."""
+                self.scale_slider.setValue(int(value * 10))
+                self.overlay.rect_scale = value
+                self.save_settings()
+
+            def on_cross_scale_slider_change(value: int) -> None:
+                """Handle cross scale slider change."""
+                scale = value / 10.0
+                self.cross_scale_input.setValue(scale)
+                self.overlay.cross_scale = scale
+                self.save_settings()
+
+            def on_cross_scale_spinbox_change(value: float) -> None:
+                """Handle cross scale spinbox change."""
+                self.cross_scale_slider.setValue(int(value * 10))
+                self.overlay.cross_scale = value
+                self.save_settings()
+
+            # Connect handlers only if the UI elements exist
+            if hasattr(self, 'thickness_slider'):
+                self.thickness_slider.valueChanged.connect(on_thickness_change)
+            if hasattr(self, 'font_size_slider'):
+                self.font_size_slider.valueChanged.connect(on_font_size_change)
+            if hasattr(self, 'text_thickness_slider'):
+                self.text_thickness_slider.valueChanged.connect(on_text_thickness_change)
+            if hasattr(self, 'cross_thickness_slider'):
+                self.cross_thickness_slider.valueChanged.connect(on_cross_thickness_change)
+            if hasattr(self, 'scale_slider'):
+                self.scale_slider.valueChanged.connect(on_rect_scale_slider_change)
+            if hasattr(self, 'scale_input'):
+                self.scale_input.valueChanged.connect(on_rect_scale_spinbox_change)
+            if hasattr(self, 'cross_scale_slider'):
+                self.cross_scale_slider.valueChanged.connect(on_cross_scale_slider_change)
+            if hasattr(self, 'cross_scale_input'):
+                self.cross_scale_input.valueChanged.connect(on_cross_scale_spinbox_change)
+
+        except Exception as e:
+            logger.error(f"Error connecting settings handlers: {e}", exc_info=True)
+    
     def _reload_templates(self) -> None:
         """Reload pattern matching templates."""
         if hasattr(self.pattern_matcher, 'reload_templates'):
@@ -873,23 +1061,29 @@ class OverlayController(QMainWindow):
 
     def _toggle_pattern_matching(self) -> None:
         """Toggle pattern matching on/off."""
-        is_active = self.pattern_btn.text().endswith("ON")
-        new_state = not is_active
-        
-        # Update confidence in pattern matcher before toggling
-        if new_state:  # If turning ON
-            self.pattern_matcher.confidence = self.confidence_slider.value() / 100.0
-            logger.debug(f"Updated pattern matcher confidence to: {self.pattern_matcher.confidence:.2f}")
-        
-        self._update_pattern_button_color(new_state)  # Toggle state
-        
-        # Save the new state
-        self.config_manager.update_pattern_matching_settings(
-            active=new_state,
-            confidence=self.confidence_slider.value() / 100.0,
-            target_frequency=self.freq_input.value(),
-            sound_enabled=self.sound_btn.text().endswith("ON")
-        )
+        try:
+            # Get current settings
+            settings = self.config_manager.get_pattern_matching_settings()
+            
+            # Toggle active state
+            settings["active"] = not settings["active"]
+            
+            # Update settings in config
+            self.config_manager.update_pattern_matching_settings(settings)
+            
+            # Update pattern matcher
+            if settings["active"]:
+                self.overlay.start_pattern_matching()
+                self._update_pattern_button_color(True)
+                logger.info("Pattern matching activated")
+            else:
+                self.overlay.stop_pattern_matching()
+                self._update_pattern_button_color(False)
+                logger.info("Pattern matching deactivated")
+                
+        except Exception as e:
+            logger.error(f"Error toggling pattern matching: {e}", exc_info=True)
+            self._update_pattern_button_color(False)
 
     def _toggle_sound(self) -> None:
         """Toggle sound alerts on/off."""
@@ -1017,3 +1211,171 @@ class OverlayController(QMainWindow):
             save_screenshots=True,
             save_templates=True
         ) 
+
+    def _toggle_ocr(self) -> None:
+        """Toggle Text OCR on/off."""
+        is_active = self.ocr_btn.isChecked()
+        self.ocr_btn.setText(f"Text OCR: {'ON' if is_active else 'OFF'}")
+        
+        if is_active:
+            self.ocr_btn.setStyleSheet(
+                "background-color: #228B22; color: white; padding: 8px; font-weight: bold;"
+            )
+            self._start_ocr()
+        else:
+            self.ocr_btn.setStyleSheet(
+                "background-color: #8B0000; color: white; padding: 8px; font-weight: bold;"
+            )
+            self._stop_ocr()
+    
+    def _start_ocr(self) -> None:
+        """Start Text OCR processing."""
+        logger.info("Starting Text OCR")
+        self.ocr_status.setText("Text OCR: Active")
+        
+        # Update config
+        ocr_settings = self.config_manager.get_ocr_settings()
+        ocr_settings['active'] = True
+        self.config_manager.update_ocr_settings(ocr_settings)
+        
+        # Start OCR processing
+        self.text_ocr.start()
+    
+    def _stop_ocr(self) -> None:
+        """Stop Text OCR processing."""
+        logger.info("Stopping Text OCR")
+        self.ocr_status.setText("Text OCR: Inactive")
+        
+        # Update config
+        ocr_settings = self.config_manager.get_ocr_settings()
+        ocr_settings['active'] = False
+        self.config_manager.update_ocr_settings(ocr_settings)
+        
+        # Stop OCR processing
+        self.text_ocr.stop()
+    
+    def _start_ocr_region_selection(self) -> None:
+        """Start the Text OCR region selection process."""
+        logger.info("Starting Text OCR region selection")
+        
+        try:
+            if hasattr(self, 'region_selector'):
+                logger.debug("Cleaning up previous region selector")
+                self.region_selector.close()
+                self.region_selector.deleteLater()
+            
+            logger.debug("Creating new SelectorTool instance")
+            self.region_selector = SelectorTool("Click and drag to select Text OCR region")
+            self.region_selector.region_selected.connect(self._on_ocr_region_selected)
+            self.region_selector.selection_cancelled.connect(self._on_ocr_region_cancelled)
+            
+            # Don't hide main window, just show selector
+            logger.debug("Scheduling selector display")
+            QTimer.singleShot(100, lambda: self._show_selector())
+            
+        except Exception as e:
+            logger.error(f"Error starting region selection: {e}")
+            
+    def _show_selector(self) -> None:
+        """Helper method to show and activate the selector."""
+        try:
+            logger.debug("Showing selector tool")
+            self.region_selector.show()
+            logger.debug("Activating selector window")
+            self.region_selector.activateWindow()
+            logger.debug("Selector display complete")
+        except Exception as e:
+            logger.error(f"Error showing selector: {e}", exc_info=True)
+    
+    def _on_ocr_region_selected(self, region: dict) -> None:
+        """Handle selected Text OCR region."""
+        logger.info(f"Selected OCR region: {region}")
+        
+        try:
+            # Update OCR settings
+            ocr_settings = self.config_manager.get_ocr_settings()
+            ocr_settings['region'] = {
+                'left': region['left'],
+                'top': region['top'],
+                'width': region['width'],
+                'height': region['height'],
+                'dpi_scale': region['dpi_scale']
+            }
+            self.config_manager.update_ocr_settings(ocr_settings)
+            
+            # Update TextOCR instance
+            self.text_ocr.set_region(ocr_settings['region'])
+            
+            # Update status with logical coordinates
+            logical = region['logical_coords']
+            self.ocr_status.setText(
+                f"OCR region: ({logical['left']}, {logical['top']}) "
+                f"[Physical: ({region['left']}, {region['top']})]"
+            )
+            
+        except Exception as e:
+            logger.error(f"Error saving OCR region: {e}", exc_info=True)
+            
+    def _on_ocr_region_cancelled(self) -> None:
+        """Handle OCR region selection cancellation."""
+        logger.info("OCR region selection cancelled")
+        
+        try:
+            # Restore previous region status if it exists
+            ocr_settings = self.config_manager.get_ocr_settings()
+            if ocr_settings['region']['width'] > 0:
+                status_text = f"OCR region: ({ocr_settings['region']['left']}, {ocr_settings['region']['top']})"
+                logger.debug(f"Restoring previous OCR region status: {status_text}")
+                self.ocr_status.setText(status_text)
+            else:
+                logger.debug("No previous OCR region settings found")
+                self.ocr_status.setText("Text OCR: Inactive")
+        except Exception as e:
+            logger.error(f"Error handling region cancellation: {e}", exc_info=True)
+            self.ocr_status.setText("Text OCR: Inactive")
+
+    def on_ocr_slider_change(self, value: int) -> None:
+        """
+        Handle changes to the OCR frequency slider.
+        
+        Args:
+            value: The slider value (1-20, representing 0.1-2.0 updates/sec)
+        """
+        # Convert slider value to frequency
+        freq = value / 10.0
+        logger.debug(f"OCR frequency slider changed: {value} -> {freq} updates/sec")
+        
+        # Update spinbox
+        self.ocr_freq_input.setValue(freq)
+        
+        # Update OCR frequency
+        if hasattr(self, 'text_ocr'):
+            self.text_ocr.set_frequency(freq)
+            
+        # Save to config
+        config = ConfigManager()
+        ocr_settings = config.get_ocr_settings()
+        ocr_settings['frequency'] = freq
+        config.update_ocr_settings(ocr_settings)
+        
+    def on_ocr_spinbox_change(self, value: float) -> None:
+        """
+        Handle changes to the OCR frequency spinbox.
+        
+        Args:
+            value: The frequency value in updates per second (0.1-2.0)
+        """
+        logger.debug(f"OCR frequency spinbox changed to: {value} updates/sec")
+        
+        # Update slider
+        self.ocr_freq_slider.setValue(int(value * 10))
+        
+        # Update OCR frequency
+        if hasattr(self, 'text_ocr'):
+            self.text_ocr.set_frequency(value)
+            
+        # Save to config
+        config = ConfigManager()
+        ocr_settings = config.get_ocr_settings()
+        ocr_settings['frequency'] = value
+        config.update_ocr_settings(ocr_settings) 

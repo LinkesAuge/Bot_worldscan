@@ -2,7 +2,7 @@ from pathlib import Path
 from configparser import ConfigParser
 import logging
 from PyQt6.QtGui import QColor
-from typing import Tuple, Dict, Any, Optional
+from typing import Dict, Any
 import os
 
 logger = logging.getLogger(__name__)
@@ -15,9 +15,10 @@ class ConfigManager:
     - Overlay appearance (colors, sizes, positions)
     - Pattern matching parameters (confidence levels, FPS)
     - Scanner settings (regions, coordinates)
+    - OCR settings (region, frequency)
     - Sound settings
     
-    The settings are stored in a INI file that can be manually
+    The settings are stored in an INI file that can be manually
     edited if needed. If no config file exists, default settings are created.
     """
     
@@ -51,49 +52,60 @@ class ConfigManager:
         logger.debug("Configuration loaded successfully")
 
     def create_default_config(self) -> None:
-        """
-        Create a new configuration file with default settings.
-        
-        This method sets up initial values for all application settings:
-        - Overlay: Visual appearance settings for the detection overlay
-        - Pattern Matching: Detection sensitivity and performance settings
-        - Scanner: World scanning parameters
-        - Debug: Debug mode settings
-        
-        The default values are chosen to provide a good starting experience
-        for new users while maintaining reliable detection.
-        """
+        """Create a new configuration file with default settings."""
+        # Overlay settings
         self.config["Overlay"] = {
-            "active": "true",  # Default to ON
-            "rect_color_r": "170",
-            "rect_color_g": "0",
-            "rect_color_b": "255",
-            "rect_thickness": "8",
-            "rect_scale": "2.0",
+            "active": "false",
+            "rect_color_r": "0",
+            "rect_color_g": "255",
+            "rect_color_b": "0",
+            "rect_thickness": "2",
+            "rect_scale": "1.0",
             "font_color_r": "255",
-            "font_color_g": "0",
-            "font_color_b": "0",
-            "font_size": "24",
-            "text_thickness": "2",
+            "font_color_g": "255",
+            "font_color_b": "255",
+            "font_size": "12",
+            "text_thickness": "1",
             "cross_color_r": "255",
-            "cross_color_g": "85",
-            "cross_color_b": "127",
-            "cross_size": "28",
-            "cross_thickness": "5",
+            "cross_color_g": "0",
+            "cross_color_b": "0",
+            "cross_size": "10",
+            "cross_thickness": "1",
             "cross_scale": "1.0"
         }
         
+        # Pattern matching settings
         self.config["PatternMatching"] = {
-            "active": "true",  # Default to ON
-            "confidence": "0.90",  # 90%
-            "target_frequency": "1.0",  # 1 update per second
-            "grouping_threshold": "10",
-            "sound_enabled": "true",  # Default to ON
-            "sound_cooldown": "5.0"
+            "active": "false",
+            "confidence": "0.8",
+            "target_frequency": "1.0",
+            "sound_enabled": "false"
         }
         
+        # Scanner settings
+        self.config["Scanner"] = {
+            "minimap_left": "0",
+            "minimap_top": "0",
+            "minimap_width": "0",
+            "minimap_height": "0",
+            "input_field_x": "0",
+            "input_field_y": "0"
+        }
+        
+        # OCR settings
+        self.config["OCR"] = {
+            "active": "false",
+            "frequency": "0.5",
+            "region_left": "0",
+            "region_top": "0",
+            "region_width": "0",
+            "region_height": "0",
+            "dpi_scale": "1.0"
+        }
+        
+        # Debug settings
         self.config["Debug"] = {
-            "enabled": "false",  # Default to OFF
+            "enabled": "false",
             "save_screenshots": "true",
             "save_templates": "true"
         }
@@ -107,125 +119,166 @@ class ConfigManager:
             self.config.write(f)
         logger.debug("Configuration saved")
 
-    def get_overlay_settings(self) -> Dict[str, Any]:
-        """Get overlay window settings from config."""
-        settings = {
-            "active": self.config.getboolean("Overlay", "active", fallback=False),
-            "rect_color": QColor(
-                self.config.getint("Overlay", "rect_color_r", fallback=170),
-                self.config.getint("Overlay", "rect_color_g", fallback=0),
-                self.config.getint("Overlay", "rect_color_b", fallback=255)
-            ),
-            "rect_thickness": self.config.getint("Overlay", "rect_thickness", fallback=7),
-            "rect_scale": self.config.getfloat("Overlay", "rect_scale", fallback=2.0),
-            "font_color": QColor(
-                self.config.getint("Overlay", "font_color_r", fallback=255),
-                self.config.getint("Overlay", "font_color_g", fallback=0),
-                self.config.getint("Overlay", "font_color_b", fallback=0)
-            ),
-            "font_size": self.config.getint("Overlay", "font_size", fallback=33),
-            "text_thickness": self.config.getint("Overlay", "text_thickness", fallback=2),
-            "cross_color": QColor(
-                self.config.getint("Overlay", "cross_color_r", fallback=255),
-                self.config.getint("Overlay", "cross_color_g", fallback=85),
-                self.config.getint("Overlay", "cross_color_b", fallback=127)
-            ),
-            "cross_size": self.config.getint("Overlay", "cross_size", fallback=28),
-            "cross_thickness": self.config.getint("Overlay", "cross_thickness", fallback=5),
-            "cross_scale": self.config.getfloat("Overlay", "cross_scale", fallback=1.0)
+    def get_ocr_settings(self) -> Dict[str, Any]:
+        """Get current OCR settings."""
+        if not self.config.has_section("OCR"):
+            self.config.add_section("OCR")
+            
+        return {
+            "active": self.config.getboolean("OCR", "active", fallback=False),
+            "frequency": self.config.getfloat("OCR", "frequency", fallback=0.5),
+            "region": {
+                "left": self.config.getint("OCR", "region_left", fallback=0),
+                "top": self.config.getint("OCR", "region_top", fallback=0),
+                "width": self.config.getint("OCR", "region_width", fallback=0),
+                "height": self.config.getint("OCR", "region_height", fallback=0),
+                "dpi_scale": self.config.getfloat("OCR", "dpi_scale", fallback=1.0)
+            }
         }
-        logger.debug(f"Loaded overlay settings: {settings}")
-        return settings
+
+    def update_ocr_settings(self, settings: Dict[str, Any]) -> None:
+        """
+        Update OCR settings.
+        
+        Args:
+            settings: Dictionary containing OCR settings
+        """
+        if not self.config.has_section("OCR"):
+            self.config.add_section("OCR")
+            
+        self.config["OCR"]["active"] = str(settings.get("active", False)).lower()
+        self.config["OCR"]["frequency"] = str(settings.get("frequency", 0.5))
+        
+        region = settings.get("region", {})
+        self.config["OCR"]["region_left"] = str(region.get("left", 0))
+        self.config["OCR"]["region_top"] = str(region.get("top", 0))
+        self.config["OCR"]["region_width"] = str(region.get("width", 0))
+        self.config["OCR"]["region_height"] = str(region.get("height", 0))
+        self.config["OCR"]["dpi_scale"] = str(region.get("dpi_scale", 1.0))
+        
+        self.save_config()
+        logger.debug(f"Updated OCR settings: {settings}")
 
     def get_pattern_matching_settings(self) -> Dict[str, Any]:
         """Get pattern matching settings from config."""
-        settings = {
+        if not self.config.has_section("PatternMatching"):
+            self.config.add_section("PatternMatching")
+            
+        return {
             "active": self.config.getboolean("PatternMatching", "active", fallback=False),
-            "confidence": self.config.getfloat("PatternMatching", "confidence", fallback=0.81),
+            "confidence": self.config.getfloat("PatternMatching", "confidence", fallback=0.8),
             "target_frequency": self.config.getfloat("PatternMatching", "target_frequency", fallback=1.0),
-            "grouping_threshold": self.config.getint("PatternMatching", "grouping_threshold", fallback=10),
-            "sound_enabled": self.config.getboolean("PatternMatching", "sound_enabled", fallback=False),
-            "sound_cooldown": self.config.getfloat("PatternMatching", "sound_cooldown", fallback=5.0)
+            "sound_enabled": self.config.getboolean("PatternMatching", "sound_enabled", fallback=False)
         }
-        logger.debug(f"Loaded pattern matching settings: {settings}")
-        return settings
 
-    def get_debug_settings(self) -> Dict[str, Any]:
-        """Get debug settings from config."""
-        if not self.config.has_section("Debug"):
-            self.config.add_section("Debug")
-            self.config["Debug"] = {
-                "enabled": "false",
-                "save_screenshots": "true",
-                "save_templates": "true"
-            }
-            self.save_config()
-            
-        settings = {
-            "enabled": self.config.getboolean("Debug", "enabled", fallback=False),
-            "save_screenshots": self.config.getboolean("Debug", "save_screenshots", fallback=True),
-            "save_templates": self.config.getboolean("Debug", "save_templates", fallback=True)
-        }
-        logger.debug(f"Loaded debug settings: {settings}")
-        return settings
-
-    def update_debug_settings(self, enabled: bool, save_screenshots: bool = True, save_templates: bool = True) -> None:
-        """Update debug settings in config."""
-        if not self.config.has_section("Debug"):
-            self.config.add_section("Debug")
-            
-        self.config["Debug"]["enabled"] = str(enabled).lower()
-        self.config["Debug"]["save_screenshots"] = str(save_screenshots).lower()
-        self.config["Debug"]["save_templates"] = str(save_templates).lower()
+    def update_pattern_matching_settings(self, settings: Dict[str, Any]) -> None:
+        """
+        Update pattern matching settings.
         
+        Args:
+            settings: Dictionary containing pattern matching settings
+        """
+        if not self.config.has_section("PatternMatching"):
+            self.config.add_section("PatternMatching")
+            
+        for key, value in settings.items():
+            self.config["PatternMatching"][key] = str(value).lower() if isinstance(value, bool) else str(value)
+            
         self.save_config()
-        logger.debug(f"Updated debug settings: enabled={enabled}, screenshots={save_screenshots}, templates={save_templates}")
+        logger.debug(f"Updated pattern matching settings: {settings}")
 
-    def update_overlay_settings(self, active: bool, rect_color: QColor, 
-                              rect_thickness: int, rect_scale: float,
-                              font_color: QColor, font_size: int,
-                              text_thickness: int,
-                              cross_color: QColor, cross_size: int,
-                              cross_thickness: int, cross_scale: float) -> None:
-        """Update overlay settings in config."""
-        if "Overlay" not in self.config:
+    def get_overlay_settings(self) -> Dict[str, Any]:
+        """Get overlay settings from config."""
+        if not self.config.has_section("Overlay"):
             self.config.add_section("Overlay")
             
-        self.config["Overlay"]["active"] = str(active).lower()
+        return {
+            "active": self.config.getboolean("Overlay", "active", fallback=False),
+            "rect_color": QColor(
+                self.config.getint("Overlay", "rect_color_r", fallback=0),
+                self.config.getint("Overlay", "rect_color_g", fallback=255),
+                self.config.getint("Overlay", "rect_color_b", fallback=0)
+            ),
+            "rect_thickness": self.config.getint("Overlay", "rect_thickness", fallback=2),
+            "rect_scale": self.config.getfloat("Overlay", "rect_scale", fallback=1.0),
+            "font_color": QColor(
+                self.config.getint("Overlay", "font_color_r", fallback=255),
+                self.config.getint("Overlay", "font_color_g", fallback=255),
+                self.config.getint("Overlay", "font_color_b", fallback=255)
+            ),
+            "font_size": self.config.getint("Overlay", "font_size", fallback=12),
+            "text_thickness": self.config.getint("Overlay", "text_thickness", fallback=1),
+            "cross_color": QColor(
+                self.config.getint("Overlay", "cross_color_r", fallback=255),
+                self.config.getint("Overlay", "cross_color_g", fallback=0),
+                self.config.getint("Overlay", "cross_color_b", fallback=0)
+            ),
+            "cross_size": self.config.getint("Overlay", "cross_size", fallback=10),
+            "cross_thickness": self.config.getint("Overlay", "cross_thickness", fallback=1),
+            "cross_scale": self.config.getfloat("Overlay", "cross_scale", fallback=1.0)
+        }
+
+    def update_overlay_settings(self, settings: Dict[str, Any]) -> None:
+        """
+        Update overlay settings.
+        
+        Args:
+            settings: Dictionary containing overlay settings
+        """
+        if not self.config.has_section("Overlay"):
+            self.config.add_section("Overlay")
+            
+        self.config["Overlay"]["active"] = str(settings.get("active", False)).lower()
+        
+        rect_color = settings.get("rect_color", QColor(0, 255, 0))
         self.config["Overlay"]["rect_color_r"] = str(rect_color.red())
         self.config["Overlay"]["rect_color_g"] = str(rect_color.green())
         self.config["Overlay"]["rect_color_b"] = str(rect_color.blue())
-        self.config["Overlay"]["rect_thickness"] = str(rect_thickness)
-        self.config["Overlay"]["rect_scale"] = str(rect_scale)
+        
+        self.config["Overlay"]["rect_thickness"] = str(settings.get("rect_thickness", 2))
+        self.config["Overlay"]["rect_scale"] = str(settings.get("rect_scale", 1.0))
+        
+        font_color = settings.get("font_color", QColor(255, 255, 255))
         self.config["Overlay"]["font_color_r"] = str(font_color.red())
         self.config["Overlay"]["font_color_g"] = str(font_color.green())
         self.config["Overlay"]["font_color_b"] = str(font_color.blue())
-        self.config["Overlay"]["font_size"] = str(font_size)
-        self.config["Overlay"]["text_thickness"] = str(text_thickness)
+        
+        self.config["Overlay"]["font_size"] = str(settings.get("font_size", 12))
+        self.config["Overlay"]["text_thickness"] = str(settings.get("text_thickness", 1))
+        
+        cross_color = settings.get("cross_color", QColor(255, 0, 0))
         self.config["Overlay"]["cross_color_r"] = str(cross_color.red())
         self.config["Overlay"]["cross_color_g"] = str(cross_color.green())
         self.config["Overlay"]["cross_color_b"] = str(cross_color.blue())
-        self.config["Overlay"]["cross_size"] = str(cross_size)
-        self.config["Overlay"]["cross_thickness"] = str(cross_thickness)
-        self.config["Overlay"]["cross_scale"] = str(cross_scale)
+        
+        self.config["Overlay"]["cross_size"] = str(settings.get("cross_size", 10))
+        self.config["Overlay"]["cross_thickness"] = str(settings.get("cross_thickness", 1))
+        self.config["Overlay"]["cross_scale"] = str(settings.get("cross_scale", 1.0))
         
         self.save_config()
+        logger.debug("Updated overlay settings")
 
-    def update_pattern_matching_settings(self, active: bool, confidence: float, 
-                                      target_frequency: float, sound_enabled: bool) -> None:
-        """Update pattern matching settings in config."""
-        if "PatternMatching" not in self.config:
-            self.config.add_section("PatternMatching")
+    def get_scanner_settings(self) -> Dict[str, Any]:
+        """Get scanner settings from config."""
+        if not self.config.has_section("Scanner"):
+            self.config.add_section("Scanner")
             
-        self.config["PatternMatching"]["active"] = str(active).lower()
-        self.config["PatternMatching"]["confidence"] = str(confidence)
-        self.config["PatternMatching"]["target_frequency"] = str(target_frequency)
-        self.config["PatternMatching"]["sound_enabled"] = str(sound_enabled).lower()
-        
-        self.save_config()
+        return {
+            "minimap_left": self.config.getint("Scanner", "minimap_left", fallback=0),
+            "minimap_top": self.config.getint("Scanner", "minimap_top", fallback=0),
+            "minimap_width": self.config.getint("Scanner", "minimap_width", fallback=0),
+            "minimap_height": self.config.getint("Scanner", "minimap_height", fallback=0),
+            "input_field_x": self.config.getint("Scanner", "input_field_x", fallback=0),
+            "input_field_y": self.config.getint("Scanner", "input_field_y", fallback=0)
+        }
 
-    def update_scanner_settings(self, settings: Dict[str, int]) -> None:
-        """Update scanner settings in config."""
+    def update_scanner_settings(self, settings: Dict[str, Any]) -> None:
+        """
+        Update scanner settings.
+        
+        Args:
+            settings: Dictionary containing scanner settings
+        """
         if not self.config.has_section("Scanner"):
             self.config.add_section("Scanner")
             
@@ -233,15 +286,31 @@ class ConfigManager:
             self.config["Scanner"][key] = str(value)
             
         self.save_config()
+        logger.debug(f"Updated scanner settings: {settings}")
 
-    def get_scanner_settings(self) -> Dict[str, int]:
-        """Get current scanner settings from config."""
-        if not self.config.has_section("Scanner"):
-            return {}
+    def get_debug_settings(self) -> Dict[str, bool]:
+        """Get debug settings from config."""
+        if not self.config.has_section("Debug"):
+            self.config.add_section("Debug")
             
         return {
-            "minimap_left": self.config.getint("Scanner", "minimap_left", fallback=0),
-            "minimap_top": self.config.getint("Scanner", "minimap_top", fallback=0),
-            "minimap_width": self.config.getint("Scanner", "minimap_width", fallback=0),
-            "minimap_height": self.config.getint("Scanner", "minimap_height", fallback=0)
-        } 
+            "enabled": self.config.getboolean("Debug", "enabled", fallback=False),
+            "save_screenshots": self.config.getboolean("Debug", "save_screenshots", fallback=True),
+            "save_templates": self.config.getboolean("Debug", "save_templates", fallback=True)
+        }
+
+    def update_debug_settings(self, settings: Dict[str, bool]) -> None:
+        """
+        Update debug settings.
+        
+        Args:
+            settings: Dictionary containing debug settings
+        """
+        if not self.config.has_section("Debug"):
+            self.config.add_section("Debug")
+            
+        for key, value in settings.items():
+            self.config["Debug"][key] = str(value).lower()
+            
+        self.save_config()
+        logger.debug(f"Updated debug settings: {settings}") 
