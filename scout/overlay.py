@@ -201,6 +201,10 @@ class Overlay(QWidget):
         self.pattern_matching_active = False
         self.pattern_matching_timer.stop()
         
+        # Reset pattern matcher frequency
+        self.pattern_matcher.update_frequency = 0.0
+        self.pattern_matcher.last_update_time = 0.0
+        
         # Safely destroy window when pattern matching stops
         self._destroy_window_safely()
         

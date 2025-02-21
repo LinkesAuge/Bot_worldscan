@@ -246,7 +246,7 @@ class PatternMatcher:
             logger.error(f"Error capturing window: {e}", exc_info=True)
             return None
     
-    def find_matches(self, screenshot: np.ndarray) -> List[MatchResult]:
+    def find_matches(self, screenshot: np.ndarray) -> List[GroupedMatch]:
         """
         Find all pattern matches in the given screenshot.
         
@@ -254,11 +254,20 @@ class PatternMatcher:
             screenshot: Screenshot to analyze
             
         Returns:
-            List of MatchResult objects for each match found
+            List of GroupedMatch objects for each match found
         """
         matches = []
         
         try:
+            # Calculate time since last update and update frequency
+            current_time = time()
+            if self.last_update_time > 0:
+                time_diff = current_time - self.last_update_time
+                if time_diff > 0:
+                    self.update_frequency = 1.0 / time_diff
+                    logger.debug(f"Pattern matching frequency: {self.update_frequency:.2f} updates/sec")
+            self.last_update_time = current_time
+            
             # Convert screenshot to grayscale
             gray = cv2.cvtColor(screenshot, cv2.COLOR_BGR2GRAY)
             
