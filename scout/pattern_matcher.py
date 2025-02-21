@@ -243,154 +243,99 @@ class PatternMatcher:
             logger.error(f"Error capturing window: {e}", exc_info=True)
             return None
     
-    def find_matches(self, image: np.ndarray) -> List[GroupedMatch]:
+    def find_matches(self, screenshot: np.ndarray) -> List[MatchResult]:
         """
-        Find all template matches in the image.
+        Find all pattern matches in the given screenshot.
         
         Args:
-            image: Image to search in
-        
+            screenshot: Screenshot to analyze
+            
         Returns:
-            List of GroupedMatch objects
+            List of MatchResult objects for each match found
         """
+        matches = []
+        
         try:
-            # Convert image to grayscale
-            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            # Convert screenshot to grayscale
+            gray = cv2.cvtColor(screenshot, cv2.COLOR_BGR2GRAY)
             
-            # Update debug window with processed images if debug mode is enabled
+            # Create debug image if in debug mode
             if self.debug_mode:
-                # Show original capture
-                self.debug_window.update_image(
-                    "Current Search Image",
-                    image,
-                    metadata={
-                        "size": f"{image.shape[1]}x{image.shape[0]}",
-                        "type": "Original"
-                    },
-                    save=True
-                )
-                
-                # Show grayscale version
-                self.debug_window.update_image(
-                    "Current Search Image (Gray)",
-                    gray,
-                    metadata={
-                        "size": f"{gray.shape[1]}x{gray.shape[0]}",
-                        "type": "Grayscale"
-                    },
-                    save=True
-                )
+                debug_img = screenshot.copy()
             
-            all_matches = []
-            
-            # Process each template
-            for template_name, template in self.templates.items():
-                # Match template
+            # Search for each template
+            for name, template in self.templates.items():
+                # Perform template matching
                 result = cv2.matchTemplate(gray, template, cv2.TM_CCOEFF_NORMED)
                 
-                # Find matches above threshold
+                # Find matches above confidence threshold
                 locations = np.where(result >= self.confidence)
-                for y, x in zip(*locations):
-                    match = GroupedMatch(
-                        bounds=(
-                            x,
-                            y,
-                            x + template.shape[1],
-                            y + template.shape[0]
-                        ),
-                        confidence=result[y, x],
-                        template_name=template_name
-                    )
-                    all_matches.append(match)
-                    
-                # Update debug window with match visualization if in debug mode
-                if self.debug_mode and len(locations[0]) > 0:
-                    # Create visualization
-                    debug_img = image.copy()
-                    for match in all_matches:
-                        if match.template_name == template_name:
-                            x1, y1, x2, y2 = match.bounds
-                            cv2.rectangle(
-                                debug_img,
-                                (x1, y1),
-                                (x2, y2),
-                                (0, 255, 0),
-                                2
-                            )
-                            # Add confidence score
-                            cv2.putText(
-                                debug_img,
-                                f"{match.confidence:.2f}",
-                                (x1, y1 - 5),
-                                cv2.FONT_HERSHEY_SIMPLEX,
-                                0.5,
-                                (0, 255, 0),
-                                1
-                            )
-                    
-                    self.debug_window.update_image(
-                        f"Matches - {template_name}",
-                        debug_img,
-                        metadata={
-                            "matches": len(locations[0]),
-                            "confidence_threshold": f"{self.confidence:.2f}"
-                        },
-                        save=True
-                    )
-                    
-                    # Also show the correlation result
-                    # Scale to 0-255 for better visualization
-                    result_normalized = cv2.normalize(result, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
-                    self.debug_window.update_image(
-                        f"Correlation - {template_name}",
-                        result_normalized,
-                        metadata={
-                            "max_confidence": f"{np.max(result):.2f}",
-                            "threshold": f"{self.confidence:.2f}"
-                        },
-                        save=True
-                    )
-            
-            # Group matches
-            grouped = self._group_matches(all_matches)
-            
-            # If in debug mode, show final grouped matches
-            if self.debug_mode and grouped:
-                final_img = image.copy()
-                for match in grouped:
-                    x1, y1, x2, y2 = match.bounds
-                    cv2.rectangle(
-                        final_img,
-                        (x1, y1),
-                        (x2, y2),
-                        (0, 0, 255),  # Red for grouped matches
-                        2
-                    )
-                    # Add template name and confidence
-                    cv2.putText(
-                        final_img,
-                        f"{match.template_name} ({match.confidence:.2f})",
-                        (x1, y1 - 5),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.5,
-                        (0, 0, 255),
-                        1
-                    )
                 
+                # Create match results
+                for pt in zip(*locations[::-1]):  # Convert to x,y format
+                    match = MatchResult(
+                        position=pt,
+                        confidence=result[pt[1], pt[0]],
+                        width=template.shape[1],
+                        height=template.shape[0],
+                        template_name=name
+                    )
+                    matches.append(match)
+                    
+                    if self.debug_mode:
+                        # Draw match rectangle on debug image
+                        cv2.rectangle(
+                            debug_img,
+                            pt,
+                            (pt[0] + template.shape[1], pt[1] + template.shape[0]),
+                            (0, 255, 0),
+                            2
+                        )
+                        # Add confidence text
+                        cv2.putText(
+                            debug_img,
+                            f"{name} ({result[pt[1], pt[0]]:.2f})",
+                            (pt[0], pt[1] - 5),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.5,
+                            (0, 255, 0),
+                            1
+                        )
+            
+            # Update debug window if in debug mode
+            if self.debug_mode and matches:
                 self.debug_window.update_image(
-                    "Final Grouped Matches",
-                    final_img,
+                    "Pattern Matches",
+                    debug_img,
                     metadata={
-                        "matches": len(grouped),
-                        "grouping_threshold": self.grouping_threshold
+                        "matches": len(matches),
+                        "confidence": self.confidence
                     },
                     save=True
                 )
             
-            return grouped
+            # Handle matches for sound alerts
+            self.handle_matches(matches)
+            
+            # Convert MatchResult objects to GroupedMatch objects for display
+            grouped_matches = []
+            for match in matches:
+                grouped_match = GroupedMatch(
+                    bounds=(
+                        match.position[0],
+                        match.position[1],
+                        match.position[0] + match.width,
+                        match.position[1] + match.height
+                    ),
+                    confidence=match.confidence,
+                    template_name=match.template_name
+                )
+                grouped_matches.append(grouped_match)
+            
+            return grouped_matches
             
         except Exception as e:
-            logger.error(f"Error finding matches: {e}", exc_info=True)
+            logger.error(f"Error finding matches: {str(e)}", exc_info=True)
             return []
     
     def _group_matches(self, matches: List[GroupedMatch]) -> List[GroupedMatch]:
@@ -459,3 +404,14 @@ class PatternMatcher:
             used.add(i)
         
         return grouped 
+
+    def handle_matches(self, matches: List[MatchResult]) -> None:
+        """
+        Handle pattern matches and trigger sound alerts if enabled.
+        
+        Args:
+            matches: List of pattern matches found
+        """
+        if matches and self.sound_enabled and hasattr(self, 'sound_manager'):
+            logger.debug(f"Playing sound alert for {len(matches)} matches")
+            self.sound_manager.play_if_ready() 
