@@ -1,0 +1,2 @@
+2025-02-20 22:48:03,870 - world_scanner - INFO - === Starting new scan session ===
+2025-02-20 22:48:03,870 - world_scanner - INFO - Log file created at: scan_logs\scan_log_20250220-224803.txt

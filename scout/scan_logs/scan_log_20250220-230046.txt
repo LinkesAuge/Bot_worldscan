@@ -1,0 +1,12 @@
+2025-02-20 23:00:46,882 - world_scanner - INFO - === Starting new scan session ===
+2025-02-20 23:00:46,882 - world_scanner - INFO - Log file created at: scan_logs\scan_log_20250220-230046.txt
+2025-02-20 23:00:46,905 - world_scanner - INFO - Starting coordinate detection...
+2025-02-20 23:00:46,905 - world_scanner - INFO - Using scanner settings: {'minimap_left': 7, 'minimap_top': 1130, 'minimap_width': 223, 'minimap_height': 260}
+2025-02-20 23:00:46,905 - world_scanner - DEBUG - Coordinate regions defined:
+2025-02-20 23:00:46,906 - world_scanner - DEBUG - x: {'left': 7, 'top': 1392, 'width': 45, 'height': 25}
+2025-02-20 23:00:46,906 - world_scanner - DEBUG - y: {'left': 82, 'top': 1392, 'width': 45, 'height': 25}
+2025-02-20 23:00:46,906 - world_scanner - DEBUG - k: {'left': 157, 'top': 1392, 'width': 35, 'height': 25}
+2025-02-20 23:00:46,912 - world_scanner - DEBUG - Processing x coordinate region
+2025-02-20 23:00:47,118 - world_scanner - DEBUG - Raw OCR text for x: ''
+2025-02-20 23:00:47,118 - world_scanner - ERROR - No digits found in OCR text for x
+2025-02-20 23:00:47,119 - world_scanner - INFO - === Ending scan session ===
