@@ -1,0 +1,320 @@
+from typing import List, Tuple, Optional, Dict
+import cv2
+import numpy as np
+import mss
+import os
+from pathlib import Path
+from dataclasses import dataclass
+from time import time
+import logging
+import win32gui
+import win32ui
+import win32con
+from window_manager import WindowManager
+
+logger = logging.getLogger(__name__)
+
+@dataclass
+class MatchResult:
+    """
+    Data class for pattern matching results.
+    
+    Attributes:
+        position: (x, y) coordinates of match
+        confidence: Match confidence score (0-1)
+        width: Width of matched template
+        height: Height of matched template
+        template_name: Name of the matched template
+    """
+    position: Tuple[int, int]
+    confidence: float
+    width: int
+    height: int
+    template_name: str
+
+@dataclass
+class GroupedMatch:
+    """
+    Data class for grouped pattern matching results.
+    
+    Attributes:
+        position: Top-left coordinates of the group's bounding box
+        width: Average width of the group's bounding box
+        height: Average height of the group's bounding box
+        confidence: Highest confidence score in the group
+        template_name: Name of the matched template
+        match_count: Number of matches in this group
+        bounds: (min_x, min_y, max_x, max_y) of the group's bounding box
+        group_id: ID of the group this match belongs to
+    """
+    position: Tuple[int, int]
+    width: int
+    height: int
+    confidence: float
+    template_name: str
+    match_count: int
+    bounds: Tuple[int, int, int, int]
+    group_id: int
+
+class PatternMatcher:
+    """Handles pattern matching for game elements."""
+    
+    def __init__(self, window_manager: WindowManager, confidence: float = 0.8, 
+                 target_fps: float = 1.0, sound_enabled: bool = False,
+                 images_dir: str = "images", grouping_threshold: int = 10) -> None:
+        """
+        Initialize pattern matcher.
+        
+        Args:
+            window_manager: Window manager instance for capturing
+            confidence: Minimum confidence threshold for matches
+            target_fps: Target frames per second for scanning
+            sound_enabled: Whether to enable sound alerts
+            images_dir: Directory containing template images
+            grouping_threshold: Pixel distance threshold for grouping matches
+        """
+        self.window_manager = window_manager
+        self.confidence = confidence
+        self.target_fps = target_fps
+        self.sound_enabled = sound_enabled
+        self.images_dir = Path(images_dir)
+        self.templates: Dict[str, np.ndarray] = {}
+        self.fps = 0.0
+        self.last_capture_time = 0.0
+        self.grouping_threshold = grouping_threshold
+        self.client_offset_x = 0
+        self.client_offset_y = 0
+        
+        # Load templates on initialization
+        self.reload_templates()
+        logger.debug("PatternMatcher initialized")
+    
+    def reload_templates(self) -> None:
+        """Reload all template images from the images directory."""
+        logger.info("Reloading template images")
+        self.templates.clear()
+        
+        if not self.images_dir.exists():
+            logger.warning(f"Template directory not found: {self.images_dir}")
+            return
+            
+        for file in self.images_dir.glob("*.png"):
+            try:
+                # Read template and convert to grayscale
+                template = cv2.imread(str(file))
+                if template is None:
+                    logger.warning(f"Failed to load template: {file}")
+                    continue
+                    
+                # Convert to grayscale and ensure correct format
+                template = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
+                template = np.array(template, dtype=np.uint8)
+                
+                self.templates[file.stem] = template
+                logger.debug(f"Loaded template: {file.stem}")
+                
+            except Exception as e:
+                logger.error(f"Error loading template {file}: {str(e)}", exc_info=True)
+        
+        logger.info(f"Loaded {len(self.templates)} templates")
+    
+    def find_matches(self, confidence_threshold: float = 0.8) -> List[GroupedMatch]:
+        """
+        Find matches for all templates in the window.
+        
+        Args:
+            confidence_threshold: Minimum confidence score for matches (0-1)
+            
+        Returns:
+            List[GroupedMatch]: List of grouped matches above the confidence threshold
+        """
+        logger.info(f"Starting pattern matching with confidence threshold: {confidence_threshold}")
+        
+        if not self.templates:
+            logger.warning("No templates loaded!")
+            return []
+            
+        logger.info(f"Loaded templates: {list(self.templates.keys())}")
+        
+        try:
+            # Capture window
+            img = self.capture_window()
+            if img is None:
+                logger.warning("Failed to capture window")
+                return []
+            
+            logger.debug(f"Captured image size: {img.shape}")
+            
+            # Convert to grayscale
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            
+            # Calculate FPS
+            current_time = time()
+            if self.last_capture_time > 0:
+                self.fps = 1.0 / (current_time - self.last_capture_time)
+            self.last_capture_time = current_time
+            
+            # Process each template
+            all_matches = []
+            for name, template in self.templates.items():
+                try:
+                    logger.debug(f"Matching template '{name}'")
+                    result = cv2.matchTemplate(gray, template, cv2.TM_CCOEFF_NORMED)
+                    locations = np.where(result >= confidence_threshold)
+                    
+                    for pt in zip(*locations[::-1]):
+                        confidence = result[pt[1], pt[0]]
+                        match = MatchResult(
+                            position=pt,
+                            confidence=confidence,
+                            width=template.shape[1],
+                            height=template.shape[0],
+                            template_name=name
+                        )
+                        all_matches.append(match)
+                        logger.debug(f"Found match: {name} at {pt} with confidence {confidence:.2f}")
+                        
+                except Exception as e:
+                    logger.error(f"Error matching template {name}: {e}")
+            
+            # Group matches
+            grouped_matches = self._group_matches(all_matches)
+            logger.info(f"Found {len(grouped_matches)} grouped matches")
+            return grouped_matches
+            
+        except Exception as e:
+            logger.error(f"Error in pattern matching: {e}", exc_info=True)
+            return []
+    
+    def _group_matches(self, matches: List[MatchResult]) -> List[GroupedMatch]:
+        """Group nearby matches together."""
+        if not matches:
+            return []
+            
+        groups = []
+        used = set()
+        group_id = 0
+        
+        for i, match in enumerate(matches):
+            if i in used:
+                continue
+                
+            # Start new group
+            group = [match]
+            used.add(i)
+            
+            # Find nearby matches
+            for j, other in enumerate(matches[i+1:], i+1):
+                if j in used:
+                    continue
+                    
+                # Check if match is close to any in current group
+                for grouped_match in group:
+                    dist = np.sqrt(
+                        (other.position[0] - grouped_match.position[0])**2 +
+                        (other.position[1] - grouped_match.position[1])**2
+                    )
+                    if dist <= self.grouping_threshold:
+                        group.append(other)
+                        used.add(j)
+                        break
+            
+            # Create group summary
+            min_x = min(m.position[0] for m in group)
+            min_y = min(m.position[1] for m in group)
+            max_x = max(m.position[0] + m.width for m in group)
+            max_y = max(m.position[1] + m.height for m in group)
+            
+            groups.append(GroupedMatch(
+                position=(min_x, min_y),
+                width=int((max_x - min_x) / len(group)),
+                height=int((max_y - min_y) / len(group)),
+                confidence=max(m.confidence for m in group),
+                template_name=group[0].template_name,
+                match_count=len(group),
+                bounds=(min_x, min_y, max_x, max_y),
+                group_id=group_id
+            ))
+            group_id += 1
+        
+        return groups 
+
+    def capture_window(self) -> Optional[np.ndarray]:
+        """Capture the game window."""
+        try:
+            if not self.window_manager.find_window():
+                return None
+            
+            # Get window position
+            pos = self.window_manager.get_window_position()
+            if not pos:
+                return None
+            
+            x, y, width, height = pos
+            window_title = win32gui.GetWindowText(self.window_manager.hwnd)
+            logger.info(f"Capturing window: '{window_title}' at ({x}, {y}) size: {width}x{height}")
+            
+            # Try to get the actual client area for Chrome
+            if "Chrome" in window_title:
+                try:
+                    import ctypes
+                    from ctypes.wintypes import RECT
+                    
+                    # Get client rect (actual content area)
+                    rect = RECT()
+                    ctypes.windll.user32.GetClientRect(self.window_manager.hwnd, ctypes.byref(rect))
+                    client_width = rect.right - rect.left
+                    client_height = rect.bottom - rect.top
+                    
+                    # Get client area position
+                    point = ctypes.wintypes.POINT(0, 0)
+                    ctypes.windll.user32.ClientToScreen(self.window_manager.hwnd, ctypes.byref(point))
+                    client_x, client_y = point.x, point.y
+                    
+                    # Calculate offset from window to client
+                    self.client_offset_x = client_x - x
+                    self.client_offset_y = client_y - y
+                    
+                    logger.info(f"Client area: ({client_x}, {client_y}) size: {client_width}x{client_height}")
+                    logger.debug(f"Client offset: ({self.client_offset_x}, {self.client_offset_y})")
+                    
+                    # Update coordinates to use client area
+                    x, y = client_x, client_y
+                    width, height = client_width, client_height
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to get client area: {e}")
+            
+            # Create screenshot
+            with mss.mss() as sct:
+                monitor = {
+                    "left": x,
+                    "top": y,
+                    "width": width,
+                    "height": height
+                }
+                screenshot = sct.grab(monitor)
+                img = np.array(screenshot)
+            
+            # Save debug screenshots
+            debug_dir = Path("debug_screenshots")
+            debug_dir.mkdir(exist_ok=True)
+            
+            # Save original screenshot
+            cv2.imwrite(str(debug_dir / "last_capture.png"), img)
+            
+            # Save grayscale version
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            cv2.imwrite(str(debug_dir / "last_capture_gray.png"), gray)
+            
+            # Save template images for comparison
+            for name, template in self.templates.items():
+                cv2.imwrite(str(debug_dir / f"template_{name}.png"), template)
+            
+            logger.info(f"Saved debug screenshots to {debug_dir}")
+            
+            return img
+            
+        except Exception as e:
+            logger.error(f"Error capturing window: {str(e)}", exc_info=True)
+            return None 

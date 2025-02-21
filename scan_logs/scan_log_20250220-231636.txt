@@ -1,0 +1,123 @@
+2025-02-20 23:16:36,494 - world_scanner - INFO - === Starting new scan session ===
+2025-02-20 23:16:36,495 - world_scanner - INFO - Log file created at: scan_logs\scan_log_20250220-231636.txt
+2025-02-20 23:16:36,505 - world_scanner - INFO - Starting continuous scan...
+2025-02-20 23:16:36,821 - world_scanner - INFO - Starting coordinate detection...
+2025-02-20 23:16:36,822 - world_scanner - INFO - Using scanner settings: {'minimap_left': 13, 'minimap_top': 1361, 'minimap_width': 217, 'minimap_height': 32}
+2025-02-20 23:16:36,822 - world_scanner - DEBUG - Coordinate regions defined:
+2025-02-20 23:16:36,822 - world_scanner - DEBUG - x: {'left': 13, 'top': 1393, 'width': 72, 'height': 20}
+2025-02-20 23:16:36,823 - world_scanner - DEBUG - y: {'left': 85, 'top': 1393, 'width': 72, 'height': 20}
+2025-02-20 23:16:36,823 - world_scanner - DEBUG - k: {'left': 157, 'top': 1393, 'width': 72, 'height': 20}
+2025-02-20 23:16:36,831 - world_scanner - DEBUG - Processing x coordinate region
+2025-02-20 23:16:36,931 - world_scanner - DEBUG - Raw OCR text for x: ''
+2025-02-20 23:16:36,931 - world_scanner - ERROR - No digits found in OCR text for x
+2025-02-20 23:16:36,931 - world_scanner - WARNING - Failed to read coordinates, retrying in 2 seconds...
+2025-02-20 23:16:39,335 - world_scanner - INFO - Starting coordinate detection...
+2025-02-20 23:16:39,335 - world_scanner - INFO - Using scanner settings: {'minimap_left': 13, 'minimap_top': 1361, 'minimap_width': 217, 'minimap_height': 32}
+2025-02-20 23:16:39,335 - world_scanner - DEBUG - Coordinate regions defined:
+2025-02-20 23:16:39,336 - world_scanner - DEBUG - x: {'left': 13, 'top': 1393, 'width': 72, 'height': 20}
+2025-02-20 23:16:39,336 - world_scanner - DEBUG - y: {'left': 85, 'top': 1393, 'width': 72, 'height': 20}
+2025-02-20 23:16:39,336 - world_scanner - DEBUG - k: {'left': 157, 'top': 1393, 'width': 72, 'height': 20}
+2025-02-20 23:16:39,348 - world_scanner - DEBUG - Processing x coordinate region
+2025-02-20 23:16:39,445 - world_scanner - DEBUG - Raw OCR text for x: ''
+2025-02-20 23:16:39,446 - world_scanner - ERROR - No digits found in OCR text for x
+2025-02-20 23:16:39,446 - world_scanner - WARNING - Failed to read coordinates, retrying in 2 seconds...
+2025-02-20 23:16:41,755 - world_scanner - INFO - Starting coordinate detection...
+2025-02-20 23:16:41,757 - world_scanner - INFO - Using scanner settings: {'minimap_left': 13, 'minimap_top': 1361, 'minimap_width': 217, 'minimap_height': 32}
+2025-02-20 23:16:41,757 - world_scanner - DEBUG - Coordinate regions defined:
+2025-02-20 23:16:41,757 - world_scanner - DEBUG - x: {'left': 13, 'top': 1393, 'width': 72, 'height': 20}
+2025-02-20 23:16:41,757 - world_scanner - DEBUG - y: {'left': 85, 'top': 1393, 'width': 72, 'height': 20}
+2025-02-20 23:16:41,757 - world_scanner - DEBUG - k: {'left': 157, 'top': 1393, 'width': 72, 'height': 20}
+2025-02-20 23:16:41,764 - world_scanner - DEBUG - Processing x coordinate region
+2025-02-20 23:16:41,862 - world_scanner - DEBUG - Raw OCR text for x: ''
+2025-02-20 23:16:41,862 - world_scanner - ERROR - No digits found in OCR text for x
+2025-02-20 23:16:41,863 - world_scanner - WARNING - Failed to read coordinates, retrying in 2 seconds...
+2025-02-20 23:16:44,172 - world_scanner - INFO - Starting coordinate detection...
+2025-02-20 23:16:44,173 - world_scanner - INFO - Using scanner settings: {'minimap_left': 13, 'minimap_top': 1361, 'minimap_width': 217, 'minimap_height': 32}
+2025-02-20 23:16:44,173 - world_scanner - DEBUG - Coordinate regions defined:
+2025-02-20 23:16:44,173 - world_scanner - DEBUG - x: {'left': 13, 'top': 1393, 'width': 72, 'height': 20}
+2025-02-20 23:16:44,173 - world_scanner - DEBUG - y: {'left': 85, 'top': 1393, 'width': 72, 'height': 20}
+2025-02-20 23:16:44,173 - world_scanner - DEBUG - k: {'left': 157, 'top': 1393, 'width': 72, 'height': 20}
+2025-02-20 23:16:44,183 - world_scanner - DEBUG - Processing x coordinate region
+2025-02-20 23:16:44,282 - world_scanner - DEBUG - Raw OCR text for x: ''
+2025-02-20 23:16:44,282 - world_scanner - ERROR - No digits found in OCR text for x
+2025-02-20 23:16:44,282 - world_scanner - WARNING - Failed to read coordinates, retrying in 2 seconds...
+2025-02-20 23:16:46,587 - world_scanner - INFO - Starting coordinate detection...
+2025-02-20 23:16:46,588 - world_scanner - INFO - Using scanner settings: {'minimap_left': 13, 'minimap_top': 1361, 'minimap_width': 217, 'minimap_height': 32}
+2025-02-20 23:16:46,588 - world_scanner - DEBUG - Coordinate regions defined:
+2025-02-20 23:16:46,588 - world_scanner - DEBUG - x: {'left': 13, 'top': 1393, 'width': 72, 'height': 20}
+2025-02-20 23:16:46,588 - world_scanner - DEBUG - y: {'left': 85, 'top': 1393, 'width': 72, 'height': 20}
+2025-02-20 23:16:46,588 - world_scanner - DEBUG - k: {'left': 157, 'top': 1393, 'width': 72, 'height': 20}
+2025-02-20 23:16:46,598 - world_scanner - DEBUG - Processing x coordinate region
+2025-02-20 23:16:46,700 - world_scanner - DEBUG - Raw OCR text for x: ''
+2025-02-20 23:16:46,700 - world_scanner - ERROR - No digits found in OCR text for x
+2025-02-20 23:16:46,700 - world_scanner - WARNING - Failed to read coordinates, retrying in 2 seconds...
+2025-02-20 23:16:49,003 - world_scanner - INFO - Starting coordinate detection...
+2025-02-20 23:16:49,004 - world_scanner - INFO - Using scanner settings: {'minimap_left': 13, 'minimap_top': 1361, 'minimap_width': 217, 'minimap_height': 32}
+2025-02-20 23:16:49,004 - world_scanner - DEBUG - Coordinate regions defined:
+2025-02-20 23:16:49,004 - world_scanner - DEBUG - x: {'left': 13, 'top': 1393, 'width': 72, 'height': 20}
+2025-02-20 23:16:49,005 - world_scanner - DEBUG - y: {'left': 85, 'top': 1393, 'width': 72, 'height': 20}
+2025-02-20 23:16:49,005 - world_scanner - DEBUG - k: {'left': 157, 'top': 1393, 'width': 72, 'height': 20}
+2025-02-20 23:16:49,014 - world_scanner - DEBUG - Processing x coordinate region
+2025-02-20 23:16:49,113 - world_scanner - DEBUG - Raw OCR text for x: ''
+2025-02-20 23:16:49,114 - world_scanner - ERROR - No digits found in OCR text for x
+2025-02-20 23:16:49,114 - world_scanner - WARNING - Failed to read coordinates, retrying in 2 seconds...
+2025-02-20 23:16:51,404 - world_scanner - INFO - Starting coordinate detection...
+2025-02-20 23:16:51,405 - world_scanner - INFO - Using scanner settings: {'minimap_left': 13, 'minimap_top': 1361, 'minimap_width': 217, 'minimap_height': 32}
+2025-02-20 23:16:51,405 - world_scanner - DEBUG - Coordinate regions defined:
+2025-02-20 23:16:51,405 - world_scanner - DEBUG - x: {'left': 13, 'top': 1393, 'width': 72, 'height': 20}
+2025-02-20 23:16:51,405 - world_scanner - DEBUG - y: {'left': 85, 'top': 1393, 'width': 72, 'height': 20}
+2025-02-20 23:16:51,406 - world_scanner - DEBUG - k: {'left': 157, 'top': 1393, 'width': 72, 'height': 20}
+2025-02-20 23:16:51,415 - world_scanner - DEBUG - Processing x coordinate region
+2025-02-20 23:16:51,515 - world_scanner - DEBUG - Raw OCR text for x: ''
+2025-02-20 23:16:51,515 - world_scanner - ERROR - No digits found in OCR text for x
+2025-02-20 23:16:51,516 - world_scanner - WARNING - Failed to read coordinates, retrying in 2 seconds...
+2025-02-20 23:16:53,788 - world_scanner - INFO - Starting coordinate detection...
+2025-02-20 23:16:53,788 - world_scanner - INFO - Using scanner settings: {'minimap_left': 13, 'minimap_top': 1361, 'minimap_width': 217, 'minimap_height': 32}
+2025-02-20 23:16:53,789 - world_scanner - DEBUG - Coordinate regions defined:
+2025-02-20 23:16:53,789 - world_scanner - DEBUG - x: {'left': 13, 'top': 1393, 'width': 72, 'height': 20}
+2025-02-20 23:16:53,789 - world_scanner - DEBUG - y: {'left': 85, 'top': 1393, 'width': 72, 'height': 20}
+2025-02-20 23:16:53,789 - world_scanner - DEBUG - k: {'left': 157, 'top': 1393, 'width': 72, 'height': 20}
+2025-02-20 23:16:53,799 - world_scanner - DEBUG - Processing x coordinate region
+2025-02-20 23:16:53,895 - world_scanner - DEBUG - Raw OCR text for x: ''
+2025-02-20 23:16:53,895 - world_scanner - ERROR - No digits found in OCR text for x
+2025-02-20 23:16:53,895 - world_scanner - WARNING - Failed to read coordinates, retrying in 2 seconds...
+2025-02-20 23:16:56,204 - world_scanner - INFO - Starting coordinate detection...
+2025-02-20 23:16:56,205 - world_scanner - INFO - Using scanner settings: {'minimap_left': 13, 'minimap_top': 1361, 'minimap_width': 217, 'minimap_height': 32}
+2025-02-20 23:16:56,205 - world_scanner - DEBUG - Coordinate regions defined:
+2025-02-20 23:16:56,205 - world_scanner - DEBUG - x: {'left': 13, 'top': 1393, 'width': 72, 'height': 20}
+2025-02-20 23:16:56,205 - world_scanner - DEBUG - y: {'left': 85, 'top': 1393, 'width': 72, 'height': 20}
+2025-02-20 23:16:56,205 - world_scanner - DEBUG - k: {'left': 157, 'top': 1393, 'width': 72, 'height': 20}
+2025-02-20 23:16:56,215 - world_scanner - DEBUG - Processing x coordinate region
+2025-02-20 23:16:56,312 - world_scanner - DEBUG - Raw OCR text for x: ''
+2025-02-20 23:16:56,312 - world_scanner - ERROR - No digits found in OCR text for x
+2025-02-20 23:16:56,313 - world_scanner - WARNING - Failed to read coordinates, retrying in 2 seconds...
+2025-02-20 23:16:58,619 - world_scanner - INFO - Starting coordinate detection...
+2025-02-20 23:16:58,620 - world_scanner - INFO - Using scanner settings: {'minimap_left': 13, 'minimap_top': 1361, 'minimap_width': 217, 'minimap_height': 32}
+2025-02-20 23:16:58,620 - world_scanner - DEBUG - Coordinate regions defined:
+2025-02-20 23:16:58,620 - world_scanner - DEBUG - x: {'left': 13, 'top': 1393, 'width': 72, 'height': 20}
+2025-02-20 23:16:58,620 - world_scanner - DEBUG - y: {'left': 85, 'top': 1393, 'width': 72, 'height': 20}
+2025-02-20 23:16:58,620 - world_scanner - DEBUG - k: {'left': 157, 'top': 1393, 'width': 72, 'height': 20}
+2025-02-20 23:16:58,632 - world_scanner - DEBUG - Processing x coordinate region
+2025-02-20 23:16:58,730 - world_scanner - DEBUG - Raw OCR text for x: ''
+2025-02-20 23:16:58,731 - world_scanner - ERROR - No digits found in OCR text for x
+2025-02-20 23:16:58,731 - world_scanner - WARNING - Failed to read coordinates, retrying in 2 seconds...
+2025-02-20 23:17:01,138 - world_scanner - INFO - Starting coordinate detection...
+2025-02-20 23:17:01,139 - world_scanner - INFO - Using scanner settings: {'minimap_left': 13, 'minimap_top': 1361, 'minimap_width': 217, 'minimap_height': 32}
+2025-02-20 23:17:01,139 - world_scanner - DEBUG - Coordinate regions defined:
+2025-02-20 23:17:01,139 - world_scanner - DEBUG - x: {'left': 13, 'top': 1393, 'width': 72, 'height': 20}
+2025-02-20 23:17:01,139 - world_scanner - DEBUG - y: {'left': 85, 'top': 1393, 'width': 72, 'height': 20}
+2025-02-20 23:17:01,140 - world_scanner - DEBUG - k: {'left': 157, 'top': 1393, 'width': 72, 'height': 20}
+2025-02-20 23:17:01,148 - world_scanner - DEBUG - Processing x coordinate region
+2025-02-20 23:17:01,249 - world_scanner - DEBUG - Raw OCR text for x: ''
+2025-02-20 23:17:01,249 - world_scanner - ERROR - No digits found in OCR text for x
+2025-02-20 23:17:01,249 - world_scanner - WARNING - Failed to read coordinates, retrying in 2 seconds...
+2025-02-20 23:17:03,560 - world_scanner - INFO - Starting coordinate detection...
+2025-02-20 23:17:03,560 - world_scanner - INFO - Using scanner settings: {'minimap_left': 13, 'minimap_top': 1361, 'minimap_width': 217, 'minimap_height': 32}
+2025-02-20 23:17:03,561 - world_scanner - DEBUG - Coordinate regions defined:
+2025-02-20 23:17:03,561 - world_scanner - DEBUG - x: {'left': 13, 'top': 1393, 'width': 72, 'height': 20}
+2025-02-20 23:17:03,561 - world_scanner - DEBUG - y: {'left': 85, 'top': 1393, 'width': 72, 'height': 20}
+2025-02-20 23:17:03,561 - world_scanner - DEBUG - k: {'left': 157, 'top': 1393, 'width': 72, 'height': 20}
+2025-02-20 23:17:03,566 - world_scanner - DEBUG - Processing x coordinate region
+2025-02-20 23:17:03,664 - world_scanner - DEBUG - Raw OCR text for x: ''
+2025-02-20 23:17:03,664 - world_scanner - ERROR - No digits found in OCR text for x
+2025-02-20 23:17:03,665 - world_scanner - WARNING - Failed to read coordinates, retrying in 2 seconds...
