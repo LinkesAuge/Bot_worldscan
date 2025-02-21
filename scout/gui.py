@@ -103,11 +103,6 @@ class OverlayController(QMainWindow):
                 f"Minimap region: ({scanner_settings['minimap_left']}, {scanner_settings['minimap_top']})"
             )
         
-        # Create FPS update timer
-        self.fps_timer = QTimer()
-        self.fps_timer.timeout.connect(self.update_fps_display)
-        self.fps_timer.start(500)  # Update every 500ms
-        
         # Initialize TextOCR
         self.text_ocr = TextOCR(self.debug_window)
         
@@ -148,6 +143,11 @@ class OverlayController(QMainWindow):
         self.ocr_freq_input.valueChanged.connect(on_ocr_spinbox_change)
         
         logger.debug("GUI initialized")
+        
+        # Create pattern update timer - moved to end after all UI elements are initialized
+        self.pattern_update_timer = QTimer()
+        self.pattern_update_timer.timeout.connect(self.update_pattern_frequency_display)
+        self.pattern_update_timer.start(500)  # Update every 500ms
     
     def create_overlay_controls(self, parent_layout: QVBoxLayout, settings: Dict[str, Any]) -> None:
         """
@@ -306,76 +306,87 @@ class OverlayController(QMainWindow):
             parent_layout: Parent layout to add controls to
             settings: Dictionary containing pattern matching settings
         """
-        pattern_group = QGroupBox("Pattern Matching")
+        pattern_group = QGroupBox("Pattern Matching Controls")
         layout = QVBoxLayout()
         
-        # Pattern matching toggle
-        is_active = settings["active"]
-        self.pattern_btn = QPushButton("Pattern Matching: ON" if is_active else "Pattern Matching: OFF")
+        # Pattern matching toggle button
+        is_active = settings.get("active", False)
+        self.pattern_btn = QPushButton(f"Pattern Matching: {'ON' if is_active else 'OFF'}")
         self.pattern_btn.clicked.connect(self._toggle_pattern_matching)
         self._update_pattern_button_color(is_active)
         layout.addWidget(self.pattern_btn)
         
+        # Sound toggle button
+        sound_enabled = settings.get("sound_enabled", False)
+        self.sound_btn = QPushButton(f"Sound Alert: {'ON' if sound_enabled else 'OFF'}")
+        self.sound_btn.clicked.connect(self._toggle_sound)
+        self._update_sound_button_color(sound_enabled)
+        layout.addWidget(self.sound_btn)
+        
         # Confidence controls
         confidence_layout = QHBoxLayout()
-        
-        # Left side with label and range
-        confidence_label_layout = QVBoxLayout()
         confidence_label = QLabel("Confidence:")
-        confidence_range = QLabel("Range: 0.1-1.0")
-        confidence_range.setStyleSheet("color: gray; font-size: 8pt;")
-        confidence_label_layout.addWidget(confidence_label)
-        confidence_label_layout.addWidget(confidence_range)
+        confidence_layout.addWidget(confidence_label)
         
-        # Create and configure confidence slider (0-100 for percentage)
+        # Add range label
+        range_label = QLabel("(10-100%)")
+        range_label.setStyleSheet("color: gray;")
+        confidence_layout.addWidget(range_label)
+        
+        # Slider for confidence
         self.confidence_slider = QSlider(Qt.Orientation.Horizontal)
-        self.confidence_slider.setRange(10, 100)  # 10% to 100%
-        self.confidence_slider.setValue(int(settings["confidence"] * 100))
+        self.confidence_slider.setMinimum(10)  # 0.1
+        self.confidence_slider.setMaximum(100)  # 1.0
+        self.confidence_slider.setValue(int(settings.get("confidence", 0.8) * 100))
+        confidence_layout.addWidget(self.confidence_slider)
         
-        # Create and configure confidence spinbox (0.1-1.0 for decimal)
+        # Spinbox for confidence
         self.confidence_input = QDoubleSpinBox()
-        self.confidence_input.setRange(0.1, 1.0)
+        self.confidence_input.setMinimum(0.1)
+        self.confidence_input.setMaximum(1.0)
         self.confidence_input.setSingleStep(0.05)
         self.confidence_input.setDecimals(2)
-        self.confidence_input.setValue(settings["confidence"])
-        
-        confidence_layout.addLayout(confidence_label_layout)
-        confidence_layout.addWidget(self.confidence_slider, stretch=1)
+        self.confidence_input.setValue(settings.get("confidence", 0.8))
         confidence_layout.addWidget(self.confidence_input)
+        
         layout.addLayout(confidence_layout)
         
-        # Update frequency controls with decimal values
-        freq_layout = QVBoxLayout()
+        # Frequency controls
+        freq_layout = QVBoxLayout()  # Changed to vertical layout
         
-        # Frequency slider with range (we'll multiply by 10 to handle decimals)
+        # Create horizontal layout for slider and spinbox
+        freq_controls = QHBoxLayout()
+        freq_label = QLabel("Updates/sec:")
+        freq_controls.addWidget(freq_label)
+        
+        # Add range label
+        range_label = QLabel("(0.1-10)")
+        range_label.setStyleSheet("color: gray;")
+        freq_controls.addWidget(range_label)
+        
+        # Slider for frequency (0.1 to 10 updates/sec)
         self.freq_slider = QSlider(Qt.Orientation.Horizontal)
-        self.freq_input = QDoubleSpinBox()  # Change to QDoubleSpinBox for decimals
+        self.freq_slider.setMinimum(1)  # 0.1
+        self.freq_slider.setMaximum(100)  # 10.0
+        self.freq_slider.setValue(int(settings.get("target_frequency", 1.0) * 10))
+        freq_controls.addWidget(self.freq_slider)
         
-        # Set up frequency controls
-        self.freq_slider.setRange(1, 20)  # Range 0.1 to 2.0 (multiplied by 10)
-        self.freq_slider.setValue(int(settings["target_frequency"] * 10))
+        # Spinbox for frequency
+        self.freq_input = QDoubleSpinBox()
+        self.freq_input.setMinimum(0.1)
+        self.freq_input.setMaximum(10.0)
+        self.freq_input.setSingleStep(0.1)
+        self.freq_input.setDecimals(1)
+        self.freq_input.setValue(settings.get("target_frequency", 1.0))
+        freq_controls.addWidget(self.freq_input)
         
-        self.freq_input.setRange(0.1, 2.0)  # Actual decimal range
-        self.freq_input.setSingleStep(0.1)  # Step by 0.1
-        self.freq_input.setValue(settings["target_frequency"])
+        # Add controls to main frequency layout
+        freq_layout.addLayout(freq_controls)
         
-        freq_slider_layout = QHBoxLayout()
-        freq_label = QLabel("Target frequency:")
-        range_label = QLabel("Range: 0.1-2.0 updates/sec")
-        range_label.setStyleSheet("color: gray; font-size: 8pt;")
-        
-        label_layout = QVBoxLayout()
-        label_layout.addWidget(freq_label)
-        label_layout.addWidget(range_label)
-        
-        freq_slider_layout.addLayout(label_layout)
-        freq_slider_layout.addWidget(self.freq_slider, stretch=1)
-        freq_slider_layout.addWidget(self.freq_input)
-        freq_layout.addLayout(freq_slider_layout)
-        
-        # Add frequency display
-        self.freq_display = QLabel(f"Target: {settings['target_frequency']} updates/sec")
-        self.freq_display.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # Add frequency display label below controls
+        self.freq_display = QLabel("Updates/sec: N/A")
+        self.freq_display.setStyleSheet("font-weight: bold;")
+        self.freq_display.setAlignment(Qt.AlignmentFlag.AlignCenter)  # Center the text
         freq_layout.addWidget(self.freq_display)
         
         layout.addLayout(freq_layout)
@@ -412,20 +423,15 @@ class OverlayController(QMainWindow):
         # Reload templates button
         self.reload_btn = QPushButton("Reload Templates")
         self.reload_btn.setStyleSheet("font-weight: bold;")
+        self.reload_btn.clicked.connect(self._reload_templates)  # Connect to handler
         layout.addWidget(self.reload_btn)
         
         # Debug mode toggle button - initialize from config
         debug_settings = self.config_manager.get_debug_settings()
         self.debug_btn = QPushButton(f"Debug Mode: {'ON' if debug_settings['enabled'] else 'OFF'}")
         self.debug_btn.clicked.connect(self._toggle_debug_mode)
-        self._update_debug_button_color(debug_settings['enabled'])  # Initialize color from config
+        self._update_debug_button_color(debug_settings['enabled'])
         layout.addWidget(self.debug_btn)
-        
-        # Sound toggle button
-        self.sound_btn = QPushButton("Sound Alerts: ON" if settings["sound_enabled"] else "Sound Alerts: OFF")
-        self.sound_btn.clicked.connect(self._toggle_sound)  # Connect click handler
-        self._update_sound_button_color(settings["sound_enabled"])
-        layout.addWidget(self.sound_btn)
         
         pattern_group.setLayout(layout)
         parent_layout.addWidget(pattern_group)
@@ -473,24 +479,25 @@ class OverlayController(QMainWindow):
         ocr_layout.addWidget(self.ocr_btn)
         
         # Create OCR frequency controls
-        freq_layout = QHBoxLayout()
+        freq_layout = QVBoxLayout()  # Changed to vertical layout
         
-        # Create vertical layout for label and range
-        label_layout = QVBoxLayout()
+        # Create horizontal layout for slider and spinbox
+        freq_controls = QHBoxLayout()
         freq_label = QLabel("OCR Frequency:")
+        freq_controls.addWidget(freq_label)
+        
+        # Add range label
         range_label = QLabel("(0.1 - 2.0 updates/sec)")
         range_label.setStyleSheet("QLabel { color: gray; }")
-        label_layout.addWidget(freq_label)
-        label_layout.addWidget(range_label)
-        freq_layout.addLayout(label_layout)
+        freq_controls.addWidget(range_label)
         
-        # Create slider for frequency
+        # Slider for frequency
         self.ocr_freq_slider = QSlider(Qt.Orientation.Horizontal)
         self.ocr_freq_slider.setMinimum(1)  # 0.1 updates/sec
         self.ocr_freq_slider.setMaximum(20)  # 2.0 updates/sec
         self.ocr_freq_slider.setValue(int(ocr_settings['frequency'] * 10))
         self.ocr_freq_slider.valueChanged.connect(self.on_ocr_slider_change)
-        freq_layout.addWidget(self.ocr_freq_slider)
+        freq_controls.addWidget(self.ocr_freq_slider)
         
         # Create spinbox for precise input
         self.ocr_freq_input = QDoubleSpinBox()
@@ -499,7 +506,7 @@ class OverlayController(QMainWindow):
         self.ocr_freq_input.setSingleStep(0.1)
         self.ocr_freq_input.setValue(ocr_settings['frequency'])
         self.ocr_freq_input.valueChanged.connect(self.on_ocr_spinbox_change)
-        freq_layout.addWidget(self.ocr_freq_input)
+        freq_controls.addWidget(self.ocr_freq_input)
         
         ocr_layout.addLayout(freq_layout)
         
@@ -574,13 +581,20 @@ class OverlayController(QMainWindow):
         self._update_toggle_button_color(overlay_active)  # Update button color
         self.toggle_btn.setText(f"Toggle TB Scout Overlay (F10): {state}")  # Update button text
     
-    def update_fps_display(self) -> None:
-        """Update the frequency display with current values."""
+    def update_pattern_frequency_display(self) -> None:
+        """Update the frequency display with current pattern matching values.
+        
+        This method updates the display showing the target and actual frequency of pattern matching updates.
+        It also color-codes the display based on how well the actual frequency matches the target:
+        - Green: >= 90% of target
+        - Orange: >= 70% of target
+        - Red: < 70% of target
+        """
         if hasattr(self.pattern_matcher, 'update_frequency'):
             actual_freq = self.pattern_matcher.update_frequency
             target_freq = self.freq_input.value()
             
-            logger.debug(f"Updating frequency display - Target: {target_freq:.1f}, Actual: {actual_freq:.1f}")
+            logger.debug(f"Updating pattern frequency display - Target: {target_freq:.1f}, Actual: {actual_freq:.1f}")
             
             # Update display with frequency values
             self.freq_display.setText(f"Target: {target_freq:.1f} updates/sec, Actual: {actual_freq:.1f} updates/sec")
@@ -1100,7 +1114,7 @@ class OverlayController(QMainWindow):
         new_state = not is_enabled
         
         # Update button state
-        self.sound_btn.setText(f"Sound Alerts: {'ON' if new_state else 'OFF'}")
+        self.sound_btn.setText(f"Sound Alert: {'ON' if new_state else 'OFF'}")
         self._update_sound_button_color(new_state)
         
         # Update pattern matcher sound state
