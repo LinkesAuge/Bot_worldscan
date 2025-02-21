@@ -1108,7 +1108,15 @@ class OverlayController(QMainWindow):
         logger.info(f"Sound alerts {'enabled' if new_state else 'disabled'}")
 
     def _toggle_debug_mode(self) -> None:
-        """Toggle debug mode on/off."""
+        """
+        Toggle debug mode on/off.
+        
+        This method:
+        1. Updates the debug button state and appearance
+        2. Activates pattern matching if needed for debug mode
+        3. Updates the pattern matcher's debug state
+        4. Saves the debug settings to configuration
+        """
         is_enabled = self.debug_btn.text().endswith("ON")
         new_state = not is_enabled
         
@@ -1126,11 +1134,12 @@ class OverlayController(QMainWindow):
             self.pattern_matcher.set_debug_mode(new_state)
         
         # Save debug settings to config
-        self.config_manager.update_debug_settings(
-            enabled=new_state,
-            save_screenshots=True,  # Keep default values for now
-            save_templates=True
-        )
+        debug_settings = {
+            "enabled": new_state,
+            "save_screenshots": True,
+            "save_templates": True
+        }
+        self.config_manager.update_debug_settings(debug_settings)
             
         logger.info(f"Debug mode {'enabled' if new_state else 'disabled'}")
 

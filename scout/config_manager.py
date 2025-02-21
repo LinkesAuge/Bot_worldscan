@@ -304,7 +304,10 @@ class ConfigManager:
         Update debug settings.
         
         Args:
-            settings: Dictionary containing debug settings
+            settings: Dictionary containing debug settings with keys:
+                     - enabled: Whether debug mode is enabled
+                     - save_screenshots: Whether to save debug screenshots
+                     - save_templates: Whether to save template debug images
         """
         if not self.config.has_section("Debug"):
             self.config.add_section("Debug")
