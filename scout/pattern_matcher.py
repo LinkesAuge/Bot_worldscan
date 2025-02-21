@@ -11,6 +11,7 @@ import win32gui
 import win32ui
 import win32con
 from scout.window_manager import WindowManager
+from scout.sound_manager import SoundManager
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +107,9 @@ class PatternMatcher:
         self.client_offset_x = 0
         self.client_offset_y = 0
         
+        # Initialize sound manager
+        self.sound_manager = SoundManager()
+        
         # Load templates on initialization
         self.reload_templates()
         logger.debug("PatternMatcher initialized")
@@ -149,17 +153,19 @@ class PatternMatcher:
         
         logger.info(f"Successfully loaded {len(self.templates)} templates")
     
-    def find_matches(self, confidence_threshold: float = 0.8) -> List[GroupedMatch]:
+    def find_matches(self, confidence_threshold: float = None) -> List[GroupedMatch]:
         """
         Find matches for all templates in the window.
         
         Args:
-            confidence_threshold: Minimum confidence score for matches (0-1)
+            confidence_threshold: Optional override for confidence threshold. If None, uses class's confidence value.
             
         Returns:
             List[GroupedMatch]: List of grouped matches above the confidence threshold
         """
-        logger.info(f"Starting pattern matching with confidence threshold: {confidence_threshold}")
+        # Use class confidence if no threshold provided
+        threshold = confidence_threshold if confidence_threshold is not None else self.confidence
+        logger.info(f"Starting pattern matching with confidence threshold: {threshold}")
         
         if not self.templates:
             logger.warning("No templates loaded!")
@@ -198,7 +204,7 @@ class PatternMatcher:
                 try:
                     logger.debug(f"Processing template '{name}' with shape {template.shape}")
                     result = cv2.matchTemplate(gray, template, cv2.TM_CCOEFF_NORMED)
-                    locations = np.where(result >= confidence_threshold)
+                    locations = np.where(result >= threshold)  # Use current threshold
                     match_count = len(locations[0])
                     logger.debug(f"Found {match_count} potential matches for template '{name}'")
                     
@@ -219,6 +225,11 @@ class PatternMatcher:
             
             # Group matches
             grouped_matches = self._group_matches(all_matches)
+            
+            # Play sound if matches found and sound is enabled
+            if grouped_matches and self.sound_enabled:
+                self.sound_manager.play_if_ready()
+                
             logger.info(f"Found {len(grouped_matches)} grouped matches from {len(all_matches)} total matches")
             return grouped_matches
             

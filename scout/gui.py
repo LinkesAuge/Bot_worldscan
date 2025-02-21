@@ -268,6 +268,7 @@ class OverlayController(QMainWindow):
         
         # Sound toggle button
         self.sound_btn = QPushButton("Sound Alerts: ON" if settings["sound_enabled"] else "Sound Alerts: OFF")
+        self.sound_btn.clicked.connect(self._toggle_sound)  # Connect click handler
         self._update_sound_button_color(settings["sound_enabled"])
         layout.addWidget(self.sound_btn)
         
@@ -438,6 +439,23 @@ class OverlayController(QMainWindow):
             self.overlay.cross_thickness = value
             self.save_settings()
             
+        # Connect confidence controls
+        def on_confidence_slider_change(value: int) -> None:
+            self.confidence_input.setValue(value)
+            # Convert from percentage (0-100) to decimal (0.0-1.0)
+            confidence = value / 100.0
+            self.pattern_matcher.confidence = confidence
+            self.save_settings()
+            logger.debug(f"Confidence updated to: {confidence:.2f}")
+            
+        def on_confidence_spinbox_change(value: int) -> None:
+            self.confidence_slider.setValue(value)
+            # Convert from percentage (0-100) to decimal (0.0-1.0)
+            confidence = value / 100.0
+            self.pattern_matcher.confidence = confidence
+            self.save_settings()
+            logger.debug(f"Confidence updated to: {confidence:.2f}")
+            
         # Connect scale controls
         def on_rect_scale_slider_change(value: int) -> None:
             scale = value / 10.0
@@ -466,6 +484,8 @@ class OverlayController(QMainWindow):
         self.font_size_slider.valueChanged.connect(on_font_size_change)
         self.text_thickness_slider.valueChanged.connect(on_text_thickness_change)
         self.cross_thickness_slider.valueChanged.connect(on_cross_thickness_change)
+        self.confidence_slider.valueChanged.connect(on_confidence_slider_change)
+        self.confidence_input.valueChanged.connect(on_confidence_spinbox_change)
         self.scale_slider.valueChanged.connect(on_rect_scale_slider_change)
         self.scale_input.valueChanged.connect(on_rect_scale_spinbox_change)
         self.cross_scale_slider.valueChanged.connect(on_cross_scale_slider_change)
@@ -476,7 +496,16 @@ class OverlayController(QMainWindow):
         self.font_size_input.valueChanged.connect(self.font_size_slider.setValue)
         self.text_thickness_input.valueChanged.connect(self.text_thickness_slider.setValue)
         self.cross_thickness_input.valueChanged.connect(self.cross_thickness_slider.setValue)
-
+        
+        # Connect reload templates button
+        self.reload_btn.clicked.connect(self._reload_templates)
+        
+    def _reload_templates(self) -> None:
+        """Reload pattern matching templates."""
+        if hasattr(self.pattern_matcher, 'reload_templates'):
+            self.pattern_matcher.reload_templates()
+            logger.info("Templates reloaded")
+            
     def _update_toggle_button_color(self, is_active: bool) -> None:
         """Update toggle button color based on state."""
         if is_active:
@@ -748,15 +777,44 @@ class OverlayController(QMainWindow):
     def _toggle_pattern_matching(self) -> None:
         """Toggle pattern matching on/off."""
         is_active = self.pattern_btn.text().endswith("ON")
-        self._update_pattern_button_color(not is_active)  # Toggle state
+        new_state = not is_active
+        
+        # Update confidence in pattern matcher before toggling
+        if new_state:  # If turning ON
+            self.pattern_matcher.confidence = self.confidence_slider.value() / 100.0
+            logger.debug(f"Updated pattern matcher confidence to: {self.pattern_matcher.confidence:.2f}")
+        
+        self._update_pattern_button_color(new_state)  # Toggle state
         
         # Save the new state
         self.config_manager.update_pattern_matching_settings(
-            active=not is_active,
+            active=new_state,
             confidence=self.confidence_slider.value() / 100.0,
             target_fps=self.fps_input.value(),
             sound_enabled=self.sound_btn.text().endswith("ON")
         )
+
+    def _toggle_sound(self) -> None:
+        """Toggle sound alerts on/off."""
+        is_enabled = self.sound_btn.text().endswith("ON")
+        new_state = not is_enabled
+        
+        # Update button state
+        self.sound_btn.setText(f"Sound Alerts: {'ON' if new_state else 'OFF'}")
+        self._update_sound_button_color(new_state)
+        
+        # Update pattern matcher sound state
+        if hasattr(self.pattern_matcher, 'sound_enabled'):
+            self.pattern_matcher.sound_enabled = new_state
+        
+        # Save the new state
+        self.save_settings()
+        
+        # Play test sound if enabled
+        if new_state and hasattr(self.pattern_matcher, 'sound_manager'):
+            self.pattern_matcher.sound_manager.play_if_ready()
+            
+        logger.info(f"Sound alerts {'enabled' if new_state else 'disabled'}")
 
 class DebugImageViewer(QWidget):
     """Window for displaying debug images."""
