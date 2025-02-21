@@ -4,17 +4,21 @@ from PyQt6.QtWidgets import (
     QLabel, QFrame, QHBoxLayout, QSlider, QColorDialog,
     QSpinBox, QDoubleSpinBox, QGroupBox, QApplication, QMessageBox
 )
-from PyQt6.QtCore import Qt, QTimer, QThread, QObject, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, QThread, QObject, pyqtSignal, QPoint
 from PyQt6.QtGui import QPalette, QColor, QIcon, QImage, QPixmap, QPainter, QPen, QBrush, QPaintEvent, QMouseEvent
 import logging
 from scout.config_manager import ConfigManager
 from scout.overlay import Overlay
 from scout.pattern_matcher import PatternMatcher
 from scout.world_scanner import WorldScanner, WorldPosition, ScanLogHandler, ScanWorker
+from scout.debug_window import DebugWindow
 import numpy as np
 from time import sleep
 import pyautogui
 from scout.selector_tool import SelectorTool
+import cv2
+import mss
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +84,7 @@ class OverlayController(QMainWindow):
         self.connect_settings_handlers()
         
         # Add debug image viewer
-        self.debug_viewer = DebugImageViewer()
+        self.debug_window = DebugWindow()
         
         # Initialize scan controls with current region
         scanner_settings = self.config_manager.get_scanner_settings()
@@ -297,6 +301,9 @@ class OverlayController(QMainWindow):
         self.debug_btn.clicked.connect(self._toggle_debug_mode)
         self._update_debug_button_color(debug_settings['enabled'])  # Initialize color from config
         layout.addWidget(self.debug_btn)
+        
+        # Set callback for pattern matcher to update debug button state
+        self.pattern_matcher.set_gui_callback(self._on_debug_window_closed)
         
         # Sound toggle button
         self.sound_btn = QPushButton("Sound Alerts: ON" if settings["sound_enabled"] else "Sound Alerts: OFF")
@@ -632,48 +639,50 @@ class OverlayController(QMainWindow):
             self.scan_thread.quit()
             self.scan_thread.wait()
             self.log_handler.cleanup()
-            self.debug_viewer.hide()
+            self.debug_window.hide()
     
     def _start_world_scan(self) -> None:
         """Start the world scanning process."""
         try:
-            # Ensure pattern matching is active
-            if not self.pattern_btn.text().endswith("ON"):
-                logger.info("Activating pattern matching for scan")
-                self.pattern_btn.setText("Pattern Matching: ON")
-                self._update_pattern_button_color(True)
-                # Update config and activate pattern matching
-                self.config_manager.update_pattern_matching_settings(
-                    active=True,
-                    confidence=self.confidence_slider.value() / 100.0,
-                    target_frequency=self.freq_input.value(),
-                    sound_enabled=self.sound_btn.text().endswith("ON")
-                )
-                # Actually start pattern matching in overlay
-                self.overlay.start_pattern_matching()
-            elif not self.overlay.pattern_matching_active:
-                logger.info("Restarting pattern matching")
-                self.overlay.start_pattern_matching()
+            # Create and configure scanner
+            scanner_settings = self.config_manager.get_scanner_settings()
+            if not scanner_settings:
+                logger.error("No scanner settings found")
+                return
+                
+            self.world_scanner = WorldScanner(
+                minimap_left=scanner_settings['minimap_left'],
+                minimap_top=scanner_settings['minimap_top'],
+                minimap_width=scanner_settings['minimap_width'],
+                minimap_height=scanner_settings['minimap_height'],
+                dpi_scale=scanner_settings['dpi_scale']
+            )
             
-            # Initialize scanner with current position
-            start_pos = WorldPosition(x=0, y=0, k=1)
-            self.scanner = WorldScanner(start_pos)
-            self.log_handler = ScanLogHandler()
-            
-            # Show debug viewer
-            self.debug_viewer.show()
-            
-            # Start in a separate thread
+            # Create worker and thread
+            self.scan_worker = ScanWorker(self.world_scanner, self.pattern_matcher)
             self.scan_thread = QThread()
-            self.scan_worker = ScanWorker(self.scanner, self.pattern_matcher)
+            
+            # Move worker to thread
             self.scan_worker.moveToThread(self.scan_thread)
             
             # Connect signals
             self.scan_thread.started.connect(self.scan_worker.run)
+            self.scan_worker.finished.connect(self.scan_thread.quit)
+            self.scan_worker.finished.connect(self.scan_worker.deleteLater)
+            self.scan_thread.finished.connect(self.scan_thread.deleteLater)
+            
             self.scan_worker.position_found.connect(self._on_position_found)
             self.scan_worker.error.connect(self._on_scan_error)
-            self.scan_worker.finished.connect(self.scan_thread.quit)
-            self.scan_worker.debug_image.connect(self.debug_viewer.update_image)
+            
+            # Connect debug image signal to debug window
+            self.scan_worker.debug_image.connect(
+                lambda img, coord_type, value: self.debug_window.update_image(
+                    f"Coordinate {coord_type}",
+                    img,
+                    metadata={"value": value},
+                    save=True
+                )
+            )
             
             # Start scanning
             self.scan_thread.start()
@@ -729,32 +738,76 @@ class OverlayController(QMainWindow):
             logger.error(f"Error showing selector: {e}", exc_info=True)
     
     def _on_region_selected(self, region: dict) -> None:
-        """Handle selected region."""
+        """
+        Handle the selected region from the selector tool.
+        
+        This method processes the selected region coordinates and captures the raw screenshot
+        without any color space conversion or processing.
+        
+        Args:
+            region: Dictionary containing the selected region coordinates (left, top, width, height)
+                   and DPI scaling information
+        """
         logger.info(f"Selected region: {region}")
         
         try:
-            # Convert region to scanner settings format
-            settings = {
+            # Log all screens and their geometries
+            screens = QApplication.screens()
+            logger.info(f"Found {len(screens)} screens")
+            
+            for i, screen in enumerate(screens):
+                geom = screen.geometry()
+                dpi = screen.devicePixelRatio()
+                logger.info(f"Screen {i}: Geometry={geom}, DPI={dpi}")
+            
+            # The coordinates in region are already physical pixels adjusted for DPI scaling
+            # Save physical coordinates to config for MSS
+            config = ConfigManager()
+            config.update_scanner_settings({
                 'minimap_left': region['left'],
                 'minimap_top': region['top'],
                 'minimap_width': region['width'],
-                'minimap_height': region['height']
-            }
+                'minimap_height': region['height'],
+                'dpi_scale': region['dpi_scale'],
+                'logical_coords': region['logical_coords']
+            })
             
-            logger.debug(f"Converting to scanner settings: {settings}")
-            
-            # Save region to config
-            self.config_manager.update_scanner_settings(settings)
-            logger.info("Region saved to config")
-            
-            # Update status
-            status_text = f"Minimap region set: ({region['left']}, {region['top']})"
-            logger.debug(f"Updating status to: {status_text}")
-            self.scan_status.setText(status_text)
-            
+            # Capture and display debug image using physical coordinates
+            with mss.mss() as sct:
+                # MSS uses physical coordinates, so use them directly
+                monitor = {
+                    "left": region['left'],
+                    "top": region['top'],
+                    "width": region['width'],
+                    "height": region['height'],
+                    "mon": 0  # Use the virtual screen
+                }
+                
+                logger.info(f"Capturing with monitor settings: {monitor}")
+                screenshot = np.array(sct.grab(monitor))
+                
+                # Display raw debug image in window
+                self.debug_window.update_image(
+                    "Selected Region",
+                    screenshot,
+                    metadata={
+                        "physical_coords": f"({region['left']}, {region['top']}) {region['width']}x{region['height']}",
+                        "logical_coords": f"({region['logical_coords']['left']}, {region['logical_coords']['top']}) "
+                                        f"{region['logical_coords']['width']}x{region['logical_coords']['height']}",
+                        "dpi_scale": region['dpi_scale']
+                    },
+                    save=True
+                )
+                
+                # Update status with logical coordinates for display
+                logical = region['logical_coords']
+                self.scan_status.setText(
+                    f"Minimap region: ({logical['left']}, {logical['top']}) "
+                    f"[Physical: ({region['left']}, {region['top']})]"
+                )
+                
         except Exception as e:
             logger.error(f"Error saving region: {e}", exc_info=True)
-            self.scan_status.setText("Error saving region!")
 
     def _on_region_cancelled(self) -> None:
         """Handle region selection cancellation."""
@@ -871,6 +924,11 @@ class OverlayController(QMainWindow):
         
         # Update pattern matcher debug state
         if hasattr(self.pattern_matcher, 'set_debug_mode'):
+            # Ensure pattern matching is active when enabling debug mode
+            if new_state and not self.pattern_btn.text().endswith("ON"):
+                logger.info("Activating pattern matching for debug mode")
+                self._toggle_pattern_matching()
+                
             self.pattern_matcher.set_debug_mode(new_state)
         
         # Save debug settings to config
@@ -945,44 +1003,17 @@ class OverlayController(QMainWindow):
         layout.addWidget(slider, stretch=1)
         layout.addWidget(spinbox)
         
-        return layout
+        return layout 
 
-class DebugImageViewer(QWidget):
-    """Window for displaying debug images."""
-    
-    def __init__(self) -> None:
-        super().__init__()
-        self.setWindowTitle("Debug Images")
-        self.setGeometry(100, 100, 800, 600)
+    def _on_debug_window_closed(self) -> None:
+        """Handle debug window close event."""
+        logger.debug("Updating GUI after debug window close")
+        self.debug_btn.setText("Debug Mode: OFF")
+        self._update_debug_button_color(False)
         
-        layout = QVBoxLayout()
-        
-        # Image display area
-        self.image_label = QLabel()
-        self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.image_label)
-        
-        # Coordinate values
-        self.coord_label = QLabel()
-        self.coord_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.coord_label)
-        
-        self.setLayout(layout)
-        
-    def update_image(self, image: np.ndarray, coord_type: str, value: int) -> None:
-        """Update the displayed image and coordinate value."""
-        height, width = image.shape[:2]
-        bytes_per_line = width
-        
-        # Convert image to QImage
-        q_img = QImage(image.data, width, height, bytes_per_line, QImage.Format.Format_Grayscale8)
-        
-        # Scale image for display
-        scaled_pixmap = QPixmap.fromImage(q_img).scaled(
-            400, 200, 
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation
-        )
-        
-        self.image_label.setPixmap(scaled_pixmap)
-        self.coord_label.setText(f"{coord_type} coordinate: {value}") 
+        # Update config
+        self.config_manager.update_debug_settings(
+            enabled=False,
+            save_screenshots=True,
+            save_templates=True
+        ) 

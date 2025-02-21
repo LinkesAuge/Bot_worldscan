@@ -1,4 +1,4 @@
-from typing import List, Tuple, Optional, Dict
+from typing import List, Tuple, Optional, Dict, Any
 import cv2
 import numpy as np
 import mss
@@ -12,6 +12,8 @@ import win32ui
 import win32con
 from scout.window_manager import WindowManager
 from scout.sound_manager import SoundManager
+from scout.debug_window import DebugWindow
+from scout.window_capture import WindowCapture
 
 logger = logging.getLogger(__name__)
 
@@ -40,30 +42,16 @@ class MatchResult:
 @dataclass
 class GroupedMatch:
     """
-    Represents a group of similar matches that are close together.
-    
-    When multiple matches of the same template are found near each other,
-    they are grouped together to avoid duplicate detections. This class
-    represents such a group with averaged properties.
+    Represents a group of similar matches.
     
     Attributes:
-        position: Top-left coordinates of the group's bounding box
-        width: Average width of all matches in the group
-        height: Average height of all matches in the group
-        confidence: Highest confidence score among all matches
+        bounds: Tuple of (x1, y1, x2, y2) coordinates
+        confidence: Average confidence of matches in group
         template_name: Name of the matched template
-        match_count: Number of individual matches in this group
-        bounds: (min_x, min_y, max_x, max_y) of the group's bounding box
-        group_id: Unique identifier for this group
     """
-    position: Tuple[int, int]
-    width: int
-    height: int
+    bounds: Tuple[int, int, int, int]
     confidence: float
     template_name: str
-    match_count: int
-    bounds: Tuple[int, int, int, int]
-    group_id: int
 
 class PatternMatcher:
     """
@@ -96,6 +84,8 @@ class PatternMatcher:
             grouping_threshold: Pixel distance threshold for grouping matches
         """
         self.window_manager = window_manager
+        # Initialize window capture with the same window title as window manager
+        self.window_capture = WindowCapture(window_manager.window_title)
         self.confidence = confidence
         self.target_frequency = target_frequency
         self.sound_enabled = sound_enabled
@@ -104,16 +94,30 @@ class PatternMatcher:
         self.update_frequency = 0.0
         self.last_update_time = 0.0
         self.grouping_threshold = grouping_threshold
-        self.client_offset_x = 0
-        self.client_offset_y = 0
-        self.debug_mode = False  # Add debug mode flag
+        self.debug_mode = False
         
-        # Initialize sound manager
+        # Initialize managers
         self.sound_manager = SoundManager()
+        self.debug_window = DebugWindow()
+        
+        # Connect debug window close signal
+        self.debug_window.window_closed.connect(self._on_debug_window_closed)
         
         # Load templates on initialization
         self.reload_templates()
         logger.debug("PatternMatcher initialized")
+    
+    def _on_debug_window_closed(self) -> None:
+        """Handle debug window close event."""
+        logger.debug("Debug window was closed, disabling debug mode")
+        self.debug_mode = False
+        # Notify GUI to update debug button state
+        if hasattr(self, 'gui_callback'):
+            self.gui_callback()
+    
+    def set_gui_callback(self, callback: callable) -> None:
+        """Set callback for notifying GUI of state changes."""
+        self.gui_callback = callback
     
     def reload_templates(self) -> None:
         """Reload all template images from the images directory."""
@@ -126,12 +130,6 @@ class PatternMatcher:
             
         template_files = list(self.images_dir.glob("*.png"))
         logger.info(f"Found {len(template_files)} template files: {[f.name for f in template_files]}")
-            
-        # Set up debug directory if needed
-        if self.debug_mode:
-            current_dir = Path(os.path.dirname(os.path.abspath(__file__)))
-            debug_dir = current_dir / "debug_screenshots"
-            debug_dir.mkdir(exist_ok=True)
         
         for file in template_files:
             try:
@@ -143,11 +141,22 @@ class PatternMatcher:
                     
                 # Save debug images if debug mode is enabled
                 if self.debug_mode:
-                    # Save original template
-                    cv2.imwrite(str(debug_dir / f"template_original_{file.stem}.png"), template)
-                    # Save grayscale version
+                    # Update debug window with original and grayscale versions
+                    self.debug_window.update_image(
+                        f"Template {file.stem} (Original)",
+                        template,
+                        metadata={"size": f"{template.shape[1]}x{template.shape[0]}"},
+                        save=True
+                    )
+                    
+                    # Convert to grayscale for debug view
                     template_gray = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
-                    cv2.imwrite(str(debug_dir / f"template_gray_{file.stem}.png"), template_gray)
+                    self.debug_window.update_image(
+                        f"Template {file.stem} (Gray)",
+                        template_gray,
+                        metadata={"size": f"{template_gray.shape[1]}x{template_gray.shape[0]}"},
+                        save=True
+                    )
                     logger.debug(f"Saved debug images for template: {file.stem}")
                 
                 # Convert to grayscale for actual use
@@ -162,143 +171,6 @@ class PatternMatcher:
         
         logger.info(f"Successfully loaded {len(self.templates)} templates")
     
-    def find_matches(self, confidence_threshold: float = None) -> List[GroupedMatch]:
-        """
-        Find matches for all templates in the window.
-        
-        Args:
-            confidence_threshold: Optional override for confidence threshold. If None, uses class's confidence value.
-            
-        Returns:
-            List[GroupedMatch]: List of grouped matches above the confidence threshold
-        """
-        # Use class confidence if no threshold provided
-        threshold = confidence_threshold if confidence_threshold is not None else self.confidence
-        logger.info(f"Starting pattern matching with confidence threshold: {threshold}")
-        
-        if not self.templates:
-            logger.warning("No templates loaded!")
-            return []
-            
-        logger.info(f"Loaded templates: {list(self.templates.keys())}")
-        
-        try:
-            # Capture window
-            img = self.capture_window()
-            if img is None:
-                logger.warning("Failed to capture window")
-                return []
-            
-            logger.debug(f"Captured image size: {img.shape}")
-            
-            # Convert to grayscale
-            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            
-            # Calculate update frequency
-            current_time = time()
-            if self.last_update_time > 0:
-                time_diff = current_time - self.last_update_time
-                self.update_frequency = 1.0 / time_diff if time_diff > 0 else 0.0
-                logger.debug(
-                    f"Pattern matcher frequency calculation: "
-                    f"time_diff={time_diff:.3f}s, "
-                    f"update_frequency={self.update_frequency:.2f} updates/sec, "
-                    f"target_frequency={self.target_frequency:.2f} updates/sec"
-                )
-            self.last_update_time = current_time
-            
-            # Process each template
-            all_matches = []
-            for name, template in self.templates.items():
-                try:
-                    logger.debug(f"Processing template '{name}' with shape {template.shape}")
-                    result = cv2.matchTemplate(gray, template, cv2.TM_CCOEFF_NORMED)
-                    locations = np.where(result >= threshold)  # Use current threshold
-                    match_count = len(locations[0])
-                    logger.debug(f"Found {match_count} potential matches for template '{name}'")
-                    
-                    for pt in zip(*locations[::-1]):
-                        confidence = result[pt[1], pt[0]]
-                        match = MatchResult(
-                            position=pt,
-                            confidence=confidence,
-                            width=template.shape[1],
-                            height=template.shape[0],
-                            template_name=name
-                        )
-                        all_matches.append(match)
-                        logger.debug(f"Match: {name} at {pt} with confidence {confidence:.2f}")
-                        
-                except Exception as e:
-                    logger.error(f"Error matching template {name}: {e}", exc_info=True)
-            
-            # Group matches
-            grouped_matches = self._group_matches(all_matches)
-            
-            # Play sound if matches found and sound is enabled
-            if grouped_matches and self.sound_enabled:
-                self.sound_manager.play_if_ready()
-                
-            logger.info(f"Found {len(grouped_matches)} grouped matches from {len(all_matches)} total matches")
-            return grouped_matches
-            
-        except Exception as e:
-            logger.error(f"Error in pattern matching: {e}", exc_info=True)
-            return []
-    
-    def _group_matches(self, matches: List[MatchResult]) -> List[GroupedMatch]:
-        """Group nearby matches together."""
-        if not matches:
-            return []
-            
-        groups = []
-        used = set()
-        group_id = 0
-        
-        for i, match in enumerate(matches):
-            if i in used:
-                continue
-                
-            # Start new group
-            group = [match]
-            used.add(i)
-            
-            # Find nearby matches
-            for j, other in enumerate(matches[i+1:], i+1):
-                if j in used:
-                    continue
-                    
-                # Check if match is close to any in current group
-                for grouped_match in group:
-                    dist = np.sqrt(
-                        (other.position[0] - grouped_match.position[0])**2 +
-                        (other.position[1] - grouped_match.position[1])**2
-                    )
-                    if dist <= self.grouping_threshold:
-                        group.append(other)
-                        used.add(j)
-                        break
-            
-            # Create group summary
-            min_x = min(m.position[0] for m in group)
-            min_y = min(m.position[1] for m in group)
-            max_x = max(m.position[0] + m.width for m in group)
-            max_y = max(m.position[1] + m.height for m in group)
-            
-            groups.append(GroupedMatch(
-                position=(min_x, min_y),
-                width=int((max_x - min_x) / len(group)),
-                height=int((max_y - min_y) / len(group)),
-                confidence=max(m.confidence for m in group),
-                template_name=group[0].template_name,
-                match_count=len(group),
-                bounds=(min_x, min_y, max_x, max_y),
-                group_id=group_id
-            ))
-            group_id += 1
-        
-        return groups 
-
     def set_debug_mode(self, enabled: bool) -> None:
         """
         Enable or disable debug mode.
@@ -306,6 +178,7 @@ class PatternMatcher:
         When debug mode is enabled:
         1. Window captures will be saved during pattern matching
         2. Template debug screenshots will be saved immediately
+        3. Debug window will be shown/hidden based on state
         
         Args:
             enabled: Whether to enable debug mode
@@ -314,105 +187,275 @@ class PatternMatcher:
         logger.info(f"Debug mode {'enabled' if enabled else 'disabled'}")
         
         if enabled:
-            # Get the directory where this file is located for debug screenshots
-            current_dir = Path(os.path.dirname(os.path.abspath(__file__)))
-            debug_dir = current_dir / "debug_screenshots"
-            debug_dir.mkdir(exist_ok=True)
-            
-            # Save debug screenshots of all currently loaded templates
-            for name, template in self.templates.items():
-                try:
-                    # Load original template to get color version
-                    template_path = self.images_dir / f"{name}.png"
-                    if template_path.exists():
-                        original = cv2.imread(str(template_path))
-                        if original is not None:
-                            # Save original template
-                            cv2.imwrite(str(debug_dir / f"template_original_{name}.png"), original)
-                            # Save grayscale version
-                            template_gray = cv2.cvtColor(original, cv2.COLOR_BGR2GRAY)
-                            cv2.imwrite(str(debug_dir / f"template_gray_{name}.png"), template_gray)
-                            logger.debug(f"Saved debug images for template: {name}")
-                        else:
-                            logger.warning(f"Could not load original template: {name}")
-                except Exception as e:
-                    logger.error(f"Error saving debug images for template {name}: {e}")
-
+            # Show debug window
+            self.debug_window.show()
+            # Reload templates to generate debug images
+            self.reload_templates()
+            # Force a capture to show initial state
+            screenshot = self.capture_window()
+            if screenshot is not None:
+                self.find_matches(screenshot)
+        else:
+            # Hide debug window when disabled
+            self.debug_window.hide()
+    
     def capture_window(self) -> Optional[np.ndarray]:
-        """Capture the game window."""
+        """
+        Capture the game window using WindowCapture.
+        
+        Returns:
+            Optional[np.ndarray]: Screenshot as numpy array, or None if capture failed
+        """
         try:
-            if not self.window_manager.find_window():
+            # Use WindowCapture to get the screenshot
+            screenshot = self.window_capture.capture_screenshot(method="mss")
+            
+            if screenshot is None:
+                logger.warning("Failed to capture window")
                 return None
             
-            # Get window position
-            pos = self.window_manager.get_window_position()
-            if not pos:
-                return None
-            
-            x, y, width, height = pos
-            window_title = win32gui.GetWindowText(self.window_manager.hwnd)
-            logger.info(f"Capturing window: '{window_title}' at ({x}, {y}) size: {width}x{height}")
-            
-            # Try to get the actual client area for Chrome
-            if "Chrome" in window_title:
-                try:
-                    import ctypes
-                    from ctypes.wintypes import RECT
-                    
-                    # Get client rect (actual content area)
-                    rect = RECT()
-                    ctypes.windll.user32.GetClientRect(self.window_manager.hwnd, ctypes.byref(rect))
-                    client_width = rect.right - rect.left
-                    client_height = rect.bottom - rect.top
-                    
-                    # Get client area position
-                    point = ctypes.wintypes.POINT(0, 0)
-                    ctypes.windll.user32.ClientToScreen(self.window_manager.hwnd, ctypes.byref(point))
-                    client_x, client_y = point.x, point.y
-                    
-                    # Calculate offset from window to client
-                    self.client_offset_x = client_x - x
-                    self.client_offset_y = client_y - y
-                    
-                    logger.info(f"Client area: ({client_x}, {client_y}) size: {client_width}x{client_height}")
-                    logger.debug(f"Client offset: ({self.client_offset_x}, {self.client_offset_y})")
-                    
-                    # Update coordinates to use client area
-                    x, y = client_x, client_y
-                    width, height = client_width, client_height
-                    
-                except Exception as e:
-                    logger.warning(f"Failed to get client area: {e}")
-            
-            # Create screenshot
-            with mss.mss() as sct:
-                monitor = {
-                    "left": x,
-                    "top": y,
-                    "width": width,
-                    "height": height
-                }
-                screenshot = sct.grab(monitor)
-                img = np.array(screenshot)
-            
-            # Save debug screenshots only if debug mode is enabled
+            # Update debug window if debug mode is enabled
             if self.debug_mode:
-                # Get the directory where this file is located for debug screenshots
-                current_dir = Path(os.path.dirname(os.path.abspath(__file__)))
-                debug_dir = current_dir / "debug_screenshots"
-                debug_dir.mkdir(exist_ok=True)
-                
-                # Save original screenshot
-                cv2.imwrite(str(debug_dir / "last_capture.png"), img)
+                self.debug_window.update_image(
+                    "Last Capture",
+                    screenshot,
+                    metadata={
+                        "size": f"{screenshot.shape[1]}x{screenshot.shape[0]}",
+                        "method": "mss"
+                    },
+                    save=True
+                )
                 
                 # Save grayscale version
-                gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-                cv2.imwrite(str(debug_dir / "last_capture_gray.png"), gray)
+                gray = cv2.cvtColor(screenshot, cv2.COLOR_BGR2GRAY)
+                self.debug_window.update_image(
+                    "Last Capture (Gray)",
+                    gray,
+                    metadata={"size": f"{gray.shape[1]}x{gray.shape[0]}"},
+                    save=True
+                )
                 
-                logger.info(f"Saved debug screenshots to {debug_dir}")
+                logger.debug("Updated debug window with capture images")
             
-            return img
+            return screenshot
             
         except Exception as e:
-            logger.error(f"Error capturing window: {str(e)}", exc_info=True)
-            return None 
+            logger.error(f"Error capturing window: {e}", exc_info=True)
+            return None
+    
+    def find_matches(self, image: np.ndarray) -> List[GroupedMatch]:
+        """
+        Find all template matches in the image.
+        
+        Args:
+            image: Image to search in
+        
+        Returns:
+            List of GroupedMatch objects
+        """
+        try:
+            # Convert image to grayscale
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            
+            # Update debug window with processed images if debug mode is enabled
+            if self.debug_mode:
+                # Show original capture
+                self.debug_window.update_image(
+                    "Current Search Image",
+                    image,
+                    metadata={
+                        "size": f"{image.shape[1]}x{image.shape[0]}",
+                        "type": "Original"
+                    },
+                    save=True
+                )
+                
+                # Show grayscale version
+                self.debug_window.update_image(
+                    "Current Search Image (Gray)",
+                    gray,
+                    metadata={
+                        "size": f"{gray.shape[1]}x{gray.shape[0]}",
+                        "type": "Grayscale"
+                    },
+                    save=True
+                )
+            
+            all_matches = []
+            
+            # Process each template
+            for template_name, template in self.templates.items():
+                # Match template
+                result = cv2.matchTemplate(gray, template, cv2.TM_CCOEFF_NORMED)
+                
+                # Find matches above threshold
+                locations = np.where(result >= self.confidence)
+                for y, x in zip(*locations):
+                    match = GroupedMatch(
+                        bounds=(
+                            x,
+                            y,
+                            x + template.shape[1],
+                            y + template.shape[0]
+                        ),
+                        confidence=result[y, x],
+                        template_name=template_name
+                    )
+                    all_matches.append(match)
+                    
+                # Update debug window with match visualization if in debug mode
+                if self.debug_mode and len(locations[0]) > 0:
+                    # Create visualization
+                    debug_img = image.copy()
+                    for match in all_matches:
+                        if match.template_name == template_name:
+                            x1, y1, x2, y2 = match.bounds
+                            cv2.rectangle(
+                                debug_img,
+                                (x1, y1),
+                                (x2, y2),
+                                (0, 255, 0),
+                                2
+                            )
+                            # Add confidence score
+                            cv2.putText(
+                                debug_img,
+                                f"{match.confidence:.2f}",
+                                (x1, y1 - 5),
+                                cv2.FONT_HERSHEY_SIMPLEX,
+                                0.5,
+                                (0, 255, 0),
+                                1
+                            )
+                    
+                    self.debug_window.update_image(
+                        f"Matches - {template_name}",
+                        debug_img,
+                        metadata={
+                            "matches": len(locations[0]),
+                            "confidence_threshold": f"{self.confidence:.2f}"
+                        },
+                        save=True
+                    )
+                    
+                    # Also show the correlation result
+                    # Scale to 0-255 for better visualization
+                    result_normalized = cv2.normalize(result, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
+                    self.debug_window.update_image(
+                        f"Correlation - {template_name}",
+                        result_normalized,
+                        metadata={
+                            "max_confidence": f"{np.max(result):.2f}",
+                            "threshold": f"{self.confidence:.2f}"
+                        },
+                        save=True
+                    )
+            
+            # Group matches
+            grouped = self._group_matches(all_matches)
+            
+            # If in debug mode, show final grouped matches
+            if self.debug_mode and grouped:
+                final_img = image.copy()
+                for match in grouped:
+                    x1, y1, x2, y2 = match.bounds
+                    cv2.rectangle(
+                        final_img,
+                        (x1, y1),
+                        (x2, y2),
+                        (0, 0, 255),  # Red for grouped matches
+                        2
+                    )
+                    # Add template name and confidence
+                    cv2.putText(
+                        final_img,
+                        f"{match.template_name} ({match.confidence:.2f})",
+                        (x1, y1 - 5),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.5,
+                        (0, 0, 255),
+                        1
+                    )
+                
+                self.debug_window.update_image(
+                    "Final Grouped Matches",
+                    final_img,
+                    metadata={
+                        "matches": len(grouped),
+                        "grouping_threshold": self.grouping_threshold
+                    },
+                    save=True
+                )
+            
+            return grouped
+            
+        except Exception as e:
+            logger.error(f"Error finding matches: {e}", exc_info=True)
+            return []
+    
+    def _group_matches(self, matches: List[GroupedMatch]) -> List[GroupedMatch]:
+        """
+        Group nearby matches to avoid duplicates.
+        
+        Args:
+            matches: List of matches to group
+        
+        Returns:
+            List of grouped matches
+        """
+        if not matches:
+            return []
+            
+        # Sort matches by confidence
+        matches = sorted(matches, key=lambda m: m.confidence, reverse=True)
+        
+        # Group matches
+        grouped = []
+        used = set()
+        
+        for i, match in enumerate(matches):
+            if i in used:
+                continue
+                
+            # Find all matches close to this one
+            group = [match]
+            center_x = (match.bounds[0] + match.bounds[2]) // 2
+            center_y = (match.bounds[1] + match.bounds[3]) // 2
+            
+            for j, other in enumerate(matches):
+                if j == i or j in used:
+                    continue
+                    
+                other_x = (other.bounds[0] + other.bounds[2]) // 2
+                other_y = (other.bounds[1] + other.bounds[3]) // 2
+                
+                # Check if centers are close
+                distance = np.sqrt(
+                    (center_x - other_x) ** 2 +
+                    (center_y - other_y) ** 2
+                )
+                
+                if distance <= self.grouping_threshold:
+                    group.append(other)
+                    used.add(j)
+            
+            # Create grouped match
+            if len(group) > 1:
+                # Average the bounds
+                x1 = sum(m.bounds[0] for m in group) // len(group)
+                y1 = sum(m.bounds[1] for m in group) // len(group)
+                x2 = sum(m.bounds[2] for m in group) // len(group)
+                y2 = sum(m.bounds[3] for m in group) // len(group)
+                
+                grouped_match = GroupedMatch(
+                    bounds=(x1, y1, x2, y2),
+                    confidence=sum(m.confidence for m in group) / len(group),
+                    template_name=group[0].template_name
+                )
+            else:
+                grouped_match = group[0]
+            
+            grouped.append(grouped_match)
+            used.add(i)
+        
+        return grouped 

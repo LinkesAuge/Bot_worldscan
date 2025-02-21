@@ -1,6 +1,8 @@
-from typing import Optional, Tuple, Any
+from typing import Optional, Tuple, List, Any
 import win32gui
 import logging
+import ctypes
+from ctypes.wintypes import RECT, POINT
 
 logger = logging.getLogger(__name__)
 
@@ -104,4 +106,45 @@ class WindowManager:
             
         except Exception as e:
             logger.error(f"Error getting window position: {str(e)}", exc_info=True)
+            return None 
+
+    def get_client_rect(self) -> Optional[Tuple[int, int, int, int]]:
+        """
+        Get the client area rectangle of the window.
+        
+        Returns:
+            Optional[Tuple[int, int, int, int]]: (left, top, right, bottom) of client area,
+            or None if window not found or error occurs
+        """
+        try:
+            if not self.find_window():
+                logger.warning("Window not found when getting client rect")
+                return None
+                
+            # Get window rect
+            window_rect = win32gui.GetWindowRect(self.hwnd)
+            
+            # Get client rect
+            client_rect = RECT()
+            if not ctypes.windll.user32.GetClientRect(self.hwnd, ctypes.byref(client_rect)):
+                logger.error("Failed to get client rect")
+                return None
+                
+            # Get client area position
+            client_point = POINT(0, 0)
+            if not ctypes.windll.user32.ClientToScreen(self.hwnd, ctypes.byref(client_point)):
+                logger.error("Failed to convert client coordinates")
+                return None
+                
+            # Calculate client area in screen coordinates
+            client_left = client_point.x
+            client_top = client_point.y
+            client_right = client_left + (client_rect.right - client_rect.left)
+            client_bottom = client_top + (client_rect.bottom - client_rect.top)
+            
+            logger.debug(f"Client rect: ({client_left}, {client_top}, {client_right}, {client_bottom})")
+            return (client_left, client_top, client_right, client_bottom)
+            
+        except Exception as e:
+            logger.error(f"Error getting client rect: {e}")
             return None 

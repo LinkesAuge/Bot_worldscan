@@ -12,6 +12,7 @@ import time
 from PyQt6.QtCore import QObject, pyqtSignal
 from scout.pattern_matcher import PatternMatcher
 from scout.config_manager import ConfigManager
+from scout.debug_window import DebugWindow
 
 # Set Tesseract executable path
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'  # Adjust path if needed
@@ -60,7 +61,12 @@ class WorldScanner:
     def __init__(self, 
                  start_pos: WorldPosition,
                  scan_step: int = 50,  # How many coordinates to move each step
-                 move_delay: float = 1.0  # Delay after each move
+                 move_delay: float = 1.0,  # Delay after each move
+                 minimap_left: int = 0,
+                 minimap_top: int = 0,
+                 minimap_width: int = 0,
+                 minimap_height: int = 0,
+                 dpi_scale: float = 1.0
                  ) -> None:
         """
         Initialize the world scanner with starting parameters.
@@ -74,74 +80,73 @@ class WorldScanner:
             start_pos: Initial position to start scanning from
             scan_step: Distance between each scan position (in coordinate units)
             move_delay: Time to wait after moving (in seconds)
+            minimap_left: Left coordinate of minimap region
+            minimap_top: Top coordinate of minimap region
+            minimap_width: Width of minimap region
+            minimap_height: Height of minimap region
+            dpi_scale: DPI scaling factor
         """
         self.current_pos = start_pos
         self.start_pos = start_pos
         self.scan_step = scan_step
         self.move_delay = move_delay
         self.visited_positions: List[WorldPosition] = []
+        self.minimap_left = minimap_left
+        self.minimap_top = minimap_top
+        self.minimap_width = minimap_width
+        self.minimap_height = minimap_height
+        self.dpi_scale = dpi_scale
+        
+        # Create debug window
+        self.debug_window = DebugWindow()
+        
+        # Signal for debug images (will be connected by worker)
+        self.debug_image = None
+        
+        logger.debug("WorldScanner initialized")
         
     def get_current_position(self) -> Optional[WorldPosition]:
         """
-        Read current position from minimap coordinates.
-        Uses OCR to read the X, Y, and K values.
+        Get the current position from the minimap coordinates.
+        
+        Returns:
+            WorldPosition object if coordinates are found, None otherwise
         """
         try:
-            # Check if Tesseract is available
-            try:
-                pytesseract.get_tesseract_version()
-            except pytesseract.TesseractNotFoundError:
-                logger.error("Tesseract OCR is not installed or not found in PATH")
-                logger.error("Please install Tesseract OCR and set the correct path")
-                return None
+            # Calculate coordinate regions (scaled for DPI)
+            coord_height = int(20 * self.dpi_scale)  # Height for coordinate regions
+            coord_spacing = int(5 * self.dpi_scale)  # Space between regions
             
-            logger.info("Starting coordinate detection...")
-            
-            # Get scanner settings from config
-            config = ConfigManager()
-            scanner_settings = config.get_scanner_settings()
-            logger.info(f"Using scanner settings: {scanner_settings}")
-            
-            # Define regions for coordinates based on minimap region
-            minimap_left = scanner_settings.get('minimap_left', 0)
-            minimap_top = scanner_settings.get('minimap_top', 0)
-            minimap_width = scanner_settings.get('minimap_width', 0)
-            minimap_height = scanner_settings.get('minimap_height', 0)
-            
-            # Calculate coordinate regions relative to minimap
+            # Define regions for each coordinate type
             coordinate_regions = {
                 'x': {
-                    'left': minimap_left,  # Start at minimap left edge
-                    'top': minimap_top + minimap_height,  # Just below minimap
-                    'width': minimap_width // 3,  # One third of minimap width
-                    'height': 20
+                    'left': self.minimap_left,
+                    'top': self.minimap_top + self.minimap_height + coord_spacing,
+                    'width': int(50 * self.dpi_scale),
+                    'height': coord_height
                 },
                 'y': {
-                    'left': minimap_left + minimap_width // 3,  # Second third
-                    'top': minimap_top + minimap_height,
-                    'width': minimap_width // 3,
-                    'height': 20
+                    'left': self.minimap_left + int(60 * self.dpi_scale),
+                    'top': self.minimap_top + self.minimap_height + coord_spacing,
+                    'width': int(50 * self.dpi_scale),
+                    'height': coord_height
                 },
                 'k': {
-                    'left': minimap_left + (2 * minimap_width) // 3,  # Last third
-                    'top': minimap_top + minimap_height,
-                    'width': minimap_width // 3,
-                    'height': 20
+                    'left': self.minimap_left + int(120 * self.dpi_scale),
+                    'top': self.minimap_top + self.minimap_height + coord_spacing,
+                    'width': int(30 * self.dpi_scale),
+                    'height': coord_height
                 }
             }
-            
-            logger.debug("Coordinate regions defined:")
-            for coord_type, region in coordinate_regions.items():
-                logger.debug(f"{coord_type}: {region}")
             
             # Add visual debug for coordinate regions
             with mss() as sct:
                 # Take screenshot of entire minimap area plus coordinates
                 context_region = {
-                    'left': minimap_left,
-                    'top': minimap_top,
-                    'width': minimap_width,
-                    'height': minimap_height + 30  # Add space for coordinates below
+                    'left': self.minimap_left,
+                    'top': self.minimap_top,
+                    'width': self.minimap_width,
+                    'height': self.minimap_height + int(30 * self.dpi_scale)  # Add scaled space for coordinates below
                 }
                 context_shot = np.array(sct.grab(context_region))
                 
@@ -160,32 +165,27 @@ class WorldScanner:
                         0 <= y2 < context_shot.shape[0]):
                         cv2.rectangle(context_shot, (x1, y1), (x2, y2), (0, 255, 0), 1)
                         cv2.putText(context_shot, coord_type, (x1, y1-5), 
-                                  cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+                                  cv2.FONT_HERSHEY_SIMPLEX, 0.5 * self.dpi_scale, (0, 255, 0), 1)
                 
-                # Save debug image
-                debug_dir = Path("debug_screenshots")
-                debug_dir.mkdir(exist_ok=True)
-                cv2.imwrite(str(debug_dir / "coordinate_regions.png"), context_shot)
+                # Update debug window with context image
+                self.debug_window.update_image(
+                    "Coordinate Regions",
+                    context_shot,
+                    metadata={
+                        "dpi_scale": self.dpi_scale,
+                        "minimap_size": f"{self.minimap_width}x{self.minimap_height}"
+                    },
+                    save=True
+                )
                 
                 # Process each coordinate region
                 coordinates = {}
                 for coord_type, region in coordinate_regions.items():
-                    logger.debug(f"Processing {coord_type} coordinate region")
-                    
-                    # Capture the region
+                    # Capture and process image
                     screenshot = np.array(sct.grab(region))
-                    
-                    # Convert to grayscale
                     gray = cv2.cvtColor(screenshot, cv2.COLOR_BGR2GRAY)
-                    
-                    # Enhanced preprocessing
-                    # 1. Increase contrast
                     gray = cv2.convertScaleAbs(gray, alpha=2.0, beta=0)
-                    
-                    # 2. Apply Gaussian blur to reduce noise
                     blurred = cv2.GaussianBlur(gray, (3, 3), 0)
-                    
-                    # 3. Adaptive thresholding for better text isolation
                     thresh = cv2.adaptiveThreshold(
                         blurred, 255,
                         cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
@@ -193,65 +193,44 @@ class WorldScanner:
                         11, 2
                     )
                     
-                    # 4. Dilate to make text more prominent
-                    kernel = np.ones((2,2), np.uint8)
-                    thresh = cv2.dilate(thresh, kernel, iterations=1)
-                    
-                    # Save all preprocessing steps for debugging
-                    cv2.imwrite(str(debug_dir / f"coord_{coord_type}_original.png"), screenshot)
-                    cv2.imwrite(str(debug_dir / f"coord_{coord_type}_gray.png"), gray)
-                    cv2.imwrite(str(debug_dir / f"coord_{coord_type}_thresh.png"), thresh)
-                    
-                    # Emit the processed image for debug viewer
-                    if hasattr(self, 'debug_image'):
-                        self.debug_image.emit(thresh, coord_type, 0)  # 0 as placeholder value
-                    
-                    # OCR with enhanced configuration
+                    # Try OCR
                     text = pytesseract.image_to_string(
                         thresh,
-                        config='--psm 7 --oem 3 -c tessedit_char_whitelist=0123456789 -c tessedit_char_height_range="10-30"'
+                        config='--psm 7 --oem 3 -c tessedit_char_whitelist=0123456789'
                     )
-                    logger.debug(f"Raw OCR text for {coord_type}: '{text}'")
                     
-                    # Clean and convert to int
+                    # Clean text and get value
                     try:
-                        # Remove any non-digit characters
-                        clean_text = ''.join(filter(str.isdigit, text.strip()))
-                        if not clean_text:
-                            logger.error(f"No digits found in OCR text for {coord_type}")
-                            return None
-                            
-                        value = int(clean_text)
+                        value = int(''.join(filter(str.isdigit, text.strip())))
                         coordinates[coord_type] = value
-                        logger.info(f"Detected {coord_type} coordinate: {value}")
-                        
-                        # Emit the processed image with the detected value
-                        if hasattr(self, 'debug_image'):
-                            self.debug_image.emit(thresh, coord_type, value)
-                            
-                    except ValueError as e:
-                        logger.error(f"Failed to parse {coord_type} coordinate: {e}")
-                        return None
-            
-            # Validate coordinates
-            for coord_type in ['x', 'y', 'k']:
-                if coord_type not in coordinates:
-                    logger.error(f"Missing {coord_type} coordinate")
-                    return None
-                if not (0 <= coordinates[coord_type] <= 999):
-                    logger.error(f"Invalid {coord_type} coordinate: {coordinates[coord_type]}")
-                    return None
-            
-            position = WorldPosition(
-                x=coordinates['x'],
-                y=coordinates['y'],
-                k=coordinates['k']
-            )
-            logger.info(f"Successfully detected position: X={position.x}, Y={position.y}, K={position.k}")
-            return position
-            
+                    except ValueError:
+                        coordinates[coord_type] = 0
+                        logger.warning(f"Failed to parse {coord_type} coordinate")
+                    
+                    # Update debug window with processed image
+                    self.debug_window.update_image(
+                        f"Coordinate {coord_type}",
+                        thresh,
+                        metadata={
+                            "raw_text": text.strip(),
+                            "value": coordinates[coord_type]
+                        },
+                        save=True
+                    )
+                
+                if all(coord in coordinates for coord in ['x', 'y', 'k']):
+                    position = WorldPosition(
+                        x=coordinates['x'],
+                        y=coordinates['y'],
+                        k=coordinates['k']
+                    )
+                    logger.info(f"Successfully detected position: X={position.x}, Y={position.y}, K={position.k}")
+                    return position
+                
+                return None
+                
         except Exception as e:
-            logger.error(f"Error reading coordinates: {e}", exc_info=True)
+            logger.error(f"Error getting current position: {e}", exc_info=True)
             return None
             
     def move_to_position(self, target: WorldPosition) -> bool:
@@ -434,7 +413,14 @@ class ScanWorker(QObject):
     finished = pyqtSignal()
     debug_image = pyqtSignal(object, str, int)  # image, coord_type, value
     
-    def __init__(self, scanner: 'WorldScanner', pattern_matcher: 'PatternMatcher') -> None:
+    def __init__(self, scanner: WorldScanner, pattern_matcher: 'PatternMatcher') -> None:
+        """
+        Initialize scan worker.
+        
+        Args:
+            scanner: WorldScanner instance
+            pattern_matcher: PatternMatcher instance
+        """
         super().__init__()
         self.scanner = scanner
         self.pattern_matcher = pattern_matcher
@@ -443,77 +429,6 @@ class ScanWorker(QObject):
         self.scanner.debug_image = self.debug_image
         self.last_debug_update = 0
         self.debug_update_interval = 0.5  # Update debug images every 0.5 seconds
-        
-    def update_debug_images(self) -> None:
-        """Capture and update debug images."""
-        try:
-            # Get scanner settings
-            config = ConfigManager()
-            scanner_settings = config.get_scanner_settings()
-            
-            # Get minimap dimensions
-            minimap_left = scanner_settings.get('minimap_left', 0)
-            minimap_top = scanner_settings.get('minimap_top', 0)
-            minimap_width = scanner_settings.get('minimap_width', 0)
-            minimap_height = scanner_settings.get('minimap_height', 0)
-            
-            # Define regions relative to minimap
-            coordinate_regions = {
-                'x': {
-                    'left': minimap_left,
-                    'top': minimap_top + minimap_height,
-                    'width': minimap_width // 3,
-                    'height': 20
-                },
-                'y': {
-                    'left': minimap_left + minimap_width // 3,
-                    'top': minimap_top + minimap_height,
-                    'width': minimap_width // 3,
-                    'height': 20
-                },
-                'k': {
-                    'left': minimap_left + (2 * minimap_width) // 3,
-                    'top': minimap_top + minimap_height,
-                    'width': minimap_width // 3,
-                    'height': 20
-                }
-            }
-            
-            with mss() as sct:
-                for coord_type, region in coordinate_regions.items():
-                    # Capture and process image
-                    screenshot = np.array(sct.grab(region))
-                    gray = cv2.cvtColor(screenshot, cv2.COLOR_BGR2GRAY)
-                    gray = cv2.convertScaleAbs(gray, alpha=2.0, beta=0)
-                    blurred = cv2.GaussianBlur(gray, (3, 3), 0)
-                    thresh = cv2.adaptiveThreshold(
-                        blurred, 255,
-                        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                        cv2.THRESH_BINARY,
-                        11, 2
-                    )
-                    
-                    # Try OCR
-                    text = pytesseract.image_to_string(
-                        thresh,
-                        config='--psm 7 --oem 3 -c tessedit_char_whitelist=0123456789'
-                    )
-                    
-                    # Clean text and get value
-                    try:
-                        value = int(''.join(filter(str.isdigit, text.strip())))
-                    except ValueError:
-                        value = 0
-                    
-                    # Emit image and value
-                    self.debug_image.emit(thresh, coord_type, value)
-                    
-        except Exception as e:
-            logger.error(f"Error updating debug images: {e}")
-    
-    def stop(self) -> None:
-        """Signal the worker to stop."""
-        self.should_stop = True
         
     def run(self) -> None:
         """Run the scanning process."""
@@ -586,6 +501,77 @@ class ScanWorker(QObject):
             if self.should_stop:
                 logger.info("Scan worker stopped by user")
             self.finished.emit()
+
+    def update_debug_images(self) -> None:
+        """Capture and update debug images."""
+        try:
+            # Get scanner settings
+            config = ConfigManager()
+            scanner_settings = config.get_scanner_settings()
+            
+            # Get minimap dimensions
+            minimap_left = scanner_settings.get('minimap_left', 0)
+            minimap_top = scanner_settings.get('minimap_top', 0)
+            minimap_width = scanner_settings.get('minimap_width', 0)
+            minimap_height = scanner_settings.get('minimap_height', 0)
+            
+            # Define regions relative to minimap
+            coordinate_regions = {
+                'x': {
+                    'left': minimap_left,
+                    'top': minimap_top + minimap_height,
+                    'width': minimap_width // 3,
+                    'height': 20
+                },
+                'y': {
+                    'left': minimap_left + minimap_width // 3,
+                    'top': minimap_top + minimap_height,
+                    'width': minimap_width // 3,
+                    'height': 20
+                },
+                'k': {
+                    'left': minimap_left + (2 * minimap_width) // 3,
+                    'top': minimap_top + minimap_height,
+                    'width': minimap_width // 3,
+                    'height': 20
+                }
+            }
+            
+            with mss() as sct:
+                for coord_type, region in coordinate_regions.items():
+                    # Capture and process image
+                    screenshot = np.array(sct.grab(region))
+                    gray = cv2.cvtColor(screenshot, cv2.COLOR_BGR2GRAY)
+                    gray = cv2.convertScaleAbs(gray, alpha=2.0, beta=0)
+                    blurred = cv2.GaussianBlur(gray, (3, 3), 0)
+                    thresh = cv2.adaptiveThreshold(
+                        blurred, 255,
+                        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                        cv2.THRESH_BINARY,
+                        11, 2
+                    )
+                    
+                    # Try OCR
+                    text = pytesseract.image_to_string(
+                        thresh,
+                        config='--psm 7 --oem 3 -c tessedit_char_whitelist=0123456789'
+                    )
+                    
+                    # Clean text and get value
+                    try:
+                        value = int(''.join(filter(str.isdigit, text.strip())))
+                    except ValueError:
+                        value = 0
+                    
+                    # Emit image and value
+                    self.debug_image.emit(thresh, coord_type, value)
+                    
+        except Exception as e:
+            logger.error(f"Error updating debug images: {e}")
+    
+    def stop(self) -> None:
+        """Signal the worker to stop."""
+        self.should_stop = True
 
 if __name__ == "__main__":
     # Set up logging

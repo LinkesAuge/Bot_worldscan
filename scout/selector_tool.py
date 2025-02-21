@@ -3,6 +3,10 @@ from PyQt6.QtWidgets import QWidget, QLabel, QMessageBox, QApplication
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QPainter, QPen, QColor, QBrush, QPaintEvent, QMouseEvent
 import logging
+import win32gui
+import win32con
+import ctypes
+from ctypes.wintypes import RECT, POINT
 
 logger = logging.getLogger(__name__)
 
@@ -50,9 +54,13 @@ class SelectorTool(QWidget):
         total_rect = QApplication.primaryScreen().virtualGeometry()
         logger.debug(f"Primary screen geometry: {total_rect}")
         
+        # Track screen DPI scales
+        self.screen_dpi_scales = {}
         for screen in QApplication.screens():
             screen_geom = screen.geometry()
-            logger.debug(f"Found screen with geometry: {screen_geom}")
+            dpi_scale = screen.devicePixelRatio()
+            self.screen_dpi_scales[screen] = dpi_scale
+            logger.debug(f"Found screen with geometry: {screen_geom}, DPI scale: {dpi_scale}")
             total_rect = total_rect.united(screen_geom)
         
         logger.debug(f"Setting selector to cover all screens: {total_rect}")
@@ -99,79 +107,127 @@ class SelectorTool(QWidget):
             logger.debug(f"Drawing selection rectangle: pos=({x}, {y}), size={width}x{height}")
             
     def mousePressEvent(self, event: QMouseEvent) -> None:
-        """Handle mouse press to start selection."""
+        """Handle mouse press event to start selection."""
         if event.button() == Qt.MouseButton.LeftButton:
             self.start_pos = event.pos()
+            self.current_pos = event.pos()
             self.is_selecting = True
-            logger.debug(f"Started selection at position: ({self.start_pos.x()}, {self.start_pos.y()})")
+            logger.debug(f"Started selection at: ({event.pos().x()}, {event.pos().y()})")
             
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
-        """Handle mouse movement to update selection."""
+        """Handle mouse move event to update selection."""
         if self.is_selecting:
             self.current_pos = event.pos()
-            # Log every 10 pixels moved to avoid spam
-            if self.current_pos.x() % 10 == 0 and self.current_pos.y() % 10 == 0:
-                logger.debug(f"Selection updated to: ({self.current_pos.x()}, {self.current_pos.y()})")
-            self.update()
+            logger.debug(f"Updated selection to: ({event.pos().x()}, {event.pos().y()})")
+            self.update()  # Trigger repaint
             
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
-        """Handle mouse release to finish selection."""
+        """Handle mouse release event to complete selection."""
         if event.button() == Qt.MouseButton.LeftButton and self.is_selecting:
             self.is_selecting = False
-            
-            # If mouse was released without moving, use the start position
-            if self.current_pos is None:
-                self.current_pos = self.start_pos
-                logger.debug("Using start position as no movement detected")
-            
-            try:
-                # Calculate region
-                x = min(self.start_pos.x(), self.current_pos.x())
-                y = min(self.start_pos.y(), self.current_pos.y())
-                width = abs(self.current_pos.x() - self.start_pos.x())
-                height = abs(self.current_pos.y() - self.start_pos.y())
+            if self.start_pos and self.current_pos:
+                # Calculate region in logical coordinates
+                x1, y1 = self.start_pos.x(), self.start_pos.y()
+                x2, y2 = self.current_pos.x(), self.current_pos.y()
+                left = min(x1, x2)
+                top = min(y1, y2)
+                width = abs(x2 - x1)
+                height = abs(y2 - y1)
                 
-                # Ensure minimum size
-                if width < 10 or height < 10:
-                    logger.warning(f"Selection too small (width={width}, height={height}), ignoring")
-                    # Reset and show selector again
-                    self.start_pos = None
-                    self.current_pos = None
-                    self.is_selecting = False
-                    QTimer.singleShot(100, self.show)
-                    QTimer.singleShot(100, self.update)
-                    return
+                # Get screen info and DPI scale
+                screen = QApplication.screenAt(event.pos())
+                if not screen:
+                    logger.warning("Could not determine screen for selection")
+                    screen = QApplication.primaryScreen()
+                
+                dpi_scale = screen.devicePixelRatio()
+                logger.debug(f"Selection on screen with DPI scale: {dpi_scale}")
+                
+                # Get screen geometry
+                screen_geom = screen.geometry()
+                logger.debug(f"Screen geometry: {screen_geom}")
+                
+                # Get window handle and client area
+                def find_game_window(hwnd, _):
+                    if win32gui.IsWindowVisible(hwnd):
+                        title = win32gui.GetWindowText(hwnd)
+                        if "Total Battle" in title:
+                            game_windows.append(hwnd)
+                    return True
+                
+                game_windows = []
+                win32gui.EnumWindows(find_game_window, None)
+                
+                if not game_windows:
+                    logger.warning("Could not find game window, using raw coordinates")
+                    hwnd = None
+                else:
+                    hwnd = game_windows[0]
+                    logger.debug(f"Found game window: {win32gui.GetWindowText(hwnd)}")
+                
+                # Convert to physical pixels first
+                physical_left = int(left * dpi_scale)
+                physical_top = int(top * dpi_scale)
+                physical_width = int(width * dpi_scale)
+                physical_height = int(height * dpi_scale)
+                
+                # If we found the game window, adjust for client area
+                if hwnd:
+                    try:
+                        # Get window rect
+                        window_rect = win32gui.GetWindowRect(hwnd)
+                        
+                        # Get client rect
+                        client_rect = RECT()
+                        ctypes.windll.user32.GetClientRect(hwnd, ctypes.byref(client_rect))
+                        
+                        # Get client area position
+                        client_point = POINT(0, 0)
+                        ctypes.windll.user32.ClientToScreen(hwnd, ctypes.byref(client_point))
+                        
+                        # Calculate client area offset
+                        client_offset_x = client_point.x - window_rect[0]
+                        client_offset_y = client_point.y - window_rect[1]
+                        
+                        logger.debug(f"Window rect: {window_rect}")
+                        logger.debug(f"Client point: ({client_point.x}, {client_point.y})")
+                        logger.debug(f"Client offset: ({client_offset_x}, {client_offset_y})")
+                        
+                        # Adjust physical coordinates for client area
+                        physical_left -= int(client_offset_x * dpi_scale)
+                        physical_top -= int(client_offset_y * dpi_scale)
+                        
+                        logger.debug("Adjusted coordinates for client area")
+                    except Exception as e:
+                        logger.error(f"Error adjusting for client area: {e}")
+                
+                logger.debug(f"Coordinate conversion:")
+                logger.debug(f"Original coords: ({x1}, {y1}) -> ({x2}, {y2})")
+                logger.debug(f"Final physical coords: ({physical_left}, {physical_top}) {physical_width}x{physical_height}")
                 
                 region = {
-                    'left': x,
-                    'top': y,
-                    'width': width,
-                    'height': height
+                    'left': physical_left,
+                    'top': physical_top,
+                    'width': physical_width,
+                    'height': physical_height,
+                    'dpi_scale': dpi_scale,
+                    'logical_coords': {
+                        'left': left,
+                        'top': top,
+                        'width': width,
+                        'height': height
+                    }
                 }
                 
-                logger.info(f"Selection completed: {region}")
+                logger.info(f"Selection completed: Physical={region}, Logical={region['logical_coords']}")
                 
-                # Hide the selector window before showing dialog
-                self.hide()
-                
-                # Show confirmation dialog
-                msg = QMessageBox()
-                msg.setWindowTitle("Confirm Selection")
-                msg.setText(f"Use this region?\nPosition: ({x}, {y})\nSize: {width}x{height}")
-                msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-                msg.setWindowFlags(Qt.WindowType.WindowStaysOnTopHint)
-                
-                result = msg.exec()
-                if result == QMessageBox.StandardButton.Yes:
-                    logger.info("Selection confirmed by user")
-                    self.region_selected.emit(region)
-                    self.close()
-                else:
-                    logger.info("Selection cancelled by user")
-                    self.selection_cancelled.emit()
-                    self.close()
-                    
-            except Exception as e:
-                logger.error(f"Error during selection: {e}", exc_info=True)
+                # Emit the region
+                self.region_selected.emit(region)
+            else:
+                logger.warning("Invalid selection - missing start or end position")
                 self.selection_cancelled.emit()
-                self.close() 
+            self.close()
+        elif event.button() == Qt.MouseButton.RightButton:
+            logger.info("Selection cancelled by right click")
+            self.selection_cancelled.emit()
+            self.close() 

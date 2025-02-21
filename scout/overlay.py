@@ -208,20 +208,22 @@ class Overlay(QWidget):
         self.update([])
 
     def _update_pattern_matching(self) -> None:
-        """Update pattern matching results."""
-        if not self.pattern_matching_active:
-            return
-            
+        """Run pattern matching update cycle."""
         try:
             logger.debug("Running pattern matching update")
-            matches = self.pattern_matcher.find_matches()
-            if matches:
-                logger.info(f"Found {len(matches)} matches")
-                for match in matches:
-                    logger.debug(f"Match: {match.template_name} at {match.position} with confidence {match.confidence:.2f}")
-            else:
-                logger.debug("No matches found")
+            
+            # Capture window image
+            image = self.pattern_matcher.capture_window()
+            if image is None:
+                logger.warning("Failed to capture window for pattern matching")
+                return
+            
+            # Find matches in captured image
+            matches = self.pattern_matcher.find_matches(image)
+            
+            # Update overlay with matches
             self.update(matches)
+            
         except Exception as e:
             logger.error(f"Error in pattern matching update: {e}", exc_info=True)
 
