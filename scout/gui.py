@@ -100,10 +100,12 @@ class OverlayController(QMainWindow):
         overlay_group = QGroupBox("TB Scout Overlay Controls")
         layout = QVBoxLayout()
         
-        # Toggle button - update text based on active state
-        self.toggle_btn = QPushButton(f"Toggle TB Scout Overlay (F10): {'ON' if settings['active'] else 'OFF'}")
+        # Toggle button - initialize state from settings
+        is_active = settings.get("active", False)  # Get initial state from settings
+        self.toggle_btn = QPushButton(f"Toggle TB Scout Overlay (F10): {'ON' if is_active else 'OFF'}")
         self.toggle_btn.clicked.connect(self._handle_toggle)
-        self._update_toggle_button_color(settings["active"])
+        self._update_toggle_button_color(is_active)  # Set initial color
+        self.overlay.active = is_active  # Set initial state in overlay
         layout.addWidget(self.toggle_btn)
         
         # Thickness controls
@@ -375,10 +377,13 @@ class OverlayController(QMainWindow):
         """Handle overlay toggle button click."""
         if self.toggle_callback:
             self.toggle_callback()
-            # Update button color based on overlay state
-            self._update_toggle_button_color(self.overlay.active)
+            # Get the current state from the overlay after toggle
+            is_active = self.overlay.active
+            # Update button color and text based on current state
+            self._update_toggle_button_color(is_active)
+            self.toggle_btn.setText(f"Toggle TB Scout Overlay (F10): {'ON' if is_active else 'OFF'}")
             # Update status bar
-            self.update_status(self.overlay.active)
+            self.status_bar.showMessage(f"Overlay: {'ON' if is_active else 'OFF'}")
             # Save settings including overlay state
             self.save_settings()
     

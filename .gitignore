@@ -127,4 +127,5 @@ celerybeat.pid
 # SageMath parsed files
 *.sage.py
 
-
+./scout/debug_screenshots/*
+./scout/scan_logs/*

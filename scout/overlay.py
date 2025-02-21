@@ -107,10 +107,16 @@ class Overlay(QWidget):
         x, y, width, height = pos
         logger.debug(f"Creating overlay window at ({x}, {y}) with size {width}x{height}")
         
+        # Create initial transparent overlay
+        overlay = np.zeros((height, width, 3), dtype=np.uint8)
+        overlay[:] = (255, 0, 255)  # Magenta background for transparency
+        
         # Create window with proper style
         cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL | cv2.WINDOW_FREERATIO)
-        hwnd = win32gui.FindWindow(None, self.window_name)
+        cv2.imshow(self.window_name, overlay)
+        cv2.waitKey(1)  # Process events
         
+        hwnd = win32gui.FindWindow(None, self.window_name)
         if not hwnd:
             logger.error("Failed to create overlay window")
             return
@@ -133,25 +139,50 @@ class Overlay(QWidget):
             win32con.LWA_COLORKEY
         )
         
+        # Position window
+        win32gui.SetWindowPos(
+            hwnd,
+            win32con.HWND_TOPMOST,
+            x, y, width, height,
+            win32con.SWP_NOACTIVATE | win32con.SWP_SHOWWINDOW
+        )
+        
         logger.debug("Overlay window created")
 
     def start_pattern_matching(self) -> None:
         """Start pattern matching."""
         logger.info("Starting pattern matching")
         self.pattern_matching_active = True
-        self.active = True  # Also activate overlay
-        self.create_overlay_window()
+        
+        # Create overlay window if both overlay and pattern matching are now active
+        if self.active and self.pattern_matching_active:
+            self.create_overlay_window()
         
         # Start timer for pattern matching updates
         interval = max(int(1000 / self.pattern_matcher.target_fps), 16)  # Minimum 16ms (60 FPS max)
         self.pattern_matching_timer.start(interval)
         logger.debug(f"Pattern matching timer started with interval: {interval}ms")
 
+    def _destroy_window_safely(self) -> None:
+        """Safely destroy the overlay window if it exists."""
+        try:
+            # Check if window exists before destroying
+            hwnd = win32gui.FindWindow(None, self.window_name)
+            if hwnd:
+                cv2.destroyWindow(self.window_name)
+                logger.info("Overlay window destroyed")
+        except Exception as e:
+            logger.debug(f"Window destruction skipped: {e}")
+
     def stop_pattern_matching(self) -> None:
         """Stop pattern matching."""
         logger.info("Stopping pattern matching")
         self.pattern_matching_active = False
         self.pattern_matching_timer.stop()
+        
+        # Safely destroy window when pattern matching stops
+        self._destroy_window_safely()
+        
         # Clear any existing matches from display
         self.update([])
 
@@ -225,6 +256,12 @@ class Overlay(QWidget):
             logger.warning(f"Failed to adjust for browser client area: {e}")
         
         try:
+            # Ensure window exists before drawing
+            hwnd = win32gui.FindWindow(None, self.window_name)
+            if not hwnd:
+                logger.debug("Creating overlay window as it doesn't exist")
+                self.create_overlay_window()
+            
             # Create magenta background (will be transparent)
             overlay = np.zeros((height, width, 3), dtype=np.uint8)
             overlay[:] = (255, 0, 255)  # Set background to magenta
@@ -335,12 +372,11 @@ class Overlay(QWidget):
                     win32con.LWA_COLORKEY
                 )
             else:
-                logger.warning("Overlay window not found, recreating...")
+                logger.warning("Overlay window not found after update, recreating...")
                 self.create_overlay_window()
             
         except Exception as e:
             logger.error(f"Error updating overlay: {str(e)}", exc_info=True)
-            # Try to recreate the window if there was an error
             try:
                 self.create_overlay_window()
             except Exception as e2:
@@ -348,10 +384,13 @@ class Overlay(QWidget):
 
     def toggle(self) -> None:
         """Toggle the overlay visibility."""
+        previous_state = self.active
         self.active = not self.active
+        logger.info(f"Overlay {'activated' if self.active else 'deactivated'}")
         
-        if self.active:
-            self.create_overlay_window()
-        else:
-            cv2.destroyWindow(self.window_name)
-            logger.info("Overlay window destroyed") 
+        # Only destroy window if we're turning off
+        if not self.active:
+            self._destroy_window_safely()
+        # Only create window if we're turning on AND pattern matching is active
+        elif self.pattern_matching_active:
+            self.create_overlay_window() 

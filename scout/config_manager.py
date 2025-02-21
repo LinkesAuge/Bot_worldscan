@@ -64,36 +64,36 @@ class ConfigManager:
         for new users while maintaining reliable detection.
         """
         self.config["Overlay"] = {
-            "active": "false",  # Default to off
+            "active": "true",  # Default to ON
             "rect_color_r": "170",
             "rect_color_g": "0",
             "rect_color_b": "255",
-            "rect_thickness": "7",
-            "rect_scale": "2.0",
+            "rect_thickness": "8",  # Updated
+            "rect_scale": "2.0",  # Updated
             "font_color_r": "255",
             "font_color_g": "0",
             "font_color_b": "0",
-            "font_size": "33",
-            "text_thickness": "2",
+            "font_size": "24",  # Updated
+            "text_thickness": "2",  # Updated
             "cross_color_r": "255",
             "cross_color_g": "85",
             "cross_color_b": "127",
             "cross_size": "28",
-            "cross_thickness": "5",
-            "cross_scale": "1.0"
+            "cross_thickness": "5",  # Updated
+            "cross_scale": "1.0"  # Updated
         }
         
         self.config["PatternMatching"] = {
-            "active": "false",  # Default to off
-            "confidence": "0.81",
-            "target_fps": "5",
+            "active": "true",  # Default to ON
+            "confidence": "0.90",  # Updated (90%)
+            "target_fps": "1",  # Updated
             "grouping_threshold": "10",
-            "sound_enabled": "false",  # Default to off
+            "sound_enabled": "true",  # Default to ON
             "sound_cooldown": "5.0"
         }
         
         self.config["Debug"] = {
-            "enabled": "false",  # Default to off
+            "enabled": "false",  # Default to OFF
             "save_screenshots": "true",
             "save_templates": "true"
         }
