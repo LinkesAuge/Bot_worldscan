@@ -107,7 +107,8 @@ class ConfigManager:
         self.config["Debug"] = {
             "enabled": "false",
             "save_screenshots": "true",
-            "save_templates": "true"
+            "save_templates": "true",
+            "debug_screenshots_dir": "scout/debug_screenshots"
         }
         
         self.save_config()
@@ -312,15 +313,25 @@ class ConfigManager:
         self.save_config()
         logger.debug(f"Updated scanner settings: {settings}")
 
-    def get_debug_settings(self) -> Dict[str, bool]:
-        """Get debug settings from config."""
+    def get_debug_settings(self) -> Dict[str, Any]:
+        """
+        Get debug settings from config.
+        
+        Returns:
+            Dictionary containing debug settings:
+            - enabled: Whether debug mode is enabled
+            - save_screenshots: Whether to save debug screenshots
+            - save_templates: Whether to save template debug images
+            - debug_screenshots_dir: Directory path for debug screenshots
+        """
         if not self.config.has_section("Debug"):
             self.config.add_section("Debug")
             
         return {
             "enabled": self.config.getboolean("Debug", "enabled", fallback=False),
             "save_screenshots": self.config.getboolean("Debug", "save_screenshots", fallback=True),
-            "save_templates": self.config.getboolean("Debug", "save_templates", fallback=True)
+            "save_templates": self.config.getboolean("Debug", "save_templates", fallback=True),
+            "debug_screenshots_dir": self.config.get("Debug", "debug_screenshots_dir", fallback="scout/debug_screenshots")
         }
 
     def update_debug_settings(self, settings: Dict[str, bool]) -> None:

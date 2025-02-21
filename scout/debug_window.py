@@ -6,6 +6,8 @@ import numpy as np
 import cv2
 from pathlib import Path
 import logging
+from datetime import datetime
+from scout.config_manager import ConfigManager
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +116,14 @@ class DebugWindow(QWidget):
         self.setWindowTitle("Debug Viewer")
         self.setGeometry(100, 100, 900, 700)
         
+        # Load config
+        self.config_manager = ConfigManager()
+        debug_settings = self.config_manager.get_debug_settings()
+        
+        # Initialize debug directory path from config
+        self.debug_dir = Path(debug_settings["debug_screenshots_dir"])
+        self.debug_dir.mkdir(exist_ok=True)
+        
         # Create main layout
         layout = QVBoxLayout()
         
@@ -127,10 +137,6 @@ class DebugWindow(QWidget):
         
         # Set layout
         self.setLayout(layout)
-        
-        # Create debug screenshot directory
-        self.debug_dir = Path("debug_screenshots")
-        self.debug_dir.mkdir(exist_ok=True)
         
         logger.debug("Debug window initialized")
     
