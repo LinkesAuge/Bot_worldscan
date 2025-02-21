@@ -88,6 +88,11 @@ class OverlayController(QMainWindow):
                 f"Minimap region: ({scanner_settings['minimap_left']}, {scanner_settings['minimap_top']})"
             )
         
+        # Create FPS update timer
+        self.fps_timer = QTimer()
+        self.fps_timer.timeout.connect(self._update_fps_display)
+        self.fps_timer.start(500)  # Update every 500ms
+        
         logger.debug("GUI initialized")
     
     def create_overlay_controls(self, parent_layout: QVBoxLayout, settings: Dict[str, Any]) -> None:
@@ -95,8 +100,8 @@ class OverlayController(QMainWindow):
         overlay_group = QGroupBox("TB Scout Overlay Controls")
         layout = QVBoxLayout()
         
-        # Toggle button
-        self.toggle_btn = QPushButton("Toggle TB Scout Overlay (F10)")
+        # Toggle button - update text based on active state
+        self.toggle_btn = QPushButton(f"Toggle TB Scout Overlay (F10): {'ON' if settings['active'] else 'OFF'}")
         self.toggle_btn.clicked.connect(self._handle_toggle)
         self._update_toggle_button_color(settings["active"])
         layout.addWidget(self.toggle_btn)
@@ -266,6 +271,13 @@ class OverlayController(QMainWindow):
         self.reload_btn.setStyleSheet("font-weight: bold;")
         layout.addWidget(self.reload_btn)
         
+        # Debug mode toggle button - initialize from config
+        debug_settings = self.config_manager.get_debug_settings()
+        self.debug_btn = QPushButton(f"Debug Mode: {'ON' if debug_settings['enabled'] else 'OFF'}")
+        self.debug_btn.clicked.connect(self._toggle_debug_mode)
+        self._update_debug_button_color(debug_settings['enabled'])  # Initialize color from config
+        layout.addWidget(self.debug_btn)
+        
         # Sound toggle button
         self.sound_btn = QPushButton("Sound Alerts: ON" if settings["sound_enabled"] else "Sound Alerts: OFF")
         self.sound_btn.clicked.connect(self._toggle_sound)  # Connect click handler
@@ -363,6 +375,12 @@ class OverlayController(QMainWindow):
         """Handle overlay toggle button click."""
         if self.toggle_callback:
             self.toggle_callback()
+            # Update button color based on overlay state
+            self._update_toggle_button_color(self.overlay.active)
+            # Update status bar
+            self.update_status(self.overlay.active)
+            # Save settings including overlay state
+            self.save_settings()
     
     def set_toggle_callback(self, callback: Callable[[], None]) -> None:
         """Set the callback for overlay toggle."""
@@ -377,6 +395,7 @@ class OverlayController(QMainWindow):
         state = "ON" if overlay_active else "OFF"
         self.status_bar.showMessage(f"Overlay: {state}")
         self._update_toggle_button_color(overlay_active)  # Update button color
+        self.toggle_btn.setText(f"Toggle TB Scout Overlay (F10): {state}")  # Update button text
     
     def update_fps_display(self, target_fps: float, actual_fps: float) -> None:
         """Update FPS display label."""
@@ -488,7 +507,7 @@ class OverlayController(QMainWindow):
         self.confidence_input.valueChanged.connect(on_confidence_spinbox_change)
         self.scale_slider.valueChanged.connect(on_rect_scale_slider_change)
         self.scale_input.valueChanged.connect(on_rect_scale_spinbox_change)
-        self.cross_scale_slider.valueChanged.connect(on_cross_scale_slider_change)
+        self.cross_scale_slider.valueChanged.connect(on_cross_scale_spinbox_change)
         self.cross_scale_input.valueChanged.connect(on_cross_scale_spinbox_change)
         
         # Connect input boxes to their sliders
@@ -815,6 +834,57 @@ class OverlayController(QMainWindow):
             self.pattern_matcher.sound_manager.play_if_ready()
             
         logger.info(f"Sound alerts {'enabled' if new_state else 'disabled'}")
+
+    def _update_fps_display(self) -> None:
+        """Update the FPS display with current values."""
+        if hasattr(self.pattern_matcher, 'fps'):
+            actual_fps = self.pattern_matcher.fps
+            target_fps = self.fps_input.value()
+            self.fps_display.setText(f"Target: {target_fps:.1f} FPS, Actual: {actual_fps:.1f} FPS")
+            
+            # Color code the display based on performance
+            if actual_fps >= target_fps * 0.9:  # Within 90% of target
+                self.fps_display.setStyleSheet("color: green;")
+            elif actual_fps >= target_fps * 0.7:  # Within 70% of target
+                self.fps_display.setStyleSheet("color: orange;")
+            else:  # Below 70% of target
+                self.fps_display.setStyleSheet("color: red;")
+        else:
+            self.fps_display.setText("FPS: N/A")
+            self.fps_display.setStyleSheet("")
+
+    def _toggle_debug_mode(self) -> None:
+        """Toggle debug mode on/off."""
+        is_enabled = self.debug_btn.text().endswith("ON")
+        new_state = not is_enabled
+        
+        # Update button state
+        self.debug_btn.setText(f"Debug Mode: {'ON' if new_state else 'OFF'}")
+        self._update_debug_button_color(new_state)
+        
+        # Update pattern matcher debug state
+        if hasattr(self.pattern_matcher, 'set_debug_mode'):
+            self.pattern_matcher.set_debug_mode(new_state)
+        
+        # Save debug settings to config
+        self.config_manager.update_debug_settings(
+            enabled=new_state,
+            save_screenshots=True,  # Keep default values for now
+            save_templates=True
+        )
+            
+        logger.info(f"Debug mode {'enabled' if new_state else 'disabled'}")
+
+    def _update_debug_button_color(self, is_active: bool) -> None:
+        """Update debug mode button color based on state."""
+        if is_active:
+            self.debug_btn.setStyleSheet(
+                "background-color: #228B22; color: white; padding: 8px; font-weight: bold;"  # Forest Green
+            )
+        else:
+            self.debug_btn.setStyleSheet(
+                "background-color: #8B0000; color: white; padding: 8px; font-weight: bold;"  # Dark red
+            )
 
 class DebugImageViewer(QWidget):
     """Window for displaying debug images."""

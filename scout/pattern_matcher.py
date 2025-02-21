@@ -106,6 +106,7 @@ class PatternMatcher:
         self.grouping_threshold = grouping_threshold
         self.client_offset_x = 0
         self.client_offset_y = 0
+        self.debug_mode = False  # Add debug mode flag
         
         # Initialize sound manager
         self.sound_manager = SoundManager()
@@ -126,6 +127,12 @@ class PatternMatcher:
         template_files = list(self.images_dir.glob("*.png"))
         logger.info(f"Found {len(template_files)} template files: {[f.name for f in template_files]}")
             
+        # Set up debug directory if needed
+        if self.debug_mode:
+            current_dir = Path(os.path.dirname(os.path.abspath(__file__)))
+            debug_dir = current_dir / "debug_screenshots"
+            debug_dir.mkdir(exist_ok=True)
+        
         for file in template_files:
             try:
                 # Read template and convert to grayscale
@@ -134,15 +141,17 @@ class PatternMatcher:
                     logger.warning(f"Failed to load template: {file}")
                     continue
                     
-                # Save original template for debugging
-                debug_dir = Path("debug_screenshots")
-                debug_dir.mkdir(exist_ok=True)
-                cv2.imwrite(str(debug_dir / f"template_original_{file.stem}.png"), template)
+                # Save debug images if debug mode is enabled
+                if self.debug_mode:
+                    # Save original template
+                    cv2.imwrite(str(debug_dir / f"template_original_{file.stem}.png"), template)
+                    # Save grayscale version
+                    template_gray = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
+                    cv2.imwrite(str(debug_dir / f"template_gray_{file.stem}.png"), template_gray)
+                    logger.debug(f"Saved debug images for template: {file.stem}")
                 
-                # Convert to grayscale and ensure correct format
+                # Convert to grayscale for actual use
                 template = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
-                cv2.imwrite(str(debug_dir / f"template_gray_{file.stem}.png"), template)
-                
                 template = np.array(template, dtype=np.uint8)
                 
                 self.templates[file.stem] = template
@@ -184,12 +193,6 @@ class PatternMatcher:
             
             # Convert to grayscale
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            
-            # Save debug image
-            debug_dir = Path("debug_screenshots")
-            debug_dir.mkdir(exist_ok=True)
-            cv2.imwrite(str(debug_dir / "captured_window.png"), img)
-            cv2.imwrite(str(debug_dir / "captured_window_gray.png"), gray)
             
             # Calculate FPS
             current_time = time()
@@ -290,6 +293,45 @@ class PatternMatcher:
         
         return groups 
 
+    def set_debug_mode(self, enabled: bool) -> None:
+        """
+        Enable or disable debug mode.
+        
+        When debug mode is enabled:
+        1. Window captures will be saved during pattern matching
+        2. Template debug screenshots will be saved immediately
+        
+        Args:
+            enabled: Whether to enable debug mode
+        """
+        self.debug_mode = enabled
+        logger.info(f"Debug mode {'enabled' if enabled else 'disabled'}")
+        
+        if enabled:
+            # Get the directory where this file is located for debug screenshots
+            current_dir = Path(os.path.dirname(os.path.abspath(__file__)))
+            debug_dir = current_dir / "debug_screenshots"
+            debug_dir.mkdir(exist_ok=True)
+            
+            # Save debug screenshots of all currently loaded templates
+            for name, template in self.templates.items():
+                try:
+                    # Load original template to get color version
+                    template_path = self.images_dir / f"{name}.png"
+                    if template_path.exists():
+                        original = cv2.imread(str(template_path))
+                        if original is not None:
+                            # Save original template
+                            cv2.imwrite(str(debug_dir / f"template_original_{name}.png"), original)
+                            # Save grayscale version
+                            template_gray = cv2.cvtColor(original, cv2.COLOR_BGR2GRAY)
+                            cv2.imwrite(str(debug_dir / f"template_gray_{name}.png"), template_gray)
+                            logger.debug(f"Saved debug images for template: {name}")
+                        else:
+                            logger.warning(f"Could not load original template: {name}")
+                except Exception as e:
+                    logger.error(f"Error saving debug images for template {name}: {e}")
+
     def capture_window(self) -> Optional[np.ndarray]:
         """Capture the game window."""
         try:
@@ -347,22 +389,21 @@ class PatternMatcher:
                 screenshot = sct.grab(monitor)
                 img = np.array(screenshot)
             
-            # Save debug screenshots
-            debug_dir = Path("debug_screenshots")
-            debug_dir.mkdir(exist_ok=True)
-            
-            # Save original screenshot
-            cv2.imwrite(str(debug_dir / "last_capture.png"), img)
-            
-            # Save grayscale version
-            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            cv2.imwrite(str(debug_dir / "last_capture_gray.png"), gray)
-            
-            # Save template images for comparison
-            for name, template in self.templates.items():
-                cv2.imwrite(str(debug_dir / f"template_{name}.png"), template)
-            
-            logger.info(f"Saved debug screenshots to {debug_dir}")
+            # Save debug screenshots only if debug mode is enabled
+            if self.debug_mode:
+                # Get the directory where this file is located for debug screenshots
+                current_dir = Path(os.path.dirname(os.path.abspath(__file__)))
+                debug_dir = current_dir / "debug_screenshots"
+                debug_dir.mkdir(exist_ok=True)
+                
+                # Save original screenshot
+                cv2.imwrite(str(debug_dir / "last_capture.png"), img)
+                
+                # Save grayscale version
+                gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                cv2.imwrite(str(debug_dir / "last_capture_gray.png"), gray)
+                
+                logger.info(f"Saved debug screenshots to {debug_dir}")
             
             return img
             

@@ -22,7 +22,7 @@ To achieve this we take screenshots of the current game state and analyse them w
 Go through the problem step by step, utilize extensive logging and debugging techniques and think about different approaches to solve a bug
 
 # CURRENT FILE STRUCTURE
-All python files are in the root folder and should be kept there. Any new python files should be created in there. The only exception are unit tests which should be in a subfolder called "tests"
+All python files are in the "scouts" folder and should be kept there. Any new python files should be created in there. The only exception are unit tests which should be in a subfolder called "tests"
 Anything related to logging should go into "logs" subfolder
 For debugging screenshots we use the "debug_screenshots" subfolder
 Images are stored and saved in the "images" subfolder

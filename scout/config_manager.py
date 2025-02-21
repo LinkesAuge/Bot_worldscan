@@ -58,12 +58,13 @@ class ConfigManager:
         - Overlay: Visual appearance settings for the detection overlay
         - Pattern Matching: Detection sensitivity and performance settings
         - Scanner: World scanning parameters
+        - Debug: Debug mode settings
         
         The default values are chosen to provide a good starting experience
         for new users while maintaining reliable detection.
         """
         self.config["Overlay"] = {
-            "active": "true",
+            "active": "false",  # Default to off
             "rect_color_r": "170",
             "rect_color_g": "0",
             "rect_color_b": "255",
@@ -83,12 +84,18 @@ class ConfigManager:
         }
         
         self.config["PatternMatching"] = {
-            "active": "true",
+            "active": "false",  # Default to off
             "confidence": "0.81",
             "target_fps": "5",
             "grouping_threshold": "10",
-            "sound_enabled": "true",
+            "sound_enabled": "false",  # Default to off
             "sound_cooldown": "5.0"
+        }
+        
+        self.config["Debug"] = {
+            "enabled": "false",  # Default to off
+            "save_screenshots": "true",
+            "save_templates": "true"
         }
         
         self.save_config()
@@ -103,28 +110,28 @@ class ConfigManager:
     def get_overlay_settings(self) -> Dict[str, Any]:
         """Get overlay window settings from config."""
         settings = {
-            "active": self.config.getboolean("Overlay", "active"),
+            "active": self.config.getboolean("Overlay", "active", fallback=False),
             "rect_color": QColor(
-                self.config.getint("Overlay", "rect_color_r"),
-                self.config.getint("Overlay", "rect_color_g"),
-                self.config.getint("Overlay", "rect_color_b")
+                self.config.getint("Overlay", "rect_color_r", fallback=170),
+                self.config.getint("Overlay", "rect_color_g", fallback=0),
+                self.config.getint("Overlay", "rect_color_b", fallback=255)
             ),
-            "rect_thickness": self.config.getint("Overlay", "rect_thickness"),
-            "rect_scale": self.config.getfloat("Overlay", "rect_scale"),
+            "rect_thickness": self.config.getint("Overlay", "rect_thickness", fallback=7),
+            "rect_scale": self.config.getfloat("Overlay", "rect_scale", fallback=2.0),
             "font_color": QColor(
-                self.config.getint("Overlay", "font_color_r"),
-                self.config.getint("Overlay", "font_color_g"),
-                self.config.getint("Overlay", "font_color_b")
+                self.config.getint("Overlay", "font_color_r", fallback=255),
+                self.config.getint("Overlay", "font_color_g", fallback=0),
+                self.config.getint("Overlay", "font_color_b", fallback=0)
             ),
-            "font_size": self.config.getint("Overlay", "font_size"),
-            "text_thickness": self.config.getint("Overlay", "text_thickness"),
+            "font_size": self.config.getint("Overlay", "font_size", fallback=33),
+            "text_thickness": self.config.getint("Overlay", "text_thickness", fallback=2),
             "cross_color": QColor(
-                self.config.getint("Overlay", "cross_color_r"),
-                self.config.getint("Overlay", "cross_color_g"),
-                self.config.getint("Overlay", "cross_color_b")
+                self.config.getint("Overlay", "cross_color_r", fallback=255),
+                self.config.getint("Overlay", "cross_color_g", fallback=85),
+                self.config.getint("Overlay", "cross_color_b", fallback=127)
             ),
-            "cross_size": self.config.getint("Overlay", "cross_size"),
-            "cross_thickness": self.config.getint("Overlay", "cross_thickness"),
+            "cross_size": self.config.getint("Overlay", "cross_size", fallback=28),
+            "cross_thickness": self.config.getint("Overlay", "cross_thickness", fallback=5),
             "cross_scale": self.config.getfloat("Overlay", "cross_scale", fallback=1.0)
         }
         logger.debug(f"Loaded overlay settings: {settings}")
@@ -133,15 +140,46 @@ class ConfigManager:
     def get_pattern_matching_settings(self) -> Dict[str, Any]:
         """Get pattern matching settings from config."""
         settings = {
-            "active": self.config.getboolean("PatternMatching", "active"),
-            "confidence": self.config.getfloat("PatternMatching", "confidence"),
-            "target_fps": self.config.getfloat("PatternMatching", "target_fps"),
-            "grouping_threshold": self.config.getint("PatternMatching", "grouping_threshold"),
-            "sound_enabled": self.config.getboolean("PatternMatching", "sound_enabled"),
-            "sound_cooldown": self.config.getfloat("PatternMatching", "sound_cooldown")
+            "active": self.config.getboolean("PatternMatching", "active", fallback=False),
+            "confidence": self.config.getfloat("PatternMatching", "confidence", fallback=0.81),
+            "target_fps": self.config.getfloat("PatternMatching", "target_fps", fallback=5.0),
+            "grouping_threshold": self.config.getint("PatternMatching", "grouping_threshold", fallback=10),
+            "sound_enabled": self.config.getboolean("PatternMatching", "sound_enabled", fallback=False),
+            "sound_cooldown": self.config.getfloat("PatternMatching", "sound_cooldown", fallback=5.0)
         }
         logger.debug(f"Loaded pattern matching settings: {settings}")
         return settings
+
+    def get_debug_settings(self) -> Dict[str, Any]:
+        """Get debug settings from config."""
+        if not self.config.has_section("Debug"):
+            self.config.add_section("Debug")
+            self.config["Debug"] = {
+                "enabled": "false",
+                "save_screenshots": "true",
+                "save_templates": "true"
+            }
+            self.save_config()
+            
+        settings = {
+            "enabled": self.config.getboolean("Debug", "enabled", fallback=False),
+            "save_screenshots": self.config.getboolean("Debug", "save_screenshots", fallback=True),
+            "save_templates": self.config.getboolean("Debug", "save_templates", fallback=True)
+        }
+        logger.debug(f"Loaded debug settings: {settings}")
+        return settings
+
+    def update_debug_settings(self, enabled: bool, save_screenshots: bool = True, save_templates: bool = True) -> None:
+        """Update debug settings in config."""
+        if not self.config.has_section("Debug"):
+            self.config.add_section("Debug")
+            
+        self.config["Debug"]["enabled"] = str(enabled).lower()
+        self.config["Debug"]["save_screenshots"] = str(save_screenshots).lower()
+        self.config["Debug"]["save_templates"] = str(save_templates).lower()
+        
+        self.save_config()
+        logger.debug(f"Updated debug settings: enabled={enabled}, screenshots={save_screenshots}, templates={save_templates}")
 
     def update_overlay_settings(self, active: bool, rect_color: QColor, 
                               rect_thickness: int, rect_scale: float,
