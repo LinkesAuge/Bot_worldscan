@@ -22,20 +22,52 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+"""
+Total Battle Scout - Game Automation Tool
+
+This is the main entry point for the Total Battle Scout application, which provides automated 
+scanning and pattern matching capabilities for the Total Battle game. The application creates
+a transparent overlay on top of the game window to highlight detected elements and provides
+a control interface for scanning the game world.
+
+Key Components:
+- Overlay: Transparent window that highlights detected game elements
+- Pattern Matcher: Detects specific game elements using image recognition
+- World Scanner: Systematically explores the game world
+- GUI Controller: User interface for controlling all features
+"""
+
 def is_key_pressed(key_code: int) -> bool:
     """
-    Check if a key is pressed using Windows API.
+    Check if a specific keyboard key is currently being pressed.
+    
+    This function uses the Windows API to detect the current state of any keyboard key.
+    It's used for hotkey detection in the application.
     
     Args:
-        key_code: Virtual key code to check
+        key_code: Windows virtual key code (e.g., VK_F10 for F10 key)
         
     Returns:
-        bool: True if key is pressed, False otherwise
+        bool: True if the key is currently pressed, False otherwise
     """
     return win32api.GetAsyncKeyState(key_code) & 0x8000 != 0
 
 def main() -> None:
-    """Main application entry point."""
+    """
+    Main application entry point that initializes and starts all components.
+    
+    This function:
+    1. Creates the Qt application instance
+    2. Loads configuration settings
+    3. Sets up the window manager to track the game window
+    4. Creates the overlay system for highlighting game elements
+    5. Initializes the GUI controller
+    6. Connects all necessary callbacks
+    7. Starts the application event loop
+    
+    The application runs until the user closes it or an unhandled error occurs.
+    All errors are logged for debugging purposes.
+    """
     logger.info("Starting application")
     
     try:

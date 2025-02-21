@@ -20,14 +20,41 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class WorldPosition:
-    """Represents a position in the game world."""
+    """
+    Represents a location in the game world's coordinate system.
+    
+    The game world uses a grid-based coordinate system where each position
+    is defined by:
+    - x: Horizontal position (0-999)
+    - y: Vertical position (0-999)
+    - k: World/kingdom number
+    
+    This class is used to track and navigate between different locations
+    in the game world during scanning operations.
+    """
     x: int  # 0-999
     y: int  # 0-999
     k: int  # World number
     
 class WorldScanner:
     """
-    Handles systematic scanning of the game world.
+    Automated system for exploring and scanning the game world.
+    
+    This class provides systematic exploration of the game world by:
+    1. Reading current coordinates using OCR (Optical Character Recognition)
+    2. Moving to new positions by simulating coordinate input
+    3. Generating efficient search patterns for exploration
+    4. Working with pattern matching to find specific game elements
+    
+    The scanner uses a spiral search pattern to methodically cover an area
+    around the starting position, ensuring thorough exploration while
+    minimizing travel distance.
+    
+    Key Features:
+    - Coordinate detection using Tesseract OCR
+    - Automated navigation between positions
+    - Spiral search pattern generation
+    - Integration with pattern matching for target detection
     """
     
     def __init__(self, 
@@ -36,12 +63,17 @@ class WorldScanner:
                  move_delay: float = 1.0  # Delay after each move
                  ) -> None:
         """
-        Initialize the world scanner.
+        Initialize the world scanner with starting parameters.
+        
+        The scanner begins at a specified position (usually the player's city)
+        and explores outward in a spiral pattern. The scan_step determines how
+        far to move each time, while move_delay ensures the game has time to
+        update between movements.
         
         Args:
-            start_pos: Starting position (usually player's city)
-            scan_step: Distance to move each step
-            move_delay: Delay between moves to allow game to update
+            start_pos: Initial position to start scanning from
+            scan_step: Distance between each scan position (in coordinate units)
+            move_delay: Time to wait after moving (in seconds)
         """
         self.current_pos = start_pos
         self.start_pos = start_pos

@@ -7,29 +7,55 @@ from typing import Tuple, Dict, Any, Optional
 logger = logging.getLogger(__name__)
 
 class ConfigManager:
-    """Manages application configuration using config.ini file."""
+    """
+    Manages application configuration settings using an INI file.
+    
+    This class handles all persistent settings for the application, including:
+    - Overlay appearance (colors, sizes, positions)
+    - Pattern matching parameters (confidence levels, FPS)
+    - Scanner settings (regions, coordinates)
+    - Sound settings
+    
+    The settings are stored in a human-readable INI file that can be manually
+    edited if needed. If no config file exists, default settings are created.
+    """
     
     def __init__(self, config_path: str = "config.ini") -> None:
         """
-        Initialize the configuration manager.
+        Initialize the configuration manager and load or create settings.
+        
+        This constructor will:
+        1. Check if the config file exists
+        2. Create it with default settings if it doesn't
+        3. Load the settings into memory
         
         Args:
-            config_path: Path to the config file
+            config_path: Path to the configuration file (default: "config.ini")
         """
         self.config_path = Path(config_path)
         self.config = ConfigParser()
         
         # Create default config if file doesn't exist
         if not self.config_path.exists():
-            logger.info("Creating default configuration file")
+            logger.info("No configuration file found - creating with default settings")
             self.create_default_config()
         
         # Load existing config
         self.config.read(self.config_path)
-        logger.debug("Configuration loaded")
+        logger.debug("Configuration loaded successfully")
 
     def create_default_config(self) -> None:
-        """Create a default configuration file."""
+        """
+        Create a new configuration file with default settings.
+        
+        This method sets up initial values for all application settings:
+        - Overlay: Visual appearance settings for the detection overlay
+        - Pattern Matching: Detection sensitivity and performance settings
+        - Scanner: World scanning parameters
+        
+        The default values are chosen to provide a good starting experience
+        for new users while maintaining reliable detection.
+        """
         self.config["Overlay"] = {
             "active": "true",
             "rect_color_r": "170",

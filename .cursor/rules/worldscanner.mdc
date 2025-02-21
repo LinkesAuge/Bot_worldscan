@@ -1,0 +1,38 @@
+---
+description: 
+globs: 
+---
+# PROJECT OVERVIEW
+
+
+# TECH STACK
+- Python as coding language
+- PyQt6 for GUI
+
+# ERROR FIXING PROCESS
+Go through the problem step by step, utilize extensive logging and debugging techniques and think about different approaches to solve a bug
+
+# CURRENT FILE STRUCTURE
+All python files are in the root folder and should be kept there. Any new python files should be created in there.
+Anything related to logging should go into "logs" subfolder
+For debugging screenshots we use the "debug_screenshots" subfolder
+Images are stored and saved in the "images" subfolder
+Sounds are stored and saved in the "sounds" subfolder
+
+# GITHUB PUSH PROCESS
+1. stage changes:
+git add .
+2. Commit changes:
+git commit -m "Our commit message following our GitHub Guidelines"
+3. Push changes:
+git push origin main
+
+# IMPORTANT
+You produce code like a senior python developer and you do not stop working until all of your tasks are completed
+Be careful not to break existing code functional and always check for dependencies between files/classes
+
+# OTHER CONTEXT
+
+# COMMENTS
+
+Make sure to always include detailed and easy to understand comments, explaining the function of any code block in a way even a coding layperson would understand.

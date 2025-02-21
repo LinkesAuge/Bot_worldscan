@@ -14,18 +14,40 @@ logger = logging.getLogger(__name__)
 
 class Overlay(QWidget):
     """
-    Creates and manages a transparent overlay window that can draw shapes.
+    Creates a transparent overlay window to visualize detected game elements.
+    
+    This class provides real-time visual feedback by drawing on top of the game window:
+    - Rectangles around detected elements
+    - Text labels showing what was detected and confidence levels
+    - Cross markers at the center of detected elements
+    - Color-coded indicators based on detection type
+    
+    The overlay is:
+    - Transparent to mouse clicks (passes through to game)
+    - Always on top of the game window
+    - Automatically repositioned when the game window moves
+    - Configurable in terms of colors, sizes, and display options
+    
+    Key Features:
+    - Real-time pattern match visualization
+    - Click-through transparency
+    - Automatic window tracking
+    - Configurable visual elements
     """
     
-    def __init__(self, target_window_title: str, window_manager: WindowManager, settings: Dict[str, Any], pattern_settings: Dict[str, Any]) -> None:
+    def __init__(self, target_window_title: str, window_manager: WindowManager, 
+                 settings: Dict[str, Any], pattern_settings: Dict[str, Any]) -> None:
         """
-        Initialize the overlay window.
+        Initialize the overlay window with specified settings.
+        
+        Creates a transparent window that tracks and draws over the game window.
+        The overlay uses OpenCV for drawing and Win32 API for window management.
         
         Args:
-            target_window_title: Title of the window to overlay
-            window_manager: The window manager for the target window
-            settings: Dictionary containing overlay settings
-            pattern_settings: Dictionary containing pattern matcher settings
+            target_window_title: Title of the game window to overlay
+            window_manager: Manager for tracking the game window
+            settings: Visual settings (colors, sizes, etc.)
+            pattern_settings: Pattern matching configuration
         """
         super().__init__()
         self.window_manager = window_manager

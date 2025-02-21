@@ -6,26 +6,48 @@ logger = logging.getLogger(__name__)
 
 class WindowManager:
     """
-    Manages window finding and position tracking.
+    Manages the tracking and interaction with the game window.
+    
+    This class is responsible for:
+    1. Finding the game window by its title
+    2. Tracking the window's position and size
+    3. Handling window state changes (moved, resized)
+    4. Providing window information to other components
+    
+    The window manager is a critical component that enables:
+    - The overlay to stay aligned with the game window
+    - Screen capture for pattern matching
+    - Coordinate system calculations
+    
+    It uses the Windows API to interact with window properties and
+    maintains the connection between the game window and our application.
     """
     
     def __init__(self, window_title: str) -> None:
         """
-        Initialize the window manager.
+        Initialize the window manager for a specific game window.
+        
+        Sets up tracking for a window with the given title. The manager
+        will continuously try to find and maintain a connection to this
+        window throughout the application's lifetime.
         
         Args:
-            window_title: Title of the window to find
+            window_title: Title or partial title of the game window to track
         """
         self.window_title = window_title
-        self.hwnd = None  # Add this to store the window handle
-        logger.debug(f"WindowManager initialized for window: {window_title}")
+        self.hwnd = None  # Windows handle to the game window
+        logger.debug(f"WindowManager initialized to track window: {window_title}")
     
     def find_window(self) -> bool:
         """
-        Find the target window by title.
+        Find the game window by its title.
+        
+        Searches through all windows to find one matching our target title.
+        Handles partial matches and excludes our own application windows.
+        Updates the stored window handle if found.
         
         Returns:
-            bool: True if window was found, False otherwise
+            bool: True if the window was found, False otherwise
         """
         matching_windows = []  # List to store all matching windows
         

@@ -7,15 +7,32 @@ import logging
 logger = logging.getLogger(__name__)
 
 class SoundManager:
-    """Manages sound playback for pattern matching alerts."""
+    """
+    Manages audio alerts for important game events.
+    
+    This class provides audio feedback when significant events occur,
+    such as pattern matches being found. It includes features for:
+    - Loading and playing sound files
+    - Controlling sound frequency with cooldowns
+    - Enabling/disabling sound alerts
+    - Managing sound resources
+    
+    The sound system helps users stay aware of detections without
+    having to constantly watch the screen. It includes cooldown
+    functionality to prevent sound spam.
+    """
     
     def __init__(self, sounds_dir: str = "sounds", cooldown: float = 5.0) -> None:
         """
-        Initialize the sound manager.
+        Initialize the sound system with specified settings.
+        
+        Sets up the pygame audio system and loads sound files from the
+        specified directory. Includes cooldown management to prevent
+        sounds from playing too frequently.
         
         Args:
-            sounds_dir: Directory containing sound files
-            cooldown: Minimum time between sounds in seconds
+            sounds_dir: Directory containing .wav sound files
+            cooldown: Minimum seconds between sound plays
         """
         pygame.mixer.init()
         self.sounds_dir = Path(sounds_dir)
@@ -27,7 +44,13 @@ class SoundManager:
         self.load_sound()
     
     def load_sound(self) -> None:
-        """Load the alert sound file."""
+        """
+        Load the alert sound file from disk.
+        
+        Searches the sounds directory for .wav files and loads the first
+        one found. Logs warnings if no sound files are available or if
+        loading fails.
+        """
         try:
             if not self.sounds_dir.exists():
                 logger.warning(f"Sounds directory not found: {self.sounds_dir}")

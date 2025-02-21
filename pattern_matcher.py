@@ -17,14 +17,18 @@ logger = logging.getLogger(__name__)
 @dataclass
 class MatchResult:
     """
-    Data class for pattern matching results.
+    Represents a single pattern match result from image recognition.
+    
+    This class stores information about where a template was found in the game window,
+    how confident we are in the match, and the template's properties. Each match
+    represents one detected game element.
     
     Attributes:
-        position: (x, y) coordinates of match
-        confidence: Match confidence score (0-1)
-        width: Width of matched template
-        height: Height of matched template
-        template_name: Name of the matched template
+        position: (x, y) pixel coordinates where the match was found
+        confidence: How certain we are about the match (0.0 to 1.0, higher is better)
+        width: Width of the matched template in pixels
+        height: Height of the matched template in pixels
+        template_name: Name of the template image that was matched
     """
     position: Tuple[int, int]
     confidence: float
@@ -35,17 +39,21 @@ class MatchResult:
 @dataclass
 class GroupedMatch:
     """
-    Data class for grouped pattern matching results.
+    Represents a group of similar matches that are close together.
+    
+    When multiple matches of the same template are found near each other,
+    they are grouped together to avoid duplicate detections. This class
+    represents such a group with averaged properties.
     
     Attributes:
         position: Top-left coordinates of the group's bounding box
-        width: Average width of the group's bounding box
-        height: Average height of the group's bounding box
-        confidence: Highest confidence score in the group
+        width: Average width of all matches in the group
+        height: Average height of all matches in the group
+        confidence: Highest confidence score among all matches
         template_name: Name of the matched template
-        match_count: Number of matches in this group
+        match_count: Number of individual matches in this group
         bounds: (min_x, min_y, max_x, max_y) of the group's bounding box
-        group_id: ID of the group this match belongs to
+        group_id: Unique identifier for this group
     """
     position: Tuple[int, int]
     width: int
@@ -57,7 +65,20 @@ class GroupedMatch:
     group_id: int
 
 class PatternMatcher:
-    """Handles pattern matching for game elements."""
+    """
+    Core image recognition system for detecting game elements.
+    
+    This class handles:
+    1. Loading template images that represent game elements to detect
+    2. Capturing the game window for analysis
+    3. Using OpenCV to find matches between templates and the game window
+    4. Grouping nearby matches to avoid duplicates
+    5. Maintaining performance metrics (FPS)
+    
+    The pattern matcher can be configured for different sensitivity levels
+    and performance targets. It works with the overlay system to visualize
+    detected elements.
+    """
     
     def __init__(self, window_manager: WindowManager, confidence: float = 0.8, 
                  target_fps: float = 1.0, sound_enabled: bool = False,
