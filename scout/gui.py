@@ -972,6 +972,7 @@ class RegionSelector(QWidget):
     selection_cancelled = pyqtSignal()  # Add new signal for cancellation
     
     def __init__(self) -> None:
+        """Initialize the region selector."""
         super().__init__()
         logger.info("Initializing region selector")
         
@@ -988,9 +989,13 @@ class RegionSelector(QWidget):
         self.current_pos = None
         self.is_selecting = False
         
-        # Make the widget fullscreen
-        screen = QApplication.primaryScreen().geometry()
-        self.setGeometry(screen)
+        # Get the geometry that covers all screens
+        total_rect = QApplication.primaryScreen().virtualGeometry()
+        for screen in QApplication.screens():
+            total_rect = total_rect.united(screen.geometry())
+        
+        logger.debug(f"Setting region selector to cover all screens: {total_rect}")
+        self.setGeometry(total_rect)
         
         # Add a label to show instructions
         self.instruction_label = QLabel("Click and drag to select minimap region", self)
