@@ -39,6 +39,15 @@ class OverlayController(QMainWindow):
         """
         super().__init__()
         
+        # Initialize debug mode to off
+        config = ConfigManager()
+        debug_settings = {
+            "enabled": False,
+            "save_screenshots": False,
+            "save_templates": False
+        }
+        config.update_debug_settings(debug_settings)
+        
         self.overlay = overlay
         self.config_manager = ConfigManager()
         self.toggle_callback: Optional[Callable[[], None]] = None
@@ -1111,37 +1120,38 @@ class OverlayController(QMainWindow):
         """
         Toggle debug mode on/off.
         
-        This method:
-        1. Updates the debug button state and appearance
-        2. Activates pattern matching if needed for debug mode
-        3. Updates the pattern matcher's debug state
-        4. Saves the debug settings to configuration
+        When enabled:
+        1. Shows debug window
+        2. Enables debug logging
+        3. Saves debug screenshots
+        
+        When disabled:
+        1. Hides debug window
+        2. Disables debug logging
+        3. Stops saving debug screenshots
         """
-        is_enabled = self.debug_btn.text().endswith("ON")
-        new_state = not is_enabled
+        # Get current debug state
+        config = ConfigManager()
+        debug_settings = config.get_debug_settings()
         
-        # Update button state
-        self.debug_btn.setText(f"Debug Mode: {'ON' if new_state else 'OFF'}")
-        self._update_debug_button_color(new_state)
+        # Toggle state
+        is_enabled = not debug_settings["enabled"]
         
-        # Update pattern matcher debug state
-        if hasattr(self.pattern_matcher, 'set_debug_mode'):
-            # Ensure pattern matching is active when enabling debug mode
-            if new_state and not self.pattern_btn.text().endswith("ON"):
-                logger.info("Activating pattern matching for debug mode")
-                self._toggle_pattern_matching()
-                
-            self.pattern_matcher.set_debug_mode(new_state)
+        # Update pattern matcher debug mode
+        self.pattern_matcher.set_debug_mode(is_enabled)
         
-        # Save debug settings to config
+        # Update debug settings
         debug_settings = {
-            "enabled": new_state,
-            "save_screenshots": True,
-            "save_templates": True
+            "enabled": is_enabled,
+            "save_screenshots": is_enabled,
+            "save_templates": is_enabled
         }
-        self.config_manager.update_debug_settings(debug_settings)
-            
-        logger.info(f"Debug mode {'enabled' if new_state else 'disabled'}")
+        config.update_debug_settings(debug_settings)
+        
+        # Update button color
+        self._update_debug_button_color(is_enabled)
+        
+        logger.info(f"Debug mode {'enabled' if is_enabled else 'disabled'}")
 
     def _update_debug_button_color(self, is_active: bool) -> None:
         """Update debug mode button color based on state."""
@@ -1209,17 +1219,34 @@ class OverlayController(QMainWindow):
         return layout 
 
     def _on_debug_window_closed(self) -> None:
-        """Handle debug window close event."""
-        logger.debug("Updating GUI after debug window close")
+        """
+        Handle debug window close event.
+        
+        When the debug window is closed:
+        1. Disables debug mode
+        2. Updates button state
+        3. Saves disabled state to config
+        4. Stops debug logging and screenshot saving
+        """
+        logger.debug("Debug window closed - disabling debug mode")
+        
+        # Update button state
         self.debug_btn.setText("Debug Mode: OFF")
         self._update_debug_button_color(False)
         
+        # Update pattern matcher debug mode
+        if hasattr(self.pattern_matcher, 'set_debug_mode'):
+            self.pattern_matcher.set_debug_mode(False)
+        
         # Update config
-        self.config_manager.update_debug_settings(
-            enabled=False,
-            save_screenshots=True,
-            save_templates=True
-        ) 
+        debug_settings = {
+            "enabled": False,
+            "save_screenshots": False,
+            "save_templates": False
+        }
+        self.config_manager.update_debug_settings(debug_settings)
+        
+        logger.info("Debug mode disabled due to window close")
 
     def _toggle_ocr(self) -> None:
         """Toggle Text OCR on/off."""
@@ -1387,4 +1414,47 @@ class OverlayController(QMainWindow):
         config = ConfigManager()
         ocr_settings = config.get_ocr_settings()
         ocr_settings['frequency'] = value
-        config.update_ocr_settings(ocr_settings) 
+        config.update_ocr_settings(ocr_settings)
+
+    def closeEvent(self, event) -> None:
+        """
+        Handle application close event.
+        
+        This method ensures proper cleanup when the application is closed:
+        1. Closes the debug window if it's open
+        2. Disables debug mode and saves settings
+        3. Stops any active processes
+        4. Performs parent class cleanup
+        """
+        logger.info("Application closing - performing cleanup")
+        
+        try:
+            # Close debug window if it exists
+            if hasattr(self, 'debug_window'):
+                logger.debug("Closing debug window")
+                self.debug_window.close()
+            
+            # Disable debug mode and save settings
+            debug_settings = {
+                "enabled": False,
+                "save_screenshots": False,
+                "save_templates": False
+            }
+            self.config_manager.update_debug_settings(debug_settings)
+            
+            # Stop pattern matching if active
+            if hasattr(self, 'pattern_matcher'):
+                logger.debug("Stopping pattern matching")
+                self.pattern_matcher.set_debug_mode(False)
+            
+            # Save all settings
+            self.save_settings()
+            
+            logger.info("Cleanup completed")
+            
+        except Exception as e:
+            logger.error(f"Error during application cleanup: {e}", exc_info=True)
+            
+        finally:
+            # Call parent class closeEvent
+            super().closeEvent(event) 
