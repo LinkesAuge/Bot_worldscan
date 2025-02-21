@@ -160,31 +160,55 @@ class ConfigManager:
         logger.debug(f"Updated OCR settings: {settings}")
 
     def get_pattern_matching_settings(self) -> Dict[str, Any]:
-        """Get pattern matching settings from config."""
-        if not self.config.has_section("PatternMatching"):
-            self.config.add_section("PatternMatching")
-            
+        """
+        Get pattern matching settings from config.
+        
+        Returns:
+            Dictionary containing pattern matching settings:
+            - active: Whether pattern matching is active
+            - confidence: Match confidence threshold
+            - target_frequency: Target updates per second
+            - sound_enabled: Whether sound alerts are enabled
+            - templates_dir: Directory containing template images
+            - grouping_threshold: Pixel distance for grouping matches
+        """
+        config = self._load_config()
+        
         return {
-            "active": self.config.getboolean("PatternMatching", "active", fallback=False),
-            "confidence": self.config.getfloat("PatternMatching", "confidence", fallback=0.8),
-            "target_frequency": self.config.getfloat("PatternMatching", "target_frequency", fallback=1.0),
-            "sound_enabled": self.config.getboolean("PatternMatching", "sound_enabled", fallback=False)
+            "active": config.getboolean("pattern_matching", "active", fallback=False),
+            "confidence": config.getfloat("pattern_matching", "confidence", fallback=0.8),
+            "target_frequency": config.getfloat("pattern_matching", "target_frequency", fallback=1.0),
+            "sound_enabled": config.getboolean("pattern_matching", "sound_enabled", fallback=False),
+            "templates_dir": config.get("pattern_matching", "templates_dir", fallback="scout/templates"),
+            "grouping_threshold": config.getint("pattern_matching", "grouping_threshold", fallback=10)
         }
 
     def update_pattern_matching_settings(self, settings: Dict[str, Any]) -> None:
         """
-        Update pattern matching settings.
+        Update pattern matching settings in config.
         
         Args:
-            settings: Dictionary containing pattern matching settings
+            settings: Dictionary containing pattern matching settings:
+                - active: Whether pattern matching is active
+                - confidence: Match confidence threshold
+                - target_frequency: Target updates per second
+                - sound_enabled: Whether sound alerts are enabled
+                - templates_dir: Directory containing template images
+                - grouping_threshold: Pixel distance for grouping matches
         """
-        if not self.config.has_section("PatternMatching"):
-            self.config.add_section("PatternMatching")
+        config = self._load_config()
+        
+        if not config.has_section("pattern_matching"):
+            config.add_section("pattern_matching")
             
-        for key, value in settings.items():
-            self.config["PatternMatching"][key] = str(value).lower() if isinstance(value, bool) else str(value)
-            
-        self.save_config()
+        config.set("pattern_matching", "active", str(settings.get("active", False)))
+        config.set("pattern_matching", "confidence", str(settings.get("confidence", 0.8)))
+        config.set("pattern_matching", "target_frequency", str(settings.get("target_frequency", 1.0)))
+        config.set("pattern_matching", "sound_enabled", str(settings.get("sound_enabled", False)))
+        config.set("pattern_matching", "templates_dir", str(settings.get("templates_dir", "scout/templates")))
+        config.set("pattern_matching", "grouping_threshold", str(settings.get("grouping_threshold", 10)))
+        
+        self._save_config(config)
         logger.debug(f"Updated pattern matching settings: {settings}")
 
     def get_overlay_settings(self) -> Dict[str, Any]:
@@ -316,4 +340,14 @@ class ConfigManager:
             self.config["Debug"][key] = str(value).lower()
             
         self.save_config()
-        logger.debug(f"Updated debug settings: {settings}") 
+        logger.debug(f"Updated debug settings: {settings}")
+
+    def _load_config(self):
+        """Load the configuration file."""
+        return self.config
+
+    def _save_config(self, config):
+        """Save the configuration file."""
+        with open(self.config_path, 'w') as f:
+            config.write(f)
+        logger.debug("Configuration saved") 

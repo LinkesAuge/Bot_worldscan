@@ -71,7 +71,7 @@ class PatternMatcher:
     
     def __init__(self, window_manager: WindowManager, confidence: float = 0.8, 
                  target_frequency: float = 1.0, sound_enabled: bool = False,
-                 images_dir: str = "scout/images", grouping_threshold: int = 10) -> None:
+                 templates_dir: str = "scout/templates", grouping_threshold: int = 10) -> None:
         """
         Initialize pattern matcher.
         
@@ -80,7 +80,7 @@ class PatternMatcher:
             confidence: Minimum confidence threshold for matches
             target_frequency: Target updates per second for scanning
             sound_enabled: Whether to enable sound alerts
-            images_dir: Directory containing template images (relative to workspace root)
+            templates_dir: Directory containing template images (relative to workspace root)
             grouping_threshold: Pixel distance threshold for grouping matches
         """
         self.window_manager = window_manager
@@ -89,7 +89,7 @@ class PatternMatcher:
         self.confidence = confidence
         self.target_frequency = target_frequency
         self.sound_enabled = sound_enabled
-        self.images_dir = Path(images_dir)
+        self.templates_dir = Path(templates_dir)
         self.templates: Dict[str, np.ndarray] = {}
         self.update_frequency = 0.0
         self.last_update_time = 0.0
@@ -120,15 +120,18 @@ class PatternMatcher:
         self.gui_callback = callback
     
     def reload_templates(self) -> None:
-        """Reload all template images from the images directory."""
-        logger.info(f"Reloading templates from directory: {self.images_dir}")
+        """Reload all template images from the templates directory."""
+        logger.info(f"Reloading templates from directory: {self.templates_dir}")
+        
+        # Clear existing templates
         self.templates.clear()
         
-        if not self.images_dir.exists():
-            logger.warning(f"Template directory not found: {self.images_dir}")
+        if not self.templates_dir.exists():
+            logger.warning(f"Template directory not found: {self.templates_dir}")
             return
             
-        template_files = list(self.images_dir.glob("*.png"))
+        # Load all PNG files from templates directory
+        template_files = list(self.templates_dir.glob("*.png"))
         logger.info(f"Found {len(template_files)} template files: {[f.name for f in template_files]}")
         
         for file in template_files:
