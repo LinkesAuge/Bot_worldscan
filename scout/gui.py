@@ -14,6 +14,7 @@ from scout.world_scanner import WorldScanner, WorldPosition, ScanLogHandler, Sca
 import numpy as np
 from time import sleep
 import pyautogui
+from scout.selector_tool import SelectorTool
 
 logger = logging.getLogger(__name__)
 
@@ -698,21 +699,34 @@ class OverlayController(QMainWindow):
         
         try:
             if hasattr(self, 'region_selector'):
+                logger.debug("Cleaning up previous region selector")
                 self.region_selector.close()
                 self.region_selector.deleteLater()
             
-            self.region_selector = RegionSelector()
+            logger.debug("Creating new SelectorTool instance")
+            self.region_selector = SelectorTool("Click and drag to select minimap region")
             self.region_selector.region_selected.connect(self._on_region_selected)
             self.region_selector.selection_cancelled.connect(self._on_region_cancelled)
             
             # Don't hide main window, just show selector
-            QTimer.singleShot(100, self.region_selector.show)
-            QTimer.singleShot(100, self.region_selector.activateWindow)
+            logger.debug("Scheduling selector display")
+            QTimer.singleShot(100, lambda: self._show_selector())
             
-            logger.debug("Region selector window displayed")
+            logger.debug("Region selector initialization complete")
             
         except Exception as e:
             logger.error(f"Error starting region selection: {e}", exc_info=True)
+            
+    def _show_selector(self) -> None:
+        """Helper method to show and activate the selector."""
+        try:
+            logger.debug("Showing selector tool")
+            self.region_selector.show()
+            logger.debug("Activating selector window")
+            self.region_selector.activateWindow()
+            logger.debug("Selector display complete")
+        except Exception as e:
+            logger.error(f"Error showing selector: {e}", exc_info=True)
     
     def _on_region_selected(self, region: dict) -> None:
         """Handle selected region."""
@@ -727,13 +741,16 @@ class OverlayController(QMainWindow):
                 'minimap_height': region['height']
             }
             
+            logger.debug(f"Converting to scanner settings: {settings}")
+            
             # Save region to config
             self.config_manager.update_scanner_settings(settings)
             logger.info("Region saved to config")
             
             # Update status
-            self.scan_status.setText(f"Minimap region set: ({region['left']}, {region['top']})")
-            logger.debug("Status updated")
+            status_text = f"Minimap region set: ({region['left']}, {region['top']})"
+            logger.debug(f"Updating status to: {status_text}")
+            self.scan_status.setText(status_text)
             
         except Exception as e:
             logger.error(f"Error saving region: {e}", exc_info=True)
@@ -743,13 +760,18 @@ class OverlayController(QMainWindow):
         """Handle region selection cancellation."""
         logger.info("Region selection cancelled")
         
-        # Restore previous region status if it exists
-        scanner_settings = self.config_manager.get_scanner_settings()
-        if scanner_settings:
-            self.scan_status.setText(
-                f"Minimap region: ({scanner_settings['minimap_left']}, {scanner_settings['minimap_top']})"
-            )
-        else:
+        try:
+            # Restore previous region status if it exists
+            scanner_settings = self.config_manager.get_scanner_settings()
+            if scanner_settings:
+                status_text = f"Minimap region: ({scanner_settings['minimap_left']}, {scanner_settings['minimap_top']})"
+                logger.debug(f"Restoring previous region status: {status_text}")
+                self.scan_status.setText(status_text)
+            else:
+                logger.debug("No previous region settings found")
+                self.scan_status.setText("Scanner: Inactive")
+        except Exception as e:
+            logger.error(f"Error handling region cancellation: {e}", exc_info=True)
             self.scan_status.setText("Scanner: Inactive")
 
     def _start_input_field_selection(self) -> None:
@@ -964,153 +986,3 @@ class DebugImageViewer(QWidget):
         
         self.image_label.setPixmap(scaled_pixmap)
         self.coord_label.setText(f"{coord_type} coordinate: {value}") 
-
-class RegionSelector(QWidget):
-    """Widget for selecting a screen region."""
-    
-    region_selected = pyqtSignal(dict)  # Emits region as dict (left, top, width, height)
-    selection_cancelled = pyqtSignal()  # Add new signal for cancellation
-    
-    def __init__(self) -> None:
-        """Initialize the region selector."""
-        super().__init__()
-        logger.info("Initializing region selector")
-        
-        # Set window flags - remove Tool flag as it can interfere with dialog
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint |
-            Qt.WindowType.WindowStaysOnTopHint
-        )
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setCursor(Qt.CursorShape.CrossCursor)
-        
-        # Initialize selection variables
-        self.start_pos = None
-        self.current_pos = None
-        self.is_selecting = False
-        
-        # Get the geometry that covers all screens
-        total_rect = QApplication.primaryScreen().virtualGeometry()
-        for screen in QApplication.screens():
-            total_rect = total_rect.united(screen.geometry())
-        
-        logger.debug(f"Setting region selector to cover all screens: {total_rect}")
-        self.setGeometry(total_rect)
-        
-        # Add a label to show instructions
-        self.instruction_label = QLabel("Click and drag to select minimap region", self)
-        self.instruction_label.setStyleSheet("""
-            QLabel {
-                color: white;
-                background-color: rgba(0, 0, 0, 150);
-                padding: 10px;
-                border-radius: 5px;
-            }
-        """)
-        self.instruction_label.adjustSize()
-        self.instruction_label.move(20, 20)
-        
-        logger.debug(f"Region selector set to fullscreen: {screen}")
-        
-    def paintEvent(self, event: QPaintEvent) -> None:
-        """Draw the selection overlay."""
-        painter = QPainter(self)
-        
-        # Draw semi-transparent background
-        painter.fillRect(self.rect(), QColor(0, 0, 0, 1))  # Almost transparent black
-        
-        if self.is_selecting and self.start_pos and self.current_pos:
-            # Draw selection rectangle
-            painter.setPen(QPen(QColor(0, 255, 0), 2))  # Green border
-            color = QColor(0, 255, 0, 50)  # Green with 50/255 alpha
-            painter.setBrush(QBrush(color))
-            
-            x = min(self.start_pos.x(), self.current_pos.x())
-            y = min(self.start_pos.y(), self.current_pos.y())
-            width = abs(self.current_pos.x() - self.start_pos.x())
-            height = abs(self.current_pos.y() - self.start_pos.y())
-            
-            painter.drawRect(x, y, width, height)
-            
-            # Draw size info
-            size_text = f"{width}x{height}"
-            painter.setPen(QPen(QColor(255, 255, 255)))  # White text
-            painter.drawText(x + 5, y - 5, size_text)
-            
-    def mousePressEvent(self, event: QMouseEvent) -> None:
-        """Handle mouse press to start selection."""
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.start_pos = event.pos()
-            self.is_selecting = True
-            logger.debug(f"Started selection at position: ({self.start_pos.x()}, {self.start_pos.y()})")
-            
-    def mouseMoveEvent(self, event: QMouseEvent) -> None:
-        """Handle mouse movement to update selection."""
-        if self.is_selecting:
-            self.current_pos = event.pos()
-            # Log every 10 pixels moved to avoid spam
-            if self.current_pos.x() % 10 == 0 and self.current_pos.y() % 10 == 0:
-                logger.debug(f"Selection updated to: ({self.current_pos.x()}, {self.current_pos.y()})")
-            self.update()
-            
-    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
-        """Handle mouse release to finish selection."""
-        if event.button() == Qt.MouseButton.LeftButton and self.is_selecting:
-            self.is_selecting = False
-            
-            # If mouse was released without moving, use the start position
-            if self.current_pos is None:
-                self.current_pos = self.start_pos
-                logger.debug("Using start position as no movement detected")
-            
-            try:
-                # Calculate region
-                x = min(self.start_pos.x(), self.current_pos.x())
-                y = min(self.start_pos.y(), self.current_pos.y())
-                width = abs(self.current_pos.x() - self.start_pos.x())
-                height = abs(self.current_pos.y() - self.start_pos.y())
-                
-                # Ensure minimum size
-                if width < 10 or height < 10:
-                    logger.warning("Selection too small, ignoring")
-                    # Reset and show selector again
-                    self.start_pos = None
-                    self.current_pos = None
-                    self.is_selecting = False
-                    QTimer.singleShot(100, self.show)
-                    QTimer.singleShot(100, self.update)
-                    return
-                
-                region = {
-                    'left': x,
-                    'top': y,
-                    'width': width,
-                    'height': height
-                }
-                
-                logger.info(f"Selection completed: {region}")
-                
-                # Hide the selector window before showing dialog
-                self.hide()
-                
-                # Show confirmation dialog
-                msg = QMessageBox()
-                msg.setWindowTitle("Confirm Selection")
-                msg.setText(f"Use this region?\nPosition: ({x}, {y})\nSize: {width}x{height}")
-                msg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-                msg.setWindowFlags(Qt.WindowType.WindowStaysOnTopHint)
-                
-                result = msg.exec()
-                if result == QMessageBox.StandardButton.Yes:
-                    logger.info("Selection confirmed by user")
-                    self.region_selected.emit(region)
-                    self.close()
-                else:
-                    logger.info("Selection cancelled by user")
-                    self.selection_cancelled.emit()  # Emit cancellation signal
-                    self.close()
-                    
-            except Exception as e:
-                logger.error(f"Error during selection: {e}", exc_info=True)
-                self.selection_cancelled.emit()  # Emit cancellation signal on error
-                self.close() 

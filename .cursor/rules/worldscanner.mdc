@@ -2,6 +2,8 @@
 description: 
 globs: 
 ---
+Add a short "RULE USED" at the beginning of your comment anytime you did consider these rules
+
 # PROJECT OVERVIEW
 We develop an App for a browser game called "Total Battle" that can run in browsers like Chrome, Firefox, Internet Explorer etc. but can also run in a dedicated windows app (window name is "Total Battle). 
 The app is a tool to extract information from the game world (the user has a top down view of a map with cities, monsters, armies, points of interests etc.) and to control certain actions (like move the camera, mouse cursor, click on objects etc.).
