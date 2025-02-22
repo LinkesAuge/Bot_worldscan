@@ -1,0 +1,75 @@
+# Ruff configuration file
+
+# Enable pycodestyle (`E`) and Pyflakes (`F`) codes by default.
+select = ["E", "F", "W", "I", "N", "D", "UP", "ANN", "B", "A", "C4", "T20", "RET", "SIM", "ERA"]
+ignore = ["D203", "D213"]
+
+# Allow autofix for all enabled rules (when `--fix`) is provided.
+fixable = ["ALL"]
+unfixable = []
+
+# Exclude a variety of commonly ignored directories.
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".hg",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "venv",
+]
+
+# Same as Black.
+line-length = 88
+
+# Allow unused variables when underscore-prefixed.
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+# Assume Python 3.9
+target-version = "py39"
+
+[mccabe]
+# Unlike Flake8, default to a complexity level of 10.
+max-complexity = 10
+
+[pydocstyle]
+convention = "google"
+
+[per-file-ignores]
+# Tests can use assertions and relative imports
+"tests/**/*.py" = ["S101", "TID252"]
+# Allow relative imports in __init__.py files
+"**/__init__.py" = ["TID252"]
+
+[isort]
+force-single-line = true
+known-first-party = ["scout"]
+known-third-party = ["pytest"]
+
+[flake8-annotations]
+mypy-init-return = true
+suppress-none-returning = true
+
+[flake8-quotes]
+docstring-quotes = "double"
+inline-quotes = "single"
+
+[pycodestyle]
+max-doc-length = 88
+
+[pep8-naming]
+classmethod-decorators = ["classmethod", "validator", "root_validator"] 

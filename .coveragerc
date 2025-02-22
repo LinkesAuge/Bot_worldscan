@@ -1,0 +1,28 @@
+[run]
+branch = True
+source = scout
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    if self.debug:
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    pass
+    raise ImportError
+    except ImportError:
+    if TYPE_CHECKING:
+
+ignore_errors = True
+omit =
+    tests/*
+    setup.py
+    scout/__init__.py
+    scout/version.py
+
+[html]
+directory = coverage_html
+
+[xml]
+output = coverage.xml 

@@ -1,0 +1,27 @@
+include LICENSE
+include README.md
+include pyproject.toml
+include setup.py
+include pytest.ini
+include mypy.ini
+include .coveragerc
+include ruff.toml
+include .pre-commit-config.yaml
+
+recursive-include scout *.py
+recursive-include scout/images *
+recursive-include scout/sounds *
+recursive-include scout *.ini
+
+recursive-include tests *.py
+
+global-exclude *.pyc
+global-exclude __pycache__
+global-exclude .DS_Store
+global-exclude *.pyo
+global-exclude *.pyd
+global-exclude .git*
+global-exclude .pytest_cache
+global-exclude .coverage
+global-exclude htmlcov
+global-exclude *.egg-info 
