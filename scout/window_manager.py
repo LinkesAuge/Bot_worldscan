@@ -3,6 +3,9 @@ import win32gui
 import logging
 import ctypes
 from ctypes.wintypes import RECT, POINT
+import numpy as np
+import cv2
+import mss
 
 logger = logging.getLogger(__name__)
 
@@ -159,4 +162,92 @@ class WindowManager:
             
         except Exception as e:
             logger.error(f"Error getting client rect: {e}")
+            return None 
+
+    def client_to_screen(self, x: int, y: int) -> Tuple[int, int]:
+        """
+        Convert client (window-relative) coordinates to screen coordinates.
+        
+        Args:
+            x: X coordinate relative to window client area
+            y: Y coordinate relative to window client area
+            
+        Returns:
+            Tuple[int, int]: Screen coordinates (x, y)
+        """
+        try:
+            if not self.find_window():
+                logger.warning("Window not found when converting coordinates")
+                return x, y
+                
+            # Get client area position
+            point = POINT(x, y)
+            if not ctypes.windll.user32.ClientToScreen(self.hwnd, ctypes.byref(point)):
+                logger.error("Failed to convert client coordinates")
+                return x, y
+                
+            return point.x, point.y
+            
+        except Exception as e:
+            logger.error(f"Error converting coordinates: {e}")
+            return x, y
+
+    def screen_to_client(self, screen_x: int, screen_y: int) -> Tuple[int, int]:
+        """
+        Convert screen coordinates to client (window-relative) coordinates.
+        
+        Args:
+            screen_x: X coordinate on screen
+            screen_y: Y coordinate on screen
+            
+        Returns:
+            Tuple[int, int]: Client coordinates (x, y)
+        """
+        try:
+            if not self.find_window():
+                logger.warning("Window not found when converting coordinates")
+                return screen_x, screen_y
+                
+            # Get client area position
+            point = POINT(screen_x, screen_y)
+            if not ctypes.windll.user32.ScreenToClient(self.hwnd, ctypes.byref(point)):
+                logger.error("Failed to convert screen coordinates")
+                return screen_x, screen_y
+                
+            return point.x, point.y
+            
+        except Exception as e:
+            logger.error(f"Error converting coordinates: {e}")
+            return screen_x, screen_y
+
+    def capture_screenshot(self) -> Optional[np.ndarray]:
+        """
+        Capture a screenshot of the game window.
+        
+        Returns:
+            Optional[np.ndarray]: Screenshot as numpy array in BGR format, or None if failed
+        """
+        try:
+            if not self.find_window():
+                logger.warning("Window not found when capturing screenshot")
+                return None
+                
+            # Get window position and size
+            if pos := self.get_window_position():
+                x, y, width, height = pos
+                
+                # Take screenshot using mss
+                with mss.mss() as sct:
+                    monitor = {"top": y, "left": x, "width": width, "height": height}
+                    screenshot = np.array(sct.grab(monitor))
+                    
+                    # Convert from BGRA to BGR
+                    screenshot = cv2.cvtColor(screenshot, cv2.COLOR_BGRA2BGR)
+                    
+                    return screenshot
+                    
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error capturing screenshot: {e}")
             return None 

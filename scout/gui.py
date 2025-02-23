@@ -514,8 +514,18 @@ class OverlayController(QMainWindow):
         Args:
             layout: Parent layout to add controls to
         """
+        # Create automation tab if it doesn't exist
+        if not hasattr(self, 'automation_tab'):
+            self.automation_tab = AutomationTab(
+                window_manager=self.window_manager,
+                pattern_matcher=self.pattern_matcher,
+                text_ocr=self.text_ocr,
+                game_actions=self.game_actions
+            )
+        
         # Get OCR settings from config manager
-        ocr_settings = self.config_manager.get_ocr_settings()
+        config = ConfigManager()
+        ocr_settings = config.get_ocr_settings()
         
         # Create group box for automation
         automation_group = QGroupBox("Automation")
@@ -545,7 +555,7 @@ class OverlayController(QMainWindow):
         ocr_layout.addWidget(self.ocr_btn)
         
         # Create OCR frequency controls
-        freq_layout = QVBoxLayout()
+        freq_layout = QVBoxLayout()  # Changed to vertical layout
         
         # Create horizontal layout for slider and spinbox
         freq_controls = QHBoxLayout()
@@ -574,7 +584,6 @@ class OverlayController(QMainWindow):
         self.ocr_freq_input.valueChanged.connect(self.on_ocr_spinbox_change)
         freq_controls.addWidget(self.ocr_freq_input)
         
-        freq_layout.addLayout(freq_controls)
         ocr_layout.addLayout(freq_layout)
         
         # Create OCR region selection button
@@ -907,12 +916,15 @@ class OverlayController(QMainWindow):
     def start_sequence(self) -> None:
         """Start sequence execution."""
         # Get the current sequence from the automation tab
-        if not hasattr(self, 'controller') or not hasattr(self.controller, 'automation_tab'):
-            logger.error("Automation tab not available")
-            self.sequence_btn.setChecked(False)
-            return
+        if not hasattr(self, 'automation_tab'):
+            self.automation_tab = AutomationTab(
+                window_manager=self.window_manager,
+                pattern_matcher=self.pattern_matcher,
+                text_ocr=self.text_ocr,
+                game_actions=self.game_actions
+            )
             
-        sequence = self.controller.automation_tab.sequence_builder.sequence
+        sequence = self.automation_tab.sequence_builder.sequence
         if not sequence:
             QMessageBox.warning(self, "Error", "No sequence loaded")
             self.sequence_btn.setChecked(False)
@@ -921,17 +933,17 @@ class OverlayController(QMainWindow):
         self.sequence_btn.setText("Stop Sequence")
         self.sequence_status.setText("Sequence: Active")
         
-        # Start sequence execution using the automation tab's sequence builder
-        self.controller.automation_tab.sequence_builder._on_run_clicked()
+        # Start sequence execution
+        self.automation_tab.sequence_builder._on_run_clicked()
         
     def stop_sequence(self) -> None:
         """Stop sequence execution."""
         self.sequence_btn.setText("Start Sequence")
         self.sequence_status.setText("Sequence: Inactive")
         
-        # Stop sequence execution using the automation tab's sequence builder
-        if hasattr(self, 'controller') and hasattr(self.controller, 'automation_tab'):
-            self.controller.automation_tab.sequence_builder._on_stop_clicked()
+        # Stop sequence execution
+        if hasattr(self, 'automation_tab'):
+            self.automation_tab.sequence_builder._on_stop_clicked()
 
     def _toggle_debug_mode(self) -> None:
         """

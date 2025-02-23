@@ -31,6 +31,8 @@ class PositionMarker(QWidget):
     
     # Signal emitted when a new position is marked
     position_marked = pyqtSignal(QPoint)
+    # Signal emitted when marking is cancelled
+    marking_cancelled = pyqtSignal()
     
     def __init__(self, window_manager: WindowManager):
         """Initialize the position marker overlay."""
@@ -157,6 +159,7 @@ class PositionMarker(QWidget):
         if event.key() == Qt.Key.Key_Escape and self.is_marking:
             logger.debug("ESC pressed - canceling position marking")
             self.stop_marking()
+            self.marking_cancelled.emit()  # Emit signal when cancelled
             event.accept()
         else:
             super().keyPressEvent(event)

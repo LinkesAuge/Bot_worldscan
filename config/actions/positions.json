@@ -1,14 +1,14 @@
 {
-    "Position_2": {
-        "name": "Position_2",
-        "x": 12,
-        "y": 1356,
+    "Position_1": {
+        "name": "Position_1",
+        "x": 313,
+        "y": 657,
         "description": null
     },
-    "testblabla": {
-        "name": "Position_1",
-        "x": 118,
-        "y": 1096,
-        "description": ""
+    "Position_2": {
+        "name": "Position_2",
+        "x": 2359,
+        "y": 746,
+        "description": null
     }
 }

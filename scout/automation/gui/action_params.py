@@ -16,6 +16,7 @@ from scout.automation.actions import (
     ActionType, ActionParamsCommon, ClickParams, DragParams,
     TypeParams, WaitParams, PatternWaitParams, OCRWaitParams
 )
+from scout.automation.core import AutomationPosition
 
 class BaseParamsWidget(QWidget):
     """Base class for all parameter widgets."""
@@ -93,12 +94,18 @@ class DragParamsWidget(BaseParamsWidget):
         desc_layout.addWidget(self.description_edit)
         layout.addLayout(desc_layout)
         
+        # Add note about positions
+        note_label = QLabel("Select start position from the main position dropdown above")
+        note_label.setStyleSheet("color: gray; font-style: italic;")
+        layout.addWidget(note_label)
+        
         # End position field
-        end_pos_layout = QHBoxLayout()
+        end_pos_layout = QVBoxLayout()  # Changed to vertical layout for better organization
         end_pos_layout.addWidget(QLabel("End Position:"))
-        self.end_position_edit = QLineEdit()
-        self.end_position_edit.textChanged.connect(self.params_changed.emit)
-        end_pos_layout.addWidget(self.end_position_edit)
+        self.end_position_combo = QComboBox()
+        self.end_position_combo.setMinimumWidth(200)  # Make the combo box wider
+        self.end_position_combo.currentTextChanged.connect(self.params_changed.emit)
+        end_pos_layout.addWidget(self.end_position_combo)
         layout.addLayout(end_pos_layout)
         
         # Duration field
@@ -127,7 +134,7 @@ class DragParamsWidget(BaseParamsWidget):
             description=self.description_edit.text() or None,
             timeout=self.timeout_spin.value(),
             duration=self.duration_spin.value(),
-            end_position_name=self.end_position_edit.text()
+            end_position_name=self.end_position_combo.currentText()
         )
         
     def set_params(self, params: DragParams) -> None:
@@ -136,8 +143,31 @@ class DragParamsWidget(BaseParamsWidget):
         self.description_edit.setText(params.description or "")
         self.timeout_spin.setValue(params.timeout)
         self.duration_spin.setValue(params.duration)
-        self.end_position_edit.setText(params.end_position_name)
+        
+        # Find and select the end position in the combo box
+        index = self.end_position_combo.findText(params.end_position_name)
+        if index >= 0:
+            self.end_position_combo.setCurrentIndex(index)
         self._creating_widgets = False
+        
+    def update_positions(self, positions: Dict[str, AutomationPosition]) -> None:
+        """
+        Update the available positions in the end position combo box.
+        
+        Args:
+            positions: Dictionary of position name to AutomationPosition
+        """
+        # Store current selection
+        current_pos = self.end_position_combo.currentText()
+        
+        # Update combo box items
+        self.end_position_combo.clear()
+        self.end_position_combo.addItems(sorted(positions.keys()))
+        
+        # Restore previous selection if it still exists
+        index = self.end_position_combo.findText(current_pos)
+        if index >= 0:
+            self.end_position_combo.setCurrentIndex(index)
 
 class TypeParamsWidget(BaseParamsWidget):
     """Widget for configuring text input action parameters."""

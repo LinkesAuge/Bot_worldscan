@@ -23,7 +23,7 @@ from pathlib import Path
 from scout.automation.core import AutomationPosition, AutomationSequence
 from scout.automation.actions import ActionType, AutomationAction, ActionParamsCommon
 from scout.automation.gui.position_marker import PositionMarker
-from scout.automation.gui.action_params import create_params_widget, BaseParamsWidget
+from scout.automation.gui.action_params import create_params_widget, BaseParamsWidget, DragParamsWidget
 from scout.automation.executor import SequenceExecutor, ExecutionContext
 from scout.config_manager import ConfigManager
 
@@ -430,7 +430,11 @@ class SequenceBuilder(QWidget):
         self.positions = positions
         self.position_combo.clear()
         self.position_combo.addItem("")  # Empty option
-        self.position_combo.addItems(positions.keys())
+        self.position_combo.addItems(sorted(positions.keys()))
+        
+        # Update drag parameters widget if it exists and is of type DragParamsWidget
+        if self.params_widget and isinstance(self.params_widget, DragParamsWidget):
+            self.params_widget.update_positions(positions)
         
     def _on_sequence_changed(self) -> None:
         """Handle sequence changes."""
@@ -561,6 +565,11 @@ class SequenceBuilder(QWidget):
         # Create new widget
         self.params_widget = create_params_widget(action_type)
         self.params_widget.params_changed.connect(self._update_current_action)
+        
+        # Initialize positions for drag widget
+        if isinstance(self.params_widget, DragParamsWidget):
+            self.params_widget.update_positions(self.positions)
+            
         self.params_layout.addWidget(self.params_widget)
         
         # Update position combo enabled state
@@ -799,6 +808,7 @@ class AutomationTab(QWidget):
         # Create position marker
         self.position_marker = PositionMarker(window_manager)
         self.position_marker.position_marked.connect(self._on_position_marked)
+        self.position_marker.marking_cancelled.connect(self._on_marking_cancelled)  # Connect cancel signal
         
         # Create sequence builder first
         self.sequence_builder = SequenceBuilder()
@@ -1064,7 +1074,7 @@ class AutomationTab(QWidget):
                        "The overlay will show with a slight tint to help you see it.\n\n"
                        "Press ESC to cancel marking.")
             msg.setIcon(QMessageBox.Icon.Information)
-            msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
             
             # Show message box and wait for response
             response = msg.exec()
@@ -1073,7 +1083,7 @@ class AutomationTab(QWidget):
                 # Start marking mode after user acknowledges instructions
                 self.position_marker.start_marking()
             else:
-                # User closed the message box, cancel marking
+                # User closed or cancelled the message box, re-enable the button
                 self.position_list.add_button.setEnabled(True)
             
         except Exception as e:
@@ -1198,3 +1208,8 @@ class AutomationTab(QWidget):
         
         # Stop sequence execution
         self.sequence_builder._on_stop_clicked()
+
+    def _on_marking_cancelled(self) -> None:
+        """Handle position marking being cancelled."""
+        logger.debug("Position marking cancelled")
+        self.position_list.add_button.setEnabled(True)
