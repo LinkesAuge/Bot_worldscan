@@ -66,6 +66,13 @@ class Overlay(QWidget):
         self.template_matching_timer = QTimer()
         self.template_matching_timer.timeout.connect(self._update_template_matching)
         
+        # Add match caching with group persistence
+        self.cached_matches: List[Tuple[str, int, int, int, int, float]] = []  # Current cached matches
+        self.match_counters: Dict[str, int] = {}  # Cache counters for groups
+        # Load persistence and distance settings from config
+        self.match_persistence = template_settings.get("match_persistence", 3)  # Default to 3 frames if not in config
+        self.distance_threshold = template_settings.get("distance_threshold", 100)  # Default to 100 pixels if not in config
+        
         # Convert QColor to BGR format for OpenCV
         rect_color = overlay_settings["rect_color"]
         font_color = overlay_settings["font_color"]
@@ -206,21 +213,37 @@ class Overlay(QWidget):
         except Exception as e:
             logger.debug(f"Window destruction skipped: {e}")
 
-    def stop_template_matching(self) -> None:
-        """Stop template matching."""
-        logger.info("Stopping template matching")
-        self.template_matching_active = False
-        self.template_matching_timer.stop()
+    def _get_group_key(self, match: Tuple[str, int, int, int, int, float]) -> str:
+        """Get the cache key for a match based on template name and approximate position."""
+        name, x, y, _, _, _ = match
+        # Use grid-based position to allow for small movements
+        grid_size = self.distance_threshold
+        grid_x = x // grid_size
+        grid_y = y // grid_size
+        return f"{name}_{grid_x}_{grid_y}"
+
+    def _is_same_group(self, match1: Tuple[str, int, int, int, int, float],
+                      match2: Tuple[str, int, int, int, int, float]) -> bool:
+        """
+        Check if two matches belong to the same group based on template name and position.
         
-        # Reset template matcher frequency
-        self.template_matcher.update_frequency = 0.0
-        self.template_matcher.last_update_time = 0.0
+        Args:
+            match1: First match tuple (name, x, y, w, h, conf)
+            match2: Second match tuple (name, x, y, w, h, conf)
+            
+        Returns:
+            bool: True if matches are in the same group
+        """
+        name1, x1, y1, _, _, _ = match1
+        name2, x2, y2, _, _, _ = match2
         
-        # Safely destroy window when template matching stops
-        self._destroy_window_safely()
-        
-        # Clear any existing matches from display
-        self.update([])
+        # Must be same template type
+        if name1 != name2:
+            return False
+            
+        # Check if positions are within threshold
+        return (abs(x1 - x2) <= self.distance_threshold and
+                abs(y1 - y2) <= self.distance_threshold)
 
     def _update_template_matching(self) -> None:
         """Run template matching update cycle."""
@@ -240,7 +263,8 @@ class Overlay(QWidget):
             logger.debug(f"Found {len(matches)} match groups")
             
             # Convert grouped matches to tuple format with averaged positions
-            tuple_matches = []
+            current_matches = []
+            
             for group in matches:
                 # Calculate average position for the group
                 avg_x = sum(m.bounds[0] for m in group.matches) // len(group.matches)
@@ -251,22 +275,62 @@ class Overlay(QWidget):
                 # Use highest confidence from the group
                 confidence = max(m.confidence for m in group.matches)
                 
-                tuple_matches.append((
+                match_tuple = (
                     group.template_name,
                     avg_x,
                     avg_y,
                     width,
                     height,
                     confidence
-                ))
+                )
+                current_matches.append(match_tuple)
                 
                 logger.debug(
                     f"Group for {group.template_name}: {len(group.matches)} matches, "
                     f"average position: ({avg_x}, {avg_y}), confidence: {confidence:.2f}"
                 )
             
-            # Update overlay with grouped matches
-            self.update(tuple_matches)
+            # Handle match persistence based on groups
+            all_matches = []
+            new_counters = {}
+            
+            # First, add all current matches
+            for current_match in current_matches:
+                group_key = self._get_group_key(current_match)
+                all_matches.append(current_match)
+                new_counters[group_key] = 0  # Reset counter for found matches
+                logger.debug(f"Added current match for group {group_key}")
+            
+            # Then check cached matches
+            for cached_match in self.cached_matches:
+                group_key = self._get_group_key(cached_match)
+                
+                # Skip if this exact group was already handled
+                if group_key in new_counters:
+                    continue
+                
+                # Check if this cached match is close to any current match
+                # Skip if it's too close to avoid duplicates
+                if any(self._is_same_group(cached_match, current) for current in current_matches):
+                    continue
+                
+                # Increment counter for this group
+                counter = self.match_counters.get(group_key, 0) + 1
+                
+                if counter < self.match_persistence:
+                    # Keep the match if within persistence window
+                    all_matches.append(cached_match)
+                    new_counters[group_key] = counter
+                    logger.debug(f"Using cached match for group {group_key} (frame {counter}/{self.match_persistence})")
+                else:
+                    logger.debug(f"Cache cleared for group {group_key}")
+            
+            # Update cache and counters
+            self.cached_matches = all_matches
+            self.match_counters = new_counters
+            
+            # Update overlay with all matches (new and cached)
+            self.update(all_matches)
             
         except Exception as e:
             logger.error(f"Error in template matching update: {e}", exc_info=True)
@@ -410,7 +474,11 @@ class Overlay(QWidget):
                     )
                     
                     # Draw cross at center
-                    half_size = self.cross_size // 2
+                    # Scale the cross size based on cross_scale setting
+                    scaled_cross_size = int(self.cross_size * self.cross_scale)
+                    half_size = scaled_cross_size // 2
+                    
+                    # Draw cross with scaled size
                     cv2.line(
                         overlay,
                         (center_x - half_size, center_y),
@@ -461,3 +529,23 @@ class Overlay(QWidget):
         # Only create window if we're turning on AND template matching is active
         elif self.template_matching_active:
             self.create_overlay_window() 
+
+    def stop_template_matching(self) -> None:
+        """Stop template matching."""
+        logger.info("Stopping template matching")
+        self.template_matching_active = False
+        self.template_matching_timer.stop()
+        
+        # Reset template matcher frequency
+        self.template_matcher.update_frequency = 0.0
+        self.template_matcher.last_update_time = 0.0
+        
+        # Clear match cache
+        self.cached_matches = []
+        self.match_counters.clear()
+        
+        # Safely destroy window when template matching stops
+        self._destroy_window_safely()
+        
+        # Clear any existing matches from display
+        self.update([]) 

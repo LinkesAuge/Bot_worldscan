@@ -185,6 +185,8 @@ class ConfigManager:
             - sound_enabled: Whether sound alerts are enabled
             - templates_dir: Directory containing template images
             - grouping_threshold: Pixel distance for grouping matches
+            - match_persistence: Number of frames to keep matches without updates
+            - distance_threshold: Maximum pixel distance to consider matches as the same group
         """
         config = self._load_config()
         
@@ -194,7 +196,9 @@ class ConfigManager:
             "target_frequency": config.getfloat("template_matching", "target_frequency", fallback=1.0),
             "sound_enabled": config.getboolean("template_matching", "sound_enabled", fallback=False),
             "templates_dir": config.get("template_matching", "templates_dir", fallback="scout/templates"),
-            "grouping_threshold": config.getint("template_matching", "grouping_threshold", fallback=10)
+            "grouping_threshold": config.getint("template_matching", "grouping_threshold", fallback=10),
+            "match_persistence": config.getint("template_matching", "match_persistence", fallback=3),
+            "distance_threshold": config.getint("template_matching", "distance_threshold", fallback=100)
         }
 
     def update_template_matching_settings(self, settings: Dict[str, Any]) -> None:
@@ -209,6 +213,8 @@ class ConfigManager:
                 - sound_enabled: Whether sound alerts are enabled
                 - templates_dir: Directory containing template images
                 - grouping_threshold: Pixel distance for grouping matches
+                - match_persistence: Number of frames to keep matches without updates
+                - distance_threshold: Maximum pixel distance to consider matches as the same group
         """
         config = self._load_config()
         
@@ -221,6 +227,8 @@ class ConfigManager:
         config.set("template_matching", "sound_enabled", str(settings.get("sound_enabled", False)))
         config.set("template_matching", "templates_dir", str(settings.get("templates_dir", "scout/templates")))
         config.set("template_matching", "grouping_threshold", str(settings.get("grouping_threshold", 10)))
+        config.set("template_matching", "match_persistence", str(settings.get("match_persistence", 3)))
+        config.set("template_matching", "distance_threshold", str(settings.get("distance_threshold", 100)))
         
         self._save_config(config)
         logger.debug(f"Updated template matching settings: {settings}")

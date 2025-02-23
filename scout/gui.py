@@ -461,26 +461,28 @@ class OverlayController(QMainWindow):
             freq = value / 10.0
             logger.debug(f"Frequency slider changed: {value} -> {freq} updates/sec")
             self.freq_input.setValue(freq)
-            if hasattr(self.template_matcher, 'target_frequency'):
-                self.template_matcher.target_frequency = freq
-                logger.debug(f"Updated pattern matcher target_frequency to: {freq}")
-                # Update overlay timer interval
-                if hasattr(self.overlay, 'update_timer_interval'):
-                    self.overlay.update_timer_interval()
-                    logger.debug("Updated overlay timer interval")
-            self.save_settings()
+            # Update template matcher frequency
+            self.template_matcher.target_frequency = freq
+            # Update overlay timer interval
+            self.overlay.update_timer_interval()
+            # Save to config
+            template_settings = self.config_manager.get_template_matching_settings()
+            template_settings["target_frequency"] = freq
+            self.config_manager.update_template_matching_settings(template_settings)
+            logger.debug(f"Updated template matcher frequency to {freq} updates/sec")
 
         def on_spinbox_change(value: float) -> None:
             logger.debug(f"Frequency spinbox changed to: {value} updates/sec")
             self.freq_slider.setValue(int(value * 10))
-            if hasattr(self.template_matcher, 'target_frequency'):
-                self.template_matcher.target_frequency = value
-                logger.debug(f"Updated pattern matcher target_frequency to: {value}")
-                # Update overlay timer interval
-                if hasattr(self.overlay, 'update_timer_interval'):
-                    self.overlay.update_timer_interval()
-                    logger.debug("Updated overlay timer interval")
-            self.save_settings()
+            # Update template matcher frequency
+            self.template_matcher.target_frequency = value
+            # Update overlay timer interval
+            self.overlay.update_timer_interval()
+            # Save to config
+            template_settings = self.config_manager.get_template_matching_settings()
+            template_settings["target_frequency"] = value
+            self.config_manager.update_template_matching_settings(template_settings)
+            logger.debug(f"Updated template matcher frequency to {value} updates/sec")
         
         self.freq_slider.valueChanged.connect(on_slider_change)
         self.freq_input.valueChanged.connect(on_spinbox_change)
