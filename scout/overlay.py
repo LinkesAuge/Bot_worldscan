@@ -18,9 +18,231 @@ from scout.window_manager import WindowManager
 from scout.template_matcher import TemplateMatch, GroupedMatch, TemplateMatcher
 import logging
 from PyQt6.QtWidgets import QWidget
-from PyQt6.QtCore import QTimer
+from PyQt6.QtCore import QTimer, QThread, pyqtSignal, QMutex, QMutexLocker
+import queue
+import time
 
 logger = logging.getLogger(__name__)
+
+class TemplateMatchingThread(QThread):
+    """
+    Thread for running template matching operations.
+    
+    This thread continuously:
+    1. Captures screenshots
+    2. Runs template matching
+    3. Updates match cache
+    
+    It uses a thread-safe queue to communicate matches to the main thread.
+    """
+    
+    matches_updated = pyqtSignal()  # Signal emitted when new matches are available
+    frequency_updated = pyqtSignal(float, float)  # Signal emitted when frequency stats update (target, actual)
+    
+    def __init__(self, window_manager: WindowManager, template_matcher: TemplateMatcher,
+                 distance_threshold: int, match_persistence: int):
+        """Initialize the template matching thread."""
+        super().__init__()
+        self.window_manager = window_manager
+        self.template_matcher = template_matcher
+        self.distance_threshold = distance_threshold
+        self.match_persistence = match_persistence
+        
+        # Thread control
+        self._stop_flag = False
+        self._paused = False
+        self._mutex = QMutex()
+        
+        # Match storage with thread safety
+        self._matches_mutex = QMutex()
+        self._cached_matches: List[Tuple[str, int, int, int, int, float]] = []
+        self._match_counters: Dict[str, int] = {}
+        
+        # Frequency control and tracking
+        self._target_frequency = 1.0  # Hz
+        self._actual_frequency = 0.0  # Hz
+        self._frame_times: List[float] = []  # Last 10 frame times for frequency calculation
+        self._max_frame_times = 10  # Number of frames to average for frequency calculation
+        
+    def run(self) -> None:
+        """Main thread loop for template matching."""
+        logger.info("Template matching thread started")
+        
+        while not self._stop_flag:
+            # Check if paused
+            with QMutexLocker(self._mutex):
+                if self._paused:
+                    time.sleep(0.1)  # Short sleep when paused
+                    continue
+            
+            start_time = time.time()
+            
+            try:
+                # Capture and process image
+                self._process_frame()
+                
+                # Signal that new matches are available
+                self.matches_updated.emit()
+                
+                # Update frequency tracking
+                elapsed = time.time() - start_time
+                self._update_frequency_stats(elapsed)
+                
+                # Control update frequency
+                target_interval = 1.0 / self._target_frequency
+                sleep_time = max(0, target_interval - elapsed)
+                if sleep_time > 0:
+                    time.sleep(sleep_time)
+                    
+            except Exception as e:
+                logger.error(f"Error in template matching thread: {e}", exc_info=True)
+                time.sleep(0.1)  # Prevent tight loop on error
+    
+    def _process_frame(self) -> None:
+        """Process a single frame for template matches."""
+        # Capture window image
+        image = self.window_manager.capture_screenshot()
+        if image is None:
+            return
+            
+        # Find matches
+        matches = self.template_matcher.find_matches(image)
+        
+        # Convert matches to tuple format
+        current_matches = []
+        for group in matches:
+            # Calculate average position
+            avg_x = sum(m.bounds[0] for m in group.matches) // len(group.matches)
+            avg_y = sum(m.bounds[1] for m in group.matches) // len(group.matches)
+            width = group.matches[0].bounds[2]
+            height = group.matches[0].bounds[3]
+            confidence = max(m.confidence for m in group.matches)
+            
+            match_tuple = (
+                group.template_name,
+                avg_x, avg_y,
+                width, height,
+                confidence
+            )
+            current_matches.append(match_tuple)
+        
+        # Update matches with thread safety
+        with QMutexLocker(self._matches_mutex):
+            self._update_matches(current_matches)
+    
+    def _update_matches(self, current_matches: List[Tuple[str, int, int, int, int, float]]) -> None:
+        """Update match cache with new matches."""
+        all_matches = []
+        new_counters = {}
+        
+        # Process current matches
+        for current_match in current_matches:
+            group_key = self._get_group_key(current_match)
+            existing_match = None
+            
+            # Check for existing match in same group
+            for match in all_matches:
+                if self._is_same_group(current_match, match):
+                    existing_match = match
+                    break
+            
+            if existing_match:
+                # Replace if current match has higher confidence
+                if current_match[5] > existing_match[5]:
+                    all_matches.remove(existing_match)
+                    all_matches.append(current_match)
+                    new_counters[group_key] = 0
+            else:
+                # Add new match
+                all_matches.append(current_match)
+                new_counters[group_key] = 0
+        
+        # Process cached matches
+        for cached_match in self._cached_matches:
+            group_key = self._get_group_key(cached_match)
+            
+            # Skip if group already has a match
+            if group_key in new_counters:
+                continue
+            
+            # Skip if too close to current match
+            if any(self._is_same_group(cached_match, current) for current in current_matches):
+                continue
+            
+            # Update counter and keep match if within persistence
+            counter = self._match_counters.get(group_key, 0) + 1
+            if counter < self.match_persistence:
+                all_matches.append(cached_match)
+                new_counters[group_key] = counter
+        
+        # Update cache
+        self._cached_matches = all_matches
+        self._match_counters = new_counters
+    
+    def _get_group_key(self, match: Tuple[str, int, int, int, int, float]) -> str:
+        """Get group key for a match based on position."""
+        _, x, y, _, _, _ = match
+        grid_size = self.distance_threshold
+        grid_x = x // grid_size
+        grid_y = y // grid_size
+        return f"pos_{grid_x}_{grid_y}"
+    
+    def _is_same_group(self, match1: Tuple[str, int, int, int, int, float],
+                      match2: Tuple[str, int, int, int, int, float]) -> bool:
+        """Check if matches belong to same group."""
+        _, x1, y1, w1, h1, _ = match1
+        _, x2, y2, w2, h2, _ = match2
+        
+        # Use centers for comparison
+        center1_x = x1 + w1 // 2
+        center1_y = y1 + h1 // 2
+        center2_x = x2 + w2 // 2
+        center2_y = y2 + h2 // 2
+        
+        return (abs(center1_x - center2_x) <= self.distance_threshold and
+                abs(center1_y - center2_y) <= self.distance_threshold)
+    
+    def get_current_matches(self) -> List[Tuple[str, int, int, int, int, float]]:
+        """Thread-safe getter for current matches."""
+        with QMutexLocker(self._matches_mutex):
+            return self._cached_matches.copy()
+    
+    def _update_frequency_stats(self, frame_time: float) -> None:
+        """Update frequency statistics."""
+        # Add current frame time
+        self._frame_times.append(frame_time)
+        
+        # Keep only the last N frames
+        if len(self._frame_times) > self._max_frame_times:
+            self._frame_times = self._frame_times[-self._max_frame_times:]
+        
+        # Calculate actual frequency
+        if self._frame_times:
+            avg_frame_time = sum(self._frame_times) / len(self._frame_times)
+            self._actual_frequency = 1.0 / avg_frame_time if avg_frame_time > 0 else 0.0
+        
+        # Emit frequency stats update
+        self.frequency_updated.emit(self._target_frequency, self._actual_frequency)
+    
+    def set_target_frequency(self, frequency: float) -> None:
+        """Set the target update frequency."""
+        self._target_frequency = max(frequency, 0.1)  # Ensure minimum frequency
+        logger.debug(f"Template matching frequency set to {self._target_frequency:.1f} Hz")
+    
+    def pause(self) -> None:
+        """Pause template matching."""
+        with QMutexLocker(self._mutex):
+            self._paused = True
+    
+    def resume(self) -> None:
+        """Resume template matching."""
+        with QMutexLocker(self._mutex):
+            self._paused = False
+    
+    def stop(self) -> None:
+        """Stop the thread."""
+        self._stop_flag = True
+        self.wait()  # Wait for thread to finish
 
 class Overlay(QWidget):
     """
@@ -64,45 +286,36 @@ class Overlay(QWidget):
         self.active = overlay_settings.get("active", False)
         self.template_matching_active = False
         
-        # Separate timers for template matching and drawing
-        self.template_matching_timer = QTimer()
-        self.template_matching_timer.timeout.connect(self._update_template_matching)
-        
-        self.draw_timer = QTimer()
-        self.draw_timer.timeout.connect(self._draw_overlay)
-        self.draw_timer.setInterval(33)  # ~30 FPS for drawing
-        
-        # Add match caching with group persistence
-        self.cached_matches: List[Tuple[str, int, int, int, int, float]] = []  # Current cached matches
-        self.match_counters: Dict[str, int] = {}  # Cache counters for groups
-        # Load persistence and distance settings from config
-        self.match_persistence = template_settings.get("match_persistence", 3)  # Default to 3 frames if not in config
-        self.distance_threshold = template_settings.get("distance_threshold", 100)  # Default to 100 pixels if not in config
-        
-        # Convert QColor to BGR format for OpenCV
-        rect_color = overlay_settings["rect_color"]
-        font_color = overlay_settings["font_color"]
-        cross_color = overlay_settings["cross_color"]
-        
-        # Drawing settings (in BGR format for OpenCV)
-        self.rect_color = (rect_color.blue(), rect_color.green(), rect_color.red())
-        self.rect_thickness = overlay_settings["rect_thickness"]
-        self.rect_scale = overlay_settings["rect_scale"]
-        self.font_color = (font_color.blue(), font_color.green(), font_color.red())
-        self.font_size = overlay_settings["font_size"]
-        self.text_thickness = overlay_settings["text_thickness"]
-        self.cross_color = (cross_color.blue(), cross_color.green(), cross_color.red())
-        self.cross_size = overlay_settings["cross_size"]
-        self.cross_thickness = overlay_settings["cross_thickness"]
-        self.cross_scale = overlay_settings.get("cross_scale", 1.0)  # Default to 1.0 if not set
-        
-        # Create template matcher and make it accessible
+        # Create template matcher
         self.template_matcher = TemplateMatcher(
             window_manager=self.window_manager,
             confidence=template_settings["confidence"],
             target_frequency=template_settings["target_frequency"],
             sound_enabled=template_settings["sound_enabled"]
         )
+        
+        # Create template matching thread
+        self.matching_thread = TemplateMatchingThread(
+            window_manager=self.window_manager,
+            template_matcher=self.template_matcher,
+            distance_threshold=template_settings.get("distance_threshold", 100),
+            match_persistence=template_settings.get("match_persistence", 3)
+        )
+        
+        # Set initial frequency from settings
+        self.matching_thread.set_target_frequency(template_settings["target_frequency"])
+        
+        # Connect thread signals
+        self.matching_thread.matches_updated.connect(self._on_matches_updated)
+        self.matching_thread.frequency_updated.connect(self._on_frequency_updated)
+        
+        # Drawing timer
+        self.draw_timer = QTimer()
+        self.draw_timer.timeout.connect(self._draw_overlay)
+        self.draw_timer.setInterval(33)  # ~30 FPS
+        
+        # Load drawing settings
+        self._load_drawing_settings(overlay_settings)
         
         # Ensure templates are loaded
         self.template_matcher.reload_templates()
@@ -116,6 +329,24 @@ class Overlay(QWidget):
                     f"thickness={self.rect_thickness}, "
                     f"font_size={self.font_size}, "
                     f"rect_scale={self.rect_scale}")
+
+    def _load_drawing_settings(self, settings: Dict[str, Any]) -> None:
+        """Load drawing settings from config."""
+        # Convert QColor to BGR format for OpenCV
+        rect_color = settings["rect_color"]
+        font_color = settings["font_color"]
+        cross_color = settings["cross_color"]
+        
+        self.rect_color = (rect_color.blue(), rect_color.green(), rect_color.red())
+        self.rect_thickness = settings["rect_thickness"]
+        self.rect_scale = settings["rect_scale"]
+        self.font_color = (font_color.blue(), font_color.green(), font_color.red())
+        self.font_size = settings["font_size"]
+        self.text_thickness = settings["text_thickness"]
+        self.cross_color = (cross_color.blue(), cross_color.green(), cross_color.red())
+        self.cross_size = settings["cross_size"]
+        self.cross_thickness = settings["cross_thickness"]
+        self.cross_scale = settings.get("cross_scale", 1.0)
 
     def create_overlay_window(self) -> None:
         """Create the overlay window with transparency."""
@@ -187,188 +418,51 @@ class Overlay(QWidget):
         logger.info("Starting template matching")
         self.template_matching_active = True
         
-        # Create overlay window if both overlay and template matching are now active
-        if self.active and self.template_matching_active:
+        # Create overlay window if needed
+        if self.active:
             self.create_overlay_window()
         
-        # Start both timers
-        self.update_timer_interval()  # This will start the template matching timer
-        self.draw_timer.start()  # Start the drawing timer
-        logger.debug("Template matching and draw timers started")
+        # Start drawing timer
+        self.draw_timer.start()
+        
+        # Start matching thread
+        self.matching_thread.start()
+        logger.debug("Template matching thread and draw timer started")
 
     def update_timer_interval(self) -> None:
-        """Update the template matching timer interval based on target frequency."""
-        if not hasattr(self.template_matcher, 'target_frequency'):
-            logger.warning("Template matcher has no target_frequency attribute")
-            return
-            
-        interval = max(int(1000 / self.template_matcher.target_frequency), 16)  # Minimum 16ms (60 FPS max)
-        logger.debug(
-            f"Updating template matching timer interval: "
-            f"target_frequency={self.template_matcher.target_frequency:.2f} updates/sec -> "
-            f"interval={interval}ms"
-        )
-        
-        if self.template_matching_active:
-            # Stop the timer if it's running
-            if self.template_matching_timer.isActive():
-                self.template_matching_timer.stop()
-            
-            # Set new interval and start timer
-            self.template_matching_timer.setInterval(interval)
-            self.template_matching_timer.start()
-            logger.info(f"Template matching timer restarted with new interval: {interval}ms")
+        """Update the template matching frequency."""
+        if hasattr(self.template_matcher, 'target_frequency'):
+            self.matching_thread.set_target_frequency(self.template_matcher.target_frequency)
+            logger.debug(f"Updated template matching frequency to {self.template_matcher.target_frequency:.1f} Hz")
 
-    def _destroy_window_safely(self) -> None:
-        """Safely destroy the overlay window if it exists."""
-        try:
-            # Check if window exists before destroying
-            hwnd = win32gui.FindWindow(None, self.window_name)
-            if hwnd:
-                cv2.destroyWindow(self.window_name)
-                logger.info("Overlay window destroyed")
-        except Exception as e:
-            logger.debug(f"Window destruction skipped: {e}")
-
-    def _get_group_key(self, match: Tuple[str, int, int, int, int, float]) -> str:
-        """Get the cache key for a match based on approximate position only (not template name)."""
-        _, x, y, _, _, _ = match
-        # Use grid-based position to allow for small movements
-        grid_size = self.distance_threshold
-        grid_x = x // grid_size
-        grid_y = y // grid_size
-        # No longer include template name in key since we want to group across templates
-        return f"pos_{grid_x}_{grid_y}"
-
-    def _is_same_group(self, match1: Tuple[str, int, int, int, int, float],
-                      match2: Tuple[str, int, int, int, int, float]) -> bool:
-        """
-        Check if two matches belong to the same group based on position.
-        Matches from different templates can be grouped if they are close enough.
+    def stop_template_matching(self) -> None:
+        """Stop template matching."""
+        logger.info("Stopping template matching")
+        self.template_matching_active = False
         
-        Args:
-            match1: First match tuple (name, x, y, w, h, conf)
-            match2: Second match tuple (name, x, y, w, h, conf)
-            
-        Returns:
-            bool: True if matches are in the same group
-        """
-        # Extract positions and dimensions
-        name1, x1, y1, w1, h1, _ = match1
-        name2, x2, y2, w2, h2, _ = match2
+        # Stop timers and thread
+        self.draw_timer.stop()
+        self.matching_thread.stop()
         
-        # Calculate centers
-        center1_x = x1 + w1 // 2
-        center1_y = y1 + h1 // 2
-        center2_x = x2 + w2 // 2
-        center2_y = y2 + h2 // 2
+        # Reset state
+        self.template_matcher.update_frequency = 0.0
+        self.template_matcher.last_update_time = 0.0
         
-        # Check if centers are within threshold
-        return (abs(center1_x - center2_x) <= self.distance_threshold and
-                abs(center1_y - center2_y) <= self.distance_threshold)
+        # Cleanup
+        self._destroy_window_safely()
+        self._draw_overlay()  # Final clear
 
-    def _update_template_matching(self) -> None:
-        """Run template matching update cycle."""
-        try:
-            logger.debug("Running template matching update")
-            
-            # Capture window image
-            image = self.template_matcher.capture_window()
-            if image is None:
-                logger.warning("Failed to capture window for template matching")
-                return
-                
-            logger.debug(f"Captured image with shape: {image.shape}")
-            
-            # First get all matches in GroupedMatch format
-            matches = self.template_matcher.find_matches(image)
-            logger.debug(f"Found {len(matches)} match groups")
-            
-            # Convert grouped matches to tuple format with averaged positions
-            current_matches = []
-            
-            for group in matches:
-                # Calculate average position for the group
-                avg_x = sum(m.bounds[0] for m in group.matches) // len(group.matches)
-                avg_y = sum(m.bounds[1] for m in group.matches) // len(group.matches)
-                # Use width and height from first match since they should be the same
-                width = group.matches[0].bounds[2]
-                height = group.matches[0].bounds[3]
-                # Use highest confidence from the group
-                confidence = max(m.confidence for m in group.matches)
-                
-                match_tuple = (
-                    group.template_name,
-                    avg_x,
-                    avg_y,
-                    width,
-                    height,
-                    confidence
-                )
-                current_matches.append(match_tuple)
-                
-                logger.debug(
-                    f"Group for {group.template_name}: {len(group.matches)} matches, "
-                    f"average position: ({avg_x}, {avg_y}), confidence: {confidence:.2f}"
-                )
-            
-            # Handle match persistence based on groups
-            all_matches = []
-            new_counters = {}
-            
-            # First, add all current matches
-            for current_match in current_matches:
-                group_key = self._get_group_key(current_match)
-                # Check if we already have a match in this group
-                existing_match = None
-                for match in all_matches:
-                    if self._is_same_group(current_match, match):
-                        existing_match = match
-                        break
-                
-                if existing_match:
-                    # If existing match has lower confidence, replace it
-                    if current_match[5] > existing_match[5]:
-                        all_matches.remove(existing_match)
-                        all_matches.append(current_match)
-                        new_counters[group_key] = 0
-                else:
-                    # No existing match in this group, add new match
-                    all_matches.append(current_match)
-                    new_counters[group_key] = 0
-                
-                logger.debug(f"Added current match for group {group_key}")
-            
-            # Then check cached matches
-            for cached_match in self.cached_matches:
-                group_key = self._get_group_key(cached_match)
-                
-                # Skip if this group already has a match
-                if group_key in new_counters:
-                    continue
-                
-                # Check if this cached match is close to any current match
-                # Skip if it's too close to avoid duplicates
-                if any(self._is_same_group(cached_match, current) for current in current_matches):
-                    continue
-                
-                # Increment counter for this group
-                counter = self.match_counters.get(group_key, 0) + 1
-                
-                if counter < self.match_persistence:
-                    # Keep the match if within persistence window
-                    all_matches.append(cached_match)
-                    new_counters[group_key] = counter
-                    logger.debug(f"Using cached match for group {group_key} (frame {counter}/{self.match_persistence})")
-                else:
-                    logger.debug(f"Cache cleared for group {group_key}")
-            
-            # Update cache and counters
-            self.cached_matches = all_matches
-            self.match_counters = new_counters
-            
-        except Exception as e:
-            logger.error(f"Error in template matching update: {e}", exc_info=True)
+    def _on_matches_updated(self) -> None:
+        """Handle new matches from the matching thread."""
+        # The draw timer will pick up the new matches on next draw
+        pass
+
+    def _on_frequency_updated(self, target: float, actual: float) -> None:
+        """Handle frequency statistics update."""
+        # Update template matcher's tracking (for GUI display)
+        self.template_matcher.update_frequency = actual
+        self.template_matcher.last_update_time = time.time()
+        logger.debug(f"Template matching frequency stats - Target: {target:.1f} Hz, Actual: {actual:.1f} Hz")
 
     def _draw_overlay(self) -> None:
         """Draw the overlay with current matches."""
@@ -439,15 +533,18 @@ class Overlay(QWidget):
                     logger.error("Failed to create overlay window")
                     return
             
+            # Get current matches thread-safely
+            matches = self.matching_thread.get_current_matches()
+            
             # Create magenta background (will be transparent)
             overlay = np.zeros((height, width, 3), dtype=np.uint8)
             overlay[:] = (255, 0, 255)  # Set background to magenta
             
             # Only draw matches if we have any
-            if self.cached_matches:
-                logger.debug(f"Drawing {len(self.cached_matches)} matches on overlay")
+            if matches:
+                logger.debug(f"Drawing {len(matches)} matches on overlay")
                 # Draw matches
-                for name, match_x, match_y, match_width, match_height, confidence in self.cached_matches:
+                for name, match_x, match_y, match_width, match_height, confidence in matches:
                     # Adjust match position by client offset
                     match_x = match_x - client_offset_x
                     match_y = match_y - client_offset_y
@@ -551,26 +648,16 @@ class Overlay(QWidget):
         except Exception as e:
             logger.error(f"Error updating overlay: {str(e)}", exc_info=True)
 
-    def stop_template_matching(self) -> None:
-        """Stop template matching."""
-        logger.info("Stopping template matching")
-        self.template_matching_active = False
-        self.template_matching_timer.stop()
-        self.draw_timer.stop()
-        
-        # Reset template matcher frequency
-        self.template_matcher.update_frequency = 0.0
-        self.template_matcher.last_update_time = 0.0
-        
-        # Clear match cache
-        self.cached_matches = []
-        self.match_counters.clear()
-        
-        # Safely destroy window when template matching stops
-        self._destroy_window_safely()
-        
-        # Clear any existing matches from display
-        self._draw_overlay()
+    def _destroy_window_safely(self) -> None:
+        """Safely destroy the overlay window if it exists."""
+        try:
+            # Check if window exists before destroying
+            hwnd = win32gui.FindWindow(None, self.window_name)
+            if hwnd:
+                cv2.destroyWindow(self.window_name)
+                logger.info("Overlay window destroyed")
+        except Exception as e:
+            logger.debug(f"Window destruction skipped: {e}")
 
     def toggle(self) -> None:
         """Toggle the overlay visibility."""
