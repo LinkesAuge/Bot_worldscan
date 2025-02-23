@@ -318,46 +318,51 @@ class SequenceExecutor(QObject):
             raise ValueError("Invalid parameters for template search action")
             
         self._log_debug(
-            f"Starting template search with {len(params.templates)} templates "
+            f"Starting template search with {len(params.templates) if not params.use_all_templates else 'all'} templates "
             f"(Update freq: {params.update_frequency}/s, Duration: {params.duration}s)"
         )
         
-        # Configure template matcher
-        self.context.template_matcher.confidence = params.min_confidence
-        self.context.template_matcher.target_frequency = params.update_frequency
-        self.context.template_matcher.sound_enabled = params.sound_enabled
+        # Store original template matcher settings
+        original_confidence = self.context.template_matcher.confidence
+        original_frequency = self.context.template_matcher.target_frequency
+        original_sound = self.context.template_matcher.sound_enabled
         
-        # Start template matching if overlay is enabled
-        if params.overlay_enabled:
-            self.context.template_matcher.start_template_matching()
-        
-        start_time = time.time()
         try:
+            # Configure template matcher with action parameters
+            self.context.template_matcher.confidence = params.min_confidence
+            self.context.template_matcher.target_frequency = params.update_frequency
+            self.context.template_matcher.sound_enabled = params.sound_enabled
+            
+            # If specific templates are selected, filter them
+            if not params.use_all_templates:
+                # Verify templates exist
+                available_templates = set(self.context.template_matcher.templates.keys())
+                requested_templates = set(params.templates)
+                missing_templates = requested_templates - available_templates
+                if missing_templates:
+                    raise ValueError(f"Templates not found: {missing_templates}")
+            
+            # Start template matching process
+            self.context.template_matcher.start_template_matching()
+            
+            # Wait for the specified duration
+            start_time = time.time()
             while time.time() - start_time < params.duration:
                 # Check for stop keys
                 if is_stop_key_pressed():
                     self._log_debug("Template search interrupted by user (Escape/Q pressed)")
                     self.stop_execution()
                     return
-                    
-                # Take screenshot and check for templates
-                screenshot = self.context.window_manager.capture_screenshot()
-                if screenshot is None:
-                    continue
-                    
-                # Use existing template matcher to find matches
-                matches = self.context.template_matcher.find_all_templates(screenshot)
-                if matches:
-                    self._log_debug(f"Found {len(matches)} template matches")
-                    
-                time.sleep(1.0 / params.update_frequency)  # Control update rate
+                time.sleep(0.1)  # Small sleep to prevent CPU hogging
                 
         finally:
-            # Always stop template matching when done
-            if params.overlay_enabled:
-                self.context.template_matcher.stop_template_matching()
+            # Stop template matching and restore original settings
+            self.context.template_matcher.stop_template_matching()
+            self.context.template_matcher.confidence = original_confidence
+            self.context.template_matcher.target_frequency = original_frequency
+            self.context.template_matcher.sound_enabled = original_sound
             
-            self._log_debug("Template search completed")
+        self._log_debug("Template search completed")
         
     def _execute_ocr_wait(self, action: AutomationAction) -> None:
         """Execute an OCR wait action."""

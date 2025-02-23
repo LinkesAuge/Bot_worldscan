@@ -174,64 +174,39 @@ class ConfigManager:
         logger.debug(f"Updated OCR settings: {settings}")
 
     def get_template_matching_settings(self) -> Dict[str, Any]:
-        """
-        Get template matching settings from config.
-        
-        Returns:
-            Dictionary containing template matching settings:
-            - active: Whether template matching is active
-            - confidence: Match confidence threshold
-            - target_frequency: Target updates per second
-            - sound_enabled: Whether sound alerts are enabled
-            - templates_dir: Directory containing template images
-            - grouping_threshold: Pixel distance for grouping matches
-            - match_persistence: Number of frames to keep matches without updates
-            - distance_threshold: Maximum pixel distance to consider matches as the same group
-        """
-        config = self._load_config()
-        
-        return {
-            "active": config.getboolean("template_matching", "active", fallback=False),
-            "confidence": config.getfloat("template_matching", "confidence", fallback=0.8),
-            "target_frequency": config.getfloat("template_matching", "target_frequency", fallback=1.0),
-            "sound_enabled": config.getboolean("template_matching", "sound_enabled", fallback=False),
-            "templates_dir": config.get("template_matching", "templates_dir", fallback="scout/templates"),
-            "grouping_threshold": config.getint("template_matching", "grouping_threshold", fallback=10),
-            "match_persistence": config.getint("template_matching", "match_persistence", fallback=3),
-            "distance_threshold": config.getint("template_matching", "distance_threshold", fallback=100)
+        """Get template matching settings from config."""
+        if not self.config.has_section("template_matching"):
+            self.create_default_config()
+            
+        settings = {
+            "active": self.config.getboolean("template_matching", "active", fallback=False),
+            "confidence": self.config.getfloat("template_matching", "confidence", fallback=0.8),
+            "target_frequency": self.config.getfloat("template_matching", "target_frequency", fallback=1.0),
+            "sound_enabled": self.config.getboolean("template_matching", "sound_enabled", fallback=False),
+            "templates_dir": self.config.get("template_matching", "templates_dir", fallback="scout/templates"),
+            "grouping_threshold": self.config.getint("template_matching", "grouping_threshold", fallback=10),
+            "match_persistence": self.config.getint("template_matching", "match_persistence", fallback=3),
+            "distance_threshold": self.config.getint("template_matching", "distance_threshold", fallback=100)
         }
+        return settings
 
     def update_template_matching_settings(self, settings: Dict[str, Any]) -> None:
-        """
-        Update template matching settings in config.
-        
-        Args:
-            settings: Dictionary containing template matching settings:
-                - active: Whether template matching is active
-                - confidence: Match confidence threshold
-                - target_frequency: Target updates per second
-                - sound_enabled: Whether sound alerts are enabled
-                - templates_dir: Directory containing template images
-                - grouping_threshold: Pixel distance for grouping matches
-                - match_persistence: Number of frames to keep matches without updates
-                - distance_threshold: Maximum pixel distance to consider matches as the same group
-        """
-        config = self._load_config()
-        
-        if not config.has_section("template_matching"):
-            config.add_section("template_matching")
+        """Update template matching settings in config."""
+        if not self.config.has_section("template_matching"):
+            self.config.add_section("template_matching")
             
-        config.set("template_matching", "active", str(settings.get("active", False)))
-        config.set("template_matching", "confidence", str(settings.get("confidence", 0.8)))
-        config.set("template_matching", "target_frequency", str(settings.get("target_frequency", 1.0)))
-        config.set("template_matching", "sound_enabled", str(settings.get("sound_enabled", False)))
-        config.set("template_matching", "templates_dir", str(settings.get("templates_dir", "scout/templates")))
-        config.set("template_matching", "grouping_threshold", str(settings.get("grouping_threshold", 10)))
-        config.set("template_matching", "match_persistence", str(settings.get("match_persistence", 3)))
-        config.set("template_matching", "distance_threshold", str(settings.get("distance_threshold", 100)))
+        # Convert boolean values to strings
+        self.config.set("template_matching", "active", str(settings["active"]).lower())
+        self.config.set("template_matching", "confidence", str(settings["confidence"]))
+        self.config.set("template_matching", "target_frequency", str(settings["target_frequency"]))
+        self.config.set("template_matching", "sound_enabled", str(settings["sound_enabled"]).lower())
+        self.config.set("template_matching", "templates_dir", settings.get("templates_dir", "scout/templates"))
+        self.config.set("template_matching", "grouping_threshold", str(settings.get("grouping_threshold", 10)))
+        self.config.set("template_matching", "match_persistence", str(settings.get("match_persistence", 3)))
+        self.config.set("template_matching", "distance_threshold", str(settings.get("distance_threshold", 100)))
         
-        self._save_config(config)
-        logger.debug(f"Updated template matching settings: {settings}")
+        # Save changes immediately
+        self.save_config()
 
     def get_overlay_settings(self) -> Dict[str, Any]:
         """Get overlay settings from config."""

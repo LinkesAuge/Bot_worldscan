@@ -374,11 +374,19 @@ class OverlayController(QMainWindow):
         pattern_group = QGroupBox("Pattern Matching Controls")
         layout = QVBoxLayout()
         
-        # Pattern matching toggle button
+        # Pattern matching toggle button - sync with overlay state
         is_active = settings.get("active", False)
         self.pattern_btn = QPushButton(f"Template Matching: {'ON' if is_active else 'OFF'}")
         self.pattern_btn.clicked.connect(self._toggle_pattern_matching)
         self._update_pattern_button_color(is_active)
+        
+        # Ensure overlay state matches config
+        self.overlay.template_matching_active = is_active
+        if is_active:
+            self.overlay.start_template_matching()
+        else:
+            self.overlay.stop_template_matching()
+            
         layout.addWidget(self.pattern_btn)
         
         # Sound toggle button
@@ -712,7 +720,7 @@ class OverlayController(QMainWindow):
         
         This method saves all current GUI values to the configuration file, including:
         - Overlay settings (colors, sizes, scales, etc.)
-        - Pattern matching settings (confidence, frequency, etc.)
+        - Template matching settings (confidence, frequency, etc.)
         - OCR settings (frequency, region, etc.)
         """
         try:
@@ -731,8 +739,8 @@ class OverlayController(QMainWindow):
                 "cross_scale": self.cross_scale_input.value()
             }
             
-            # Create pattern matching settings dictionary
-            pattern_settings = {
+            # Create template matching settings dictionary
+            template_settings = {
                 "active": self.pattern_btn.text().endswith("ON"),
                 "confidence": self.confidence_input.value(),
                 "target_frequency": self.freq_input.value(),
@@ -748,7 +756,7 @@ class OverlayController(QMainWindow):
             
             # Save all settings
             self.config_manager.update_overlay_settings(overlay_settings)
-            self.config_manager.update_pattern_matching_settings(pattern_settings)
+            self.config_manager.update_template_matching_settings(template_settings)
             self.config_manager.update_ocr_settings(ocr_settings)
             
             logger.debug("All settings saved to config")
@@ -1329,12 +1337,16 @@ class OverlayController(QMainWindow):
             # Update settings in config
             self.config_manager.update_template_matching_settings(settings)
             
-            # Update template matcher
+            # Update template matcher and overlay
             if settings["active"]:
+                # Ensure overlay state is synced
+                self.overlay.template_matching_active = True
                 self.overlay.start_template_matching()
                 self._update_pattern_button_color(True)
                 logger.info("Template matching activated")
             else:
+                # Ensure overlay state is synced
+                self.overlay.template_matching_active = False
                 self.overlay.stop_template_matching()
                 self._update_pattern_button_color(False)
                 logger.info("Template matching deactivated")
@@ -1342,6 +1354,9 @@ class OverlayController(QMainWindow):
         except Exception as e:
             logger.error(f"Error toggling template matching: {e}", exc_info=True)
             self._update_pattern_button_color(False)
+            # Ensure overlay is stopped on error
+            self.overlay.template_matching_active = False
+            self.overlay.stop_template_matching()
 
     def _toggle_sound(self) -> None:
         """Toggle sound alerts on/off."""

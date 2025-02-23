@@ -97,6 +97,14 @@ class TemplateMatchingThread(QThread):
             except Exception as e:
                 logger.error(f"Error in template matching thread: {e}", exc_info=True)
                 time.sleep(0.1)  # Prevent tight loop on error
+                
+        logger.info("Template matching thread stopped")
+        
+        # Clear matches when stopping
+        with QMutexLocker(self._matches_mutex):
+            self._cached_matches.clear()
+            self._match_counters.clear()
+        self.matches_updated.emit()  # Signal one last time to clear display
     
     def _process_frame(self) -> None:
         """Process a single frame for template matches."""
@@ -241,8 +249,18 @@ class TemplateMatchingThread(QThread):
     
     def stop(self) -> None:
         """Stop the thread."""
+        logger.debug("Stopping template matching thread")
         self._stop_flag = True
-        self.wait()  # Wait for thread to finish
+        
+        # Clear any cached matches
+        with QMutexLocker(self._matches_mutex):
+            self._cached_matches.clear()
+            self._match_counters.clear()
+        
+        # Reset frequency tracking
+        self._frame_times.clear()
+        self._actual_frequency = 0.0
+        self.frequency_updated.emit(self._target_frequency, 0.0)  # Signal frequency reset
 
 class Overlay(QWidget):
     """
@@ -425,6 +443,15 @@ class Overlay(QWidget):
         # Start drawing timer
         self.draw_timer.start()
         
+        # Stop existing thread if running
+        if self.matching_thread.isRunning():
+            logger.debug("Stopping existing template matching thread")
+            self.matching_thread.stop()
+            self.matching_thread.wait()  # Wait for thread to finish
+        
+        # Reset thread stop flag
+        self.matching_thread._stop_flag = False
+        
         # Start matching thread
         self.matching_thread.start()
         logger.debug("Template matching thread and draw timer started")
@@ -442,7 +469,12 @@ class Overlay(QWidget):
         
         # Stop timers and thread
         self.draw_timer.stop()
-        self.matching_thread.stop()
+        
+        # Stop and wait for thread to finish
+        if self.matching_thread.isRunning():
+            logger.debug("Stopping template matching thread")
+            self.matching_thread.stop()
+            self.matching_thread.wait()  # Wait for thread to finish
         
         # Reset state
         self.template_matcher.update_frequency = 0.0

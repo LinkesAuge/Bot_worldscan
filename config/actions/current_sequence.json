@@ -45,40 +45,16 @@
                 "position_name": null,
                 "timeout": 30.0,
                 "description": null,
-                "templates": [],
-                "use_all_templates": true,
+                "templates": [
+                    "Crypt",
+                    "crypt_small"
+                ],
+                "use_all_templates": false,
                 "overlay_enabled": true,
                 "sound_enabled": true,
-                "duration": 3.0,
-                "update_frequency": 1.0,
+                "duration": 4.0,
+                "update_frequency": 2.0,
                 "min_confidence": 0.9
-            }
-        },
-        {
-            "type": "WAIT",
-            "params": {
-                "duration": 2.0,
-                "position_name": null,
-                "timeout": 30.0,
-                "description": null
-            }
-        },
-        {
-            "type": "DRAG",
-            "params": {
-                "end_position_name": "Position_1",
-                "position_name": null,
-                "timeout": 30.0,
-                "description": null,
-                "duration": 0.5
-            }
-        },
-        {
-            "type": "CLICK",
-            "params": {
-                "position_name": null,
-                "timeout": 30.0,
-                "description": null
             }
         }
     ],

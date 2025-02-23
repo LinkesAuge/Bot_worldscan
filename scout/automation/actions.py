@@ -74,6 +74,8 @@ class TemplateSearchParams(ActionParamsCommon):
     duration: float = 30.0  # Duration to search in seconds
     update_frequency: float = 1.0  # Updates per second
     min_confidence: float = 0.8  # Minimum confidence for matches
+    description: Optional[str] = None  # Optional description of the action
+    timeout: float = 30.0  # Timeout for the action
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert parameters to dictionary for storage."""
@@ -85,7 +87,6 @@ class TemplateSearchParams(ActionParamsCommon):
             'duration': self.duration,
             'update_frequency': self.update_frequency,
             'min_confidence': self.min_confidence,
-            'position_name': self.position_name,
             'timeout': self.timeout,
             'description': self.description
         }
