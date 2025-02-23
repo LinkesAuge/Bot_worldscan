@@ -530,9 +530,12 @@ class OverlayController(QMainWindow):
         self.select_ocr_region_btn.clicked.connect(self._start_ocr_region_selection)
         ocr_layout.addWidget(self.select_ocr_region_btn)
         
-        # Create OCR status label
+        # Create OCR status label with coordinates
         self.ocr_status = QLabel("Text OCR: Inactive")
+        self.ocr_coords_label = QLabel("Coordinates: None")
+        self.ocr_coords_label.setStyleSheet("font-family: monospace;")  # For better alignment
         ocr_layout.addWidget(self.ocr_status)
+        ocr_layout.addWidget(self.ocr_coords_label)
         
         ocr_group.setLayout(ocr_layout)
         layout.addWidget(ocr_group)
@@ -1301,6 +1304,9 @@ class OverlayController(QMainWindow):
         logger.info("Starting Text OCR")
         self.ocr_status.setText("Text OCR: Active")
         
+        # Connect coordinates signal
+        self.text_ocr.coordinates_updated.connect(self._update_coordinates_display)
+        
         # Update config
         ocr_settings = self.config_manager.get_ocr_settings()
         ocr_settings['active'] = True
@@ -1314,6 +1320,9 @@ class OverlayController(QMainWindow):
         logger.info("Stopping Text OCR")
         self.ocr_status.setText("Text OCR: Inactive")
         
+        # Disconnect coordinates signal
+        self.text_ocr.coordinates_updated.disconnect(self._update_coordinates_display)
+        
         # Update config
         ocr_settings = self.config_manager.get_ocr_settings()
         ocr_settings['active'] = False
@@ -1322,6 +1331,10 @@ class OverlayController(QMainWindow):
         # Stop OCR processing
         self.text_ocr.stop()
     
+    def _update_coordinates_display(self, coords: 'GameCoordinates') -> None:
+        """Update the coordinate display in the GUI."""
+        self.ocr_coords_label.setText(str(coords))
+
     def _start_ocr_region_selection(self) -> None:
         """Start the Text OCR region selection process."""
         logger.info("Starting Text OCR region selection")
