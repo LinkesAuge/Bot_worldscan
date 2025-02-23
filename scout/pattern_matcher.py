@@ -71,7 +71,8 @@ class PatternMatcher:
     
     def __init__(self, window_manager: WindowManager, confidence: float = 0.8, 
                  target_frequency: float = 1.0, sound_enabled: bool = False,
-                 templates_dir: str = "scout/templates", grouping_threshold: int = 10) -> None:
+                 templates_dir: str = "scout/templates", grouping_threshold: int = 10,
+                 debug_window: Optional['DebugWindow'] = None) -> None:
         """
         Initialize pattern matcher.
         
@@ -82,6 +83,7 @@ class PatternMatcher:
             sound_enabled: Whether to enable sound alerts
             templates_dir: Directory containing template images (relative to workspace root)
             grouping_threshold: Pixel distance threshold for grouping matches
+            debug_window: Optional existing debug window to use. If None, a new one will be created.
         """
         self.window_manager = window_manager
         # Initialize window capture with the same window title as window manager
@@ -98,7 +100,7 @@ class PatternMatcher:
         
         # Initialize managers
         self.sound_manager = SoundManager()
-        self.debug_window = DebugWindow()
+        self.debug_window = debug_window if debug_window is not None else DebugWindow()
         
         # Connect debug window close signal
         self.debug_window.window_closed.connect(self._on_debug_window_closed)

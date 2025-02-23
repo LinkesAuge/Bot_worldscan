@@ -52,16 +52,21 @@ class OverlayController(QMainWindow):
         # Create window manager first
         self.window_manager = WindowManager("Total Battle")
         
-        # Create overlay with window manager
-        self.overlay = Overlay(self.window_manager, pattern_settings, overlay_settings)
+        # Create debug window first
+        self.debug_window = DebugWindow()
+        self.debug_window.window_closed.connect(self._on_debug_window_closed)
         
-        # Create pattern matcher with window manager
+        # Create pattern matcher with window manager and debug window
         self.pattern_matcher = PatternMatcher(
             window_manager=self.window_manager,
             confidence=pattern_settings["confidence"],
             target_frequency=pattern_settings["target_frequency"],
-            sound_enabled=pattern_settings["sound_enabled"]
+            sound_enabled=pattern_settings["sound_enabled"],
+            debug_window=self.debug_window
         )
+        
+        # Create overlay with window manager and pattern matcher
+        self.overlay = Overlay(self.window_manager, pattern_settings, overlay_settings)
         
         self.config_manager = ConfigManager()
         self.toggle_callback: Optional[Callable[[], None]] = None
@@ -98,10 +103,6 @@ class OverlayController(QMainWindow):
         
         # Now that all controls are created, connect their handlers
         self.connect_settings_handlers()
-        
-        # Add debug image viewer
-        self.debug_window = DebugWindow()
-        self.debug_window.window_closed.connect(self._on_debug_window_closed)
         
         # Initialize scan controls with current region
         scanner_settings = self.config_manager.get_scanner_settings()
@@ -153,11 +154,6 @@ class OverlayController(QMainWindow):
         self.ocr_freq_input.valueChanged.connect(on_ocr_spinbox_change)
         
         logger.debug("GUI initialized")
-        
-        # Create pattern update timer - moved to end after all UI elements are initialized
-        self.pattern_update_timer = QTimer()
-        self.pattern_update_timer.timeout.connect(self.update_pattern_frequency_display)
-        self.pattern_update_timer.start(500)  # Update every 500ms
         
         # Create pattern update timer - moved to end after all UI elements are initialized
         self.pattern_update_timer = QTimer()
@@ -443,9 +439,17 @@ class OverlayController(QMainWindow):
         
         # Debug mode toggle button - initialize from config
         debug_settings = self.config_manager.get_debug_settings()
-        self.debug_btn = QPushButton(f"Debug Mode: {'ON' if debug_settings['enabled'] else 'OFF'}")
+        is_debug_enabled = debug_settings.get('enabled', False)
+        self.debug_btn = QPushButton(f"Debug Mode: {'ON' if is_debug_enabled else 'OFF'}")
         self.debug_btn.clicked.connect(self._toggle_debug_mode)
-        self._update_debug_button_color(debug_settings['enabled'])
+        self._update_debug_button_color(is_debug_enabled)
+        
+        # Show/hide debug window based on initial state
+        if is_debug_enabled:
+            self.debug_window.show()
+        else:
+            self.debug_window.hide()
+            
         layout.addWidget(self.debug_btn)
         
         pattern_group.setLayout(layout)
@@ -1183,8 +1187,16 @@ class OverlayController(QMainWindow):
         }
         config.update_debug_settings(debug_settings)
         
-        # Update button color
+        # Update button text and color
+        self.debug_btn.setText(f"Debug Mode: {'ON' if is_enabled else 'OFF'}")
         self._update_debug_button_color(is_enabled)
+        
+        # Show/hide debug window based on state
+        if is_enabled:
+            self.debug_window.show()
+            logger.info("Debug mode enabled - debug window shown")
+        else:
+            self.debug_window.hide()
         
         logger.info(f"Debug mode {'enabled' if is_enabled else 'disabled'}")
 
