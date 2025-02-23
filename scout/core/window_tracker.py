@@ -3,7 +3,7 @@ import win32gui
 import win32con
 import logging
 from PyQt6.QtCore import QObject, pyqtSignal, QRect, QPoint
-from ..config.config_manager import ConfigManager
+from ..config import ConfigManager
 
 logger = logging.getLogger(__name__)
 

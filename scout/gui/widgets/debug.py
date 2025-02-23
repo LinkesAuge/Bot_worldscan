@@ -280,52 +280,50 @@ class DebugWidget(QWidget):
             logger.error(f"Error handling preview update: {e}")
             
     def _on_metrics_updated(self, metrics: Dict[str, Any]) -> None:
-        """Handle metrics update."""
+        """Handle metrics update event.
+        
+        Args:
+            metrics: Dictionary containing debug metrics
+        """
         try:
-            # Format metrics text
-            lines = ["Debug Metrics:", ""]
+            # Format metrics as pretty text
+            text = []
             
             # Window metrics
-            if "window" in metrics:
-                lines.extend([
-                    "WINDOW:",
-                    f"  window_found: {metrics['window']['window_found']}",
-                    f"  window_handle: {metrics['window']['window_handle']}",
-                    ""
-                ])
+            if 'window' in metrics:
+                text.append("Window Metrics:")
+                for key, value in metrics['window'].items():
+                    text.append(f"  {key}: {value}")
             
             # Capture metrics
-            if "capture" in metrics:
-                lines.extend([
-                    "CAPTURE:",
-                    f"  total_captures: {metrics['capture']['total_captures']}",
-                    f"  failed_captures: {metrics['capture']['failed_captures']}",
-                    ""
-                ])
+            if 'capture' in metrics:
+                text.append("\nCapture Metrics:")
+                capture_metrics = metrics['capture'].get('metrics', {})
+                text.append(f"  Total Captures: {capture_metrics.get('total_captures', 0)}")
+                text.append(f"  Failed Captures: {capture_metrics.get('failed_captures', 0)}")
+                text.append(f"  Avg Capture Time: {capture_metrics.get('avg_capture_time', 0.0):.3f}s")
             
             # Pattern metrics
-            if "pattern" in metrics:
-                lines.extend([
-                    "PATTERN:",
-                    f"  templates: {metrics['pattern']['templates']}",
-                    ""
-                ])
+            if 'pattern' in metrics:
+                text.append("\nPattern Metrics:")
+                templates = metrics['pattern'].get('templates', {})
+                text.append(f"  Loaded Templates: {len(templates)}")
+                for name, info in templates.items():
+                    text.append(f"  - {name}: {info}")
             
             # OCR metrics
-            if "ocr" in metrics and "metrics" in metrics["ocr"]:
-                ocr_metrics = metrics["ocr"]["metrics"]
-                lines.extend([
-                    "OCR:",
-                    f"  total_extractions: {ocr_metrics['total_extractions']}",
-                    f"  failed_extractions: {ocr_metrics['failed_extractions']}",
-                    ""
-                ])
+            if 'ocr' in metrics:
+                text.append("\nOCR Metrics:")
+                ocr_metrics = metrics['ocr'].get('metrics', {})
+                text.append(f"  Total Extractions: {ocr_metrics.get('total_extractions', 0)}")
+                text.append(f"  Failed Extractions: {ocr_metrics.get('failed_extractions', 0)}")
+                text.append(f"  Avg Processing Time: {ocr_metrics.get('avg_processing_time', 0.0):.3f}s")
             
-            # Update text
-            self.metrics_text.setText("\n".join(lines))
+            # Update text display
+            self.metrics_text.setPlainText("\n".join(text))
             
         except Exception as e:
-            logger.error(f"Error updating metrics: {e}")
+            logger.error(f"Error updating metrics display: {e}")
             
     def _save_screenshot(self) -> None:
         """Save current preview as screenshot."""

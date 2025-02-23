@@ -9,6 +9,7 @@ from .core import WindowTracker, CoordinateManager
 from .capture import CaptureManager, PatternMatcher, OCRProcessor
 from .visualization import DebugVisualizer
 from .gui.main_window import MainWindow
+from .config import ConfigManager
 
 logger = logging.getLogger(__name__)
 
@@ -48,8 +49,11 @@ class TBScoutApp(QObject):
         self.app = QApplication(sys.argv)
         
         try:
+            # Initialize config first
+            self.config = ConfigManager(config_path)
+            
             # Initialize core components
-            self.window_tracker = WindowTracker()
+            self.window_tracker = WindowTracker(self.config)
             self.coordinate_manager = CoordinateManager(
                 self.window_tracker
             )
@@ -79,12 +83,13 @@ class TBScoutApp(QObject):
             
             # Create main window
             self.main_window = MainWindow(
-                self.window_tracker,
-                self.coordinate_manager,
-                self.capture_manager,
-                self.pattern_matcher,
-                self.ocr_processor,
-                self.debug_visualizer
+                window_tracker=self.window_tracker,
+                coordinate_manager=self.coordinate_manager,
+                capture_manager=self.capture_manager,
+                pattern_matcher=self.pattern_matcher,
+                ocr_processor=self.ocr_processor,
+                debug_visualizer=self.debug_visualizer,
+                config=self.config  # Pass config to main window
             )
             
             # Connect error signals

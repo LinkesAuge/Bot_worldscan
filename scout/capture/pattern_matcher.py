@@ -87,22 +87,29 @@ class PatternMatcher(QObject):
             if subdir:
                 template_path = template_path / subdir
                 
+            # Create directory if it doesn't exist
+            template_path.mkdir(parents=True, exist_ok=True)
+                
             # Load template images
             for img_path in template_path.glob("*.png"):
                 try:
-                    # Load and preprocess template
-                    template = cv2.imread(str(img_path))
+                    # Load template in BGR format
+                    template = cv2.imread(str(img_path), cv2.IMREAD_COLOR)
                     if template is None:
-                        raise ValueError(f"Failed to load template: {img_path}")
-                        
-                    # Convert to grayscale
-                    template = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
+                        logger.error(f"Failed to load template: {img_path}")
+                        continue
+                    
+                    # Store template size before conversion
+                    template_size = (template.shape[1], template.shape[0])
+                    
+                    # Convert to grayscale for matching
+                    template_gray = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
                     
                     # Store template
                     name = img_path.stem
-                    self.templates[name] = template
-                    self.template_sizes[name] = (template.shape[1], template.shape[0])
-                    logger.debug(f"Loaded template '{name}': {self.template_sizes[name]}")
+                    self.templates[name] = template_gray  # Store grayscale version
+                    self.template_sizes[name] = template_size
+                    logger.debug(f"Loaded template '{name}': {template_size}")
                     
                 except Exception as e:
                     logger.error(f"Error loading template {img_path}: {e}")
@@ -172,138 +179,175 @@ class PatternMatcher(QObject):
         save_debug: bool = False
     ) -> List[MatchResult]:
         """
-        Find template matches in current window.
+        Find matches for loaded templates.
         
         Args:
-            template_names: Optional list of templates to match
-            save_debug: Whether to save debug visualization
+            template_names: Optional list of template names to match (default: all)
+            save_debug: Whether to save debug images
             
         Returns:
-            List of match results after non-maxima suppression
+            List of match results
         """
         try:
-            # Capture and preprocess window
+            # Get screenshot in BGR format
             image = self.capture_manager.capture_window(save_debug)
             if image is None:
-                error_msg = "Window capture failed"
-                logger.error(f"Pattern matching failed: {error_msg}")
-                self.match_failed.emit("test", error_msg)
+                logger.error("Failed to capture window")
                 return []
+            
+            # Convert to grayscale for matching
+            if len(image.shape) == 3:
+                processed = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            else:
+                processed = image
                 
-            # Preprocess for pattern matching
-            try:
-                image = self.capture_manager.preprocess_image(image)
-            except Exception as e:
-                error_msg = f"Preprocessing error: {e}"
-                logger.error(f"Pattern matching failed: {error_msg}")
-                self.match_failed.emit("test", error_msg)
+            if processed is None:
+                logger.error("Failed to preprocess image")
                 return []
-                
-            # Select templates to match
+            
+            # Track results and failures
+            results = []
+            failed_templates = []
+            
+            # Get templates to match
             if template_names is None:
                 template_names = list(self.templates.keys())
                 
-            results: List[MatchResult] = []
-            
+            if not template_names:
+                logger.warning("No templates specified for matching")
+                return []
+                
+            # Match each template
             for name in template_names:
-                if name not in self.templates:
-                    error_msg = f"Template '{name}' not found"
-                    logger.warning(error_msg)
-                    self.match_failed.emit(name, error_msg)
-                    continue
-                    
                 try:
-                    # Get template
-                    template = self.templates[name]
+                    if name not in self.templates:
+                        failed_templates.append(
+                            (name, f"Template '{name}' not found")
+                        )
+                        continue
+                        
+                    template = self.templates[name]  # Already in grayscale
                     
                     # Perform template matching
                     result = cv2.matchTemplate(
-                        image,
+                        processed,
                         template,
                         cv2.TM_CCOEFF_NORMED
                     )
                     
-                    # Find matches above threshold
-                    matches = []
-                    result_copy = result.copy()
-                    
-                    # Find initial max value to check threshold
-                    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result_copy)
-                    
-                    # If best match is below threshold, report and continue
-                    if max_val < self.confidence_threshold:
-                        error_msg = f"Match confidence {max_val:.2f} below threshold {self.confidence_threshold:.2f}"
-                        logger.warning(f"Template '{name}' failed: {error_msg}")
-                        self.match_failed.emit(name, error_msg)
-                        continue
-                    
                     # Find all matches above threshold
-                    while max_val >= self.confidence_threshold:
-                        # Calculate match position and rectangle
-                        w, h = self.template_sizes[name]
-                        x, y = max_loc
+                    locations = np.where(result >= self.confidence_threshold)
+                    for pt in zip(*locations[::-1]):  # Switch columns and rows
+                        # Calculate match center and rectangle
+                        template_w, template_h = self.template_sizes[name]
+                        center_x = pt[0] + template_w // 2
+                        center_y = pt[1] + template_h // 2
                         
-                        # Calculate center position before scaling
-                        center_x = x + w//2
-                        center_y = y + h//2
+                        # Get confidence at this point
+                        confidence = float(result[pt[1], pt[0]])
                         
                         # Apply DPI scaling
                         dpi_scale = self.capture_manager.dpi_scale
-                        scaled_x = int(x * dpi_scale)
-                        scaled_y = int(y * dpi_scale)
-                        scaled_w = int(w * dpi_scale)
-                        scaled_h = int(h * dpi_scale)
-                        scaled_center_x = int(center_x * dpi_scale)
-                        scaled_center_y = int(center_y * dpi_scale)
-                        
-                        position = QPoint(scaled_center_x, scaled_center_y)
-                        rect = QRect(scaled_x, scaled_y, scaled_w, scaled_h)
+                        scaled_x = int(center_x / dpi_scale)
+                        scaled_y = int(center_y / dpi_scale)
+                        scaled_w = int(template_w / dpi_scale)
+                        scaled_h = int(template_h / dpi_scale)
                         
                         # Create match result
                         match = MatchResult(
-                            name,
-                            float(max_val),
-                            position,
-                            rect
+                            template_name=name,
+                            confidence=confidence,
+                            position=QPoint(scaled_x, scaled_y),
+                            rect=QRect(
+                                scaled_x - scaled_w // 2,
+                                scaled_y - scaled_h // 2,
+                                scaled_w,
+                                scaled_h
+                            )
                         )
-                        matches.append(match)
+                        results.append(match)
                         
-                        # Blank out this match to find the next one
-                        cv2.rectangle(
-                            result_copy,
-                            max_loc,
-                            (max_loc[0] + w, max_loc[1] + h),
-                            0,
-                            -1
-                        )
-                        
-                        # Find next best match
-                        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result_copy)
-                    
-                    # Add matches to results and emit signals
-                    results.extend(matches)
-                    for match in matches:
-                        self.match_found.emit(
-                            match.template_name,
-                            match.confidence,
-                            match.position
-                        )
                         logger.debug(
-                            f"Found match for '{match.template_name}': "
-                            f"pos={match.position}, conf={match.confidence:.2f}"
+                            f"Found match for '{name}': "
+                            f"confidence={confidence:.2f}, "
+                            f"position=({scaled_x}, {scaled_y})"
                         )
+                        
+                    if not locations[0].size:
+                        msg = f"No matches above threshold {self.confidence_threshold:.2f}"
+                        failed_templates.append((name, msg))
+                        logger.debug(f"No match for '{name}': {msg}")
                         
                 except Exception as e:
-                    error_msg = f"Matching failed: {e}"
-                    logger.error(f"Error matching template '{name}': {error_msg}")
-                    self.match_failed.emit(name, error_msg)
+                    error_msg = f"Error matching template '{name}': {e}"
+                    failed_templates.append((name, error_msg))
+                    logger.error(error_msg)
                     
+            # Apply non-maxima suppression
+            if results:
+                results = self._non_max_suppression(results)
+                
+            # Save debug image if requested
+            if save_debug:
+                debug_img = image.copy()  # Use original BGR image for visualization
+                
+                # Draw all template matches
+                for match in results:
+                    # Draw rectangle in green
+                    pt1 = (
+                        int(match.rect.left() * self.capture_manager.dpi_scale),
+                        int(match.rect.top() * self.capture_manager.dpi_scale)
+                    )
+                    pt2 = (
+                        int(match.rect.right() * self.capture_manager.dpi_scale),
+                        int(match.rect.bottom() * self.capture_manager.dpi_scale)
+                    )
+                    cv2.rectangle(
+                        debug_img,
+                        pt1,
+                        pt2,
+                        (0, 255, 0),  # BGR green
+                        2
+                    )
+                    
+                    # Draw label
+                    label = f"{match.template_name} ({match.confidence:.2f})"
+                    label_pt = (
+                        pt1[0],
+                        max(0, pt1[1] - 10)  # Ensure label is in image
+                    )
+                    cv2.putText(
+                        debug_img,
+                        label,
+                        label_pt,
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.5,
+                        (0, 255, 0),  # BGR green
+                        1
+                    )
+                
+                # Save debug image
+                cv2.imwrite("debug_screenshots/matches.png", debug_img)
+                logger.debug(f"Saved debug image with {len(results)} matches")
+                
+            # Emit signals for matches
+            for match in results:
+                self.match_found.emit(
+                    match.template_name,
+                    match.confidence,
+                    match.position
+                )
+                
+            # Emit failure signals in batch
+            for name, error in failed_templates:
+                self.match_failed.emit(name, error)
+                
             return results
             
         except Exception as e:
             error_msg = f"Pattern matching failed: {e}"
             logger.error(error_msg)
-            self.match_failed.emit("test", error_msg)
+            self.match_failed.emit("", error_msg)
             return []
             
     def get_template_info(self) -> Dict[str, Dict[str, Any]]:

@@ -13,18 +13,7 @@ We develop an App for a browser game called "Total Battle" that can run in brows
 The app is a tool to extract information from the game world (the user has a top down view of a map with cities, monsters, armies, points of interests etc.) and to control certain actions (like move the camera, mouse cursor, click on objects etc.).
 To achieve this we take screenshots of the current game state and analyse them with pattern matching and ocr / optical character recognition.
 
-We have two separate screenshot functionalities:
-Pattern Matching: Takes screenshots of the entire "Total Battle" window to find patterns
-Minimap Region: Takes a separate screenshot of just the selected region for minimap coordinates
-The minimap region selection should:
-Allow user to select a region
-Take a screenshot of just that region
-Save it to debug_screenshots
-Display it in the debug window
-NOT affect or be used by the pattern matching system
-The pattern matching should:
-Continue to capture the entire game window
-Be completely independent of the minimap region selection
+
 # TECH AND LIBRARIES STACK
 - Python as coding language
 - PyQt6 for GUI development
@@ -56,9 +45,7 @@ You should always consider whether you have all the necessary context, ask quest
 # OTHER CONTEXT
 We need to keep our project toml file "pyproject" updated when we add/remove/change dependencies
 
-Project Summary:
- 
- 
+
 Documentation and Comments:
  
 - Write meaningful comments and documentation only when necessary.
@@ -85,6 +72,48 @@ Printing and Logging:
 - Mouse and keyboard automation
 - Debug visualization and logging
 - Sound notifications
+
+Pattern Matching Overlay:
+Visual Elements:
+Rectangle around match
+Crosshair at center
+Label showing confidence score
+All visual elements should be customizable:
+Colors
+Sizes
+Line thickness
+Settings should persist between sessions
+Performance & Updates:
+Update rate range: 0.1 to 30 updates/second
+Default: 1.0 updates/second
+No pause functionality needed
+Independent from debug system
+Window Management:
+Overlay syncs with game window (position/size)
+Works with both standalone and browser game windows
+Only active when game window exists
+Continues running when game window loses focus
+Must not interfere with game interaction (click-through)
+Handles DPI scaling
+New Customization Tab:
+Separate tab for visual customization options
+Settings to include:
+Update rate
+Rectangle properties (color, thickness)
+Crosshair properties (color, size, thickness)
+Label properties (color, size, format)
+Settings need to be:
+Saved to config
+Loaded on startup
+Applied immediately when changed
+Architecture:
+Completely separate from:
+OCR functionality
+Region selection
+Debug visualization
+Dedicated overlay window manager
+Proper window tracking/syncing
+Settings management integration
 
 ## Requirements
 

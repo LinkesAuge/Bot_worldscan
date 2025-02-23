@@ -16,7 +16,7 @@ from scout import (
     CONFIG_FILE,
     LOG_DIR,
 )
-from scout.core.config import ConfigManager
+from scout.config import ConfigManager
 from scout.core.logging import setup_logging
 from scout.gui.main_window import MainWindow
 from scout.core import WindowTracker, CoordinateManager
@@ -73,11 +73,7 @@ def run_app(app: QApplication, window: MainWindow) -> int:
 
 
 def main(argv: Optional[list[str]] = None) -> NoReturn:
-    """Application main entry point.
-    
-    Args:
-        argv: Command line arguments (defaults to sys.argv if not provided).
-    """
+    """Application main entry point."""
     # Initialize logging first
     init_logging()
     logger = logging.getLogger(__name__)
@@ -90,8 +86,8 @@ def main(argv: Optional[list[str]] = None) -> NoReturn:
         app.setOrganizationName(APP_ORGANIZATION)
         app.setOrganizationDomain(APP_DOMAIN)
         
-        # Initialize components
-        config = init_config()
+        # Initialize config first
+        config = ConfigManager(CONFIG_FILE)
         
         # Initialize core components
         window_tracker = WindowTracker(config)
@@ -120,19 +116,26 @@ def main(argv: Optional[list[str]] = None) -> NoReturn:
             ocr_processor
         )
         
-        # Create and show main window
+        # Create main window
         window = MainWindow(
             window_tracker=window_tracker,
             coordinate_manager=coordinate_manager,
             capture_manager=capture_manager,
             pattern_matcher=pattern_matcher,
             ocr_processor=ocr_processor,
-            debug_visualizer=debug_visualizer
+            debug_visualizer=debug_visualizer,
+            config=config  # Pass config to main window
         )
         
-        # Run application
-        exit_code = run_app(app, window)
-        sys.exit(exit_code)
+        # Show main window
+        window.show()
+        
+        # Start debug visualizer if enabled
+        if config.get_debug_config().enabled:
+            debug_visualizer.start()
+            
+        # Run event loop
+        sys.exit(app.exec())
         
     except Exception as e:
         logger.exception("Unhandled exception in main: %s", e)

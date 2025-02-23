@@ -7,7 +7,8 @@ from .config_manager import (
     OCRConfig,
     PatternConfig,
     SoundConfig,
-    DebugConfig
+    DebugConfig,
+    PatternMatchingOverlayConfig
 )
 
 __all__ = [
@@ -17,5 +18,6 @@ __all__ = [
     'OCRConfig',
     'PatternConfig',
     'SoundConfig',
-    'DebugConfig'
+    'DebugConfig',
+    'PatternMatchingOverlayConfig'
 ] 

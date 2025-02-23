@@ -175,17 +175,7 @@ class DebugVisualizer(QObject):
         ocr_processor: OCRProcessor,
         update_interval: int = 1000
     ) -> None:
-        """
-        Initialize debug visualizer.
-        
-        Args:
-            window_tracker: Window tracker instance
-            coordinate_manager: Coordinate manager instance
-            capture_manager: Capture manager instance
-            pattern_matcher: Pattern matcher instance
-            ocr_processor: OCR processor instance
-            update_interval: Preview update interval in ms
-        """
+        """Initialize debug visualizer."""
         super().__init__()
         
         self.window_tracker = window_tracker
@@ -194,117 +184,138 @@ class DebugVisualizer(QObject):
         self.pattern_matcher = pattern_matcher
         self.ocr_processor = ocr_processor
         
+        # Initialize state
+        self.last_matches = []  # Store matches
+        self.last_ocr_text = {}  # Store OCR results
+        
         # Create coordinate visualizer
         self.coord_vis = CoordinateVisualizer(
             window_tracker,
             coordinate_manager
         )
         
-        # Setup update timer
+        # Create update timer
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self._update_preview)
         self.update_timer.setInterval(update_interval)
         
-        # Debug state
-        self.last_matches: List[MatchResult] = []
-        self.last_ocr_text: Dict[str, str] = {}
-        
-        # Connect to capture events
+        # Connect signals
         self.capture_manager.capture_complete.connect(
             self._on_capture_complete
         )
-        
-        # Connect to pattern matcher events
         self.pattern_matcher.match_found.connect(
             self._on_match_found
         )
-        
-        # Connect to OCR events
         self.ocr_processor.text_found.connect(
             self._on_text_found
         )
+        
+        # Start by default
+        self.start()
         
         logger.debug("Debug visualizer initialized")
         
     def start(self) -> None:
         """Start preview updates."""
-        self.update_timer.start()
-        logger.debug("Debug visualization started")
+        if not self.update_timer.isActive():
+            self.update_timer.start()
+            logger.debug("Debug visualization started")
         
     def stop(self) -> None:
         """Stop preview updates."""
-        self.update_timer.stop()
-        logger.debug("Debug visualization stopped")
+        if self.update_timer.isActive():
+            self.update_timer.stop()
+            logger.debug("Debug visualization stopped")
         
     def _update_preview(self) -> None:
-        """Update preview image."""
+        """Update preview display."""
         try:
             # Capture window
-            image = self.capture_manager.capture_window()
+            image = self.capture_manager.capture_window(save_debug=False)
             if image is None:
+                logger.error("Failed to capture window for preview")
                 return
                 
-            # Draw coordinate overlay
-            image = self.coord_vis.draw_overlay(image)
+            # Create copy for drawing
+            debug_img = image.copy()
+            
+            # Draw coordinate system if enabled
+            if self.coord_vis:
+                debug_img = self.coord_vis.draw_overlay(debug_img)
             
             # Draw pattern matches
-            for match in self.last_matches:
-                rect = match.rect
-                cv2.rectangle(
-                    image,
-                    (rect.left(), rect.top()),
-                    (rect.right(), rect.bottom()),
-                    (0, 255, 0),
-                    2
-                )
-                
-                # Draw confidence
-                label = f"{match.template_name}: {match.confidence:.2f}"
-                cv2.putText(
-                    image,
-                    label,
-                    (rect.left(), rect.top() - 5),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.5,
-                    (0, 255, 0),
-                    1
-                )
-                
-            # Draw OCR results
-            for region_name, text in self.last_ocr_text.items():
-                rect = self.coordinate_manager.get_region(
-                    region_name,
-                    CoordinateSpace.SCREEN
-                )
-                if not rect:
-                    continue
+            if self.last_matches:
+                for match in self.last_matches:
+                    # Draw rectangle
+                    pt1 = (
+                        int(match.rect.left() * self.capture_manager.dpi_scale),
+                        int(match.rect.top() * self.capture_manager.dpi_scale)
+                    )
+                    pt2 = (
+                        int(match.rect.right() * self.capture_manager.dpi_scale),
+                        int(match.rect.bottom() * self.capture_manager.dpi_scale)
+                    )
+                    cv2.rectangle(
+                        debug_img,
+                        pt1,
+                        pt2,
+                        (0, 255, 0),  # BGR green
+                        2
+                    )
                     
-                cv2.putText(
-                    image,
-                    text,
-                    (rect.left(), rect.bottom() + 15),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.5,
-                    (0, 255, 255),
-                    1
-                )
-                
-            # Convert to QImage
-            height, width = image.shape[:2]
+                    # Draw crosshair at center
+                    center = (
+                        int(match.position.x() * self.capture_manager.dpi_scale),
+                        int(match.position.y() * self.capture_manager.dpi_scale)
+                    )
+                    size = 10
+                    cv2.line(
+                        debug_img,
+                        (center[0] - size, center[1]),
+                        (center[0] + size, center[1]),
+                        (0, 0, 255),  # BGR red
+                        2
+                    )
+                    cv2.line(
+                        debug_img,
+                        (center[0], center[1] - size),
+                        (center[0], center[1] + size),
+                        (0, 0, 255),  # BGR red
+                        2
+                    )
+                    
+                    # Draw label
+                    label = f"{match.template_name} ({match.confidence:.2f})"
+                    label_pt = (
+                        pt1[0],
+                        max(0, pt1[1] - 10)  # Ensure label is in image
+                    )
+                    cv2.putText(
+                        debug_img,
+                        label,
+                        label_pt,
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.5,
+                        (0, 255, 0),  # BGR green
+                        1
+                    )
+            
+            # Save debug image
+            cv2.imwrite("debug_screenshots/preview.png", debug_img)
+            
+            # Convert to QImage for display
+            height, width = debug_img.shape[:2]
             bytes_per_line = 3 * width
-            q_image = QImage(
-                image.data,
+            image = QImage(
+                debug_img.data,
                 width,
                 height,
                 bytes_per_line,
                 QImage.Format.Format_RGB888
-            )
+            ).rgbSwapped()  # Convert BGR to RGB
             
-            # Emit preview
-            self.preview_updated.emit(q_image)
-            
-            # Update metrics
-            self._update_metrics()
+            # Emit preview update
+            self.preview_updated.emit(image)
             
         except Exception as e:
             logger.error(f"Error updating preview: {e}")
@@ -341,8 +352,29 @@ class DebugVisualizer(QObject):
         confidence: float,
         position: QPoint
     ) -> None:
-        """Handle pattern match event."""
-        self._update_preview()
+        """Handle match found event."""
+        try:
+            # Create match result
+            match = MatchResult(
+                template_name=template,
+                confidence=confidence,
+                position=position,
+                rect=QRect(
+                    position.x() - 16,  # Assuming 32x32 template
+                    position.y() - 16,
+                    32,
+                    32
+                )
+            )
+            
+            # Update matches list
+            self.last_matches = [match]  # Keep only latest match
+            
+            # Update preview
+            self._update_preview()
+            
+        except Exception as e:
+            logger.error(f"Error handling match: {e}")
         
     def _on_text_found(self, region: str, text: str) -> None:
         """Handle OCR text event."""
