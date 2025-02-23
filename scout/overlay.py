@@ -104,6 +104,14 @@ class Overlay(QWidget):
             return
         
         x, y, width, height = pos
+        # Ensure positive coordinates
+        if x < 0:
+            width += x
+            x = 0
+        if y < 0:
+            height += y
+            y = 0
+            
         logger.debug(f"Creating overlay window at ({x}, {y}) with size {width}x{height}")
         
         # Create initial transparent overlay
@@ -120,9 +128,10 @@ class Overlay(QWidget):
             logger.error("Failed to create overlay window")
             return
         
-        # Remove window decorations
+        # Remove window decorations and set styles
         style = win32gui.GetWindowLong(hwnd, win32con.GWL_STYLE)
         style &= ~(win32con.WS_CAPTION | win32con.WS_THICKFRAME | win32con.WS_BORDER)
+        style |= win32con.WS_POPUP  # Add popup style for better overlay
         win32gui.SetWindowLong(hwnd, win32con.GWL_STYLE, style)
         
         # Set window extended styles
@@ -247,6 +256,14 @@ class Overlay(QWidget):
             return
         
         x, y, width, height = pos
+        # Ensure positive coordinates
+        if x < 0:
+            width += x
+            x = 0
+        if y < 0:
+            height += y
+            y = 0
+            
         window_title = win32gui.GetWindowText(self.window_manager.hwnd)
         
         # Handle browser-specific window adjustments
@@ -288,6 +305,10 @@ class Overlay(QWidget):
             if not hwnd:
                 logger.debug("Creating overlay window as it doesn't exist")
                 self.create_overlay_window()
+                hwnd = win32gui.FindWindow(None, self.window_name)
+                if not hwnd:
+                    logger.error("Failed to create overlay window")
+                    return
             
             # Create magenta background (will be transparent)
             overlay = np.zeros((height, width, 3), dtype=np.uint8)
@@ -304,27 +325,43 @@ class Overlay(QWidget):
                     match_x2 = match.bounds[2] - client_offset_x
                     match_y2 = match.bounds[3] - client_offset_y
                     
+                    # Adjust for negative window position
+                    if x < 0:
+                        match_x += abs(x)
+                        match_x2 += abs(x)
+                    if y < 0:
+                        match_y += abs(y)
+                        match_y2 += abs(y)
+                    
                     logger.debug(f"Drawing match - Original bounds: {match.bounds}")
                     logger.debug(f"Client offset being applied: ({client_offset_x}, {client_offset_y})")
                     logger.debug(f"Adjusted coordinates: ({match_x}, {match_y}) -> ({match_x2}, {match_y2})")
                     
-                    # Calculate center point and dimensions
-                    center_x = (match_x + match_x2) // 2
-                    center_y = (match_y + match_y2) // 2
+                    # Calculate template dimensions
                     template_width = match_x2 - match_x
                     template_height = match_y2 - match_y
+                    
+                    # Skip if dimensions are invalid
+                    if template_width <= 0 or template_height <= 0:
+                        continue
+                    
+                    # Calculate center point
+                    center_x = (match_x + match_x2) // 2
+                    center_y = (match_y + match_y2) // 2
                     
                     # Calculate scaled dimensions
                     scaled_width = int(template_width * self.rect_scale)
                     scaled_height = int(template_height * self.rect_scale)
                     
                     # Calculate new bounds ensuring they're integers
-                    new_x1 = int(center_x - scaled_width // 2)
-                    new_y1 = int(center_y - scaled_height // 2)
-                    new_x2 = int(new_x1 + scaled_width)
-                    new_y2 = int(new_y1 + scaled_height)
+                    new_x1 = max(0, min(int(center_x - scaled_width // 2), width))
+                    new_y1 = max(0, min(int(center_y - scaled_height // 2), height))
+                    new_x2 = max(0, min(int(new_x1 + scaled_width), width))
+                    new_y2 = max(0, min(int(new_y1 + scaled_height), height))
                     
-                    # Cache color tuples
+                    logger.debug(f"Drawing scaled rectangle at: ({new_x1}, {new_y1}) -> ({new_x2}, {new_y2})")
+                    
+                    # Ensure color values are tuples of integers
                     rect_color = tuple(map(int, self.rect_color))
                     font_color = tuple(map(int, self.font_color))
                     cross_color = tuple(map(int, self.cross_color))
@@ -351,7 +388,7 @@ class Overlay(QWidget):
                     )
                     
                     # Draw cross at center
-                    half_size = int(self.cross_size * self.cross_scale) // 2
+                    half_size = self.cross_size // 2
                     cv2.line(
                         overlay,
                         (center_x - half_size, center_y),
@@ -367,51 +404,28 @@ class Overlay(QWidget):
                         self.cross_thickness
                     )
             
-            # Show and position the window
+            # Show overlay
             cv2.imshow(self.window_name, overlay)
-            cv2.waitKey(1)  # Process events
+            cv2.waitKey(1)
             
-            # Find and update window properties
-            hwnd = win32gui.FindWindow(None, self.window_name)
-            if hwnd:
-                # Cache current window styles
-                current_style = win32gui.GetWindowLong(hwnd, win32con.GWL_STYLE)
-                current_ex_style = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
-                
-                # Update position and state with minimal redraw
-                win32gui.SetWindowPos(
-                    hwnd,
-                    win32con.HWND_TOPMOST,  # Always on top
-                    x, y, width, height,
-                    win32con.SWP_NOACTIVATE | win32con.SWP_SHOWWINDOW | win32con.SWP_NOREDRAW
-                )
-                
-                # Update styles only if needed
-                new_style = current_style & ~(win32con.WS_CAPTION | win32con.WS_THICKFRAME | win32con.WS_BORDER)
-                if current_style != new_style:
-                    win32gui.SetWindowLong(hwnd, win32con.GWL_STYLE, new_style)
-                
-                new_ex_style = current_ex_style | win32con.WS_EX_LAYERED | win32con.WS_EX_TRANSPARENT | win32con.WS_EX_TOPMOST
-                if current_ex_style != new_ex_style:
-                    win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, new_ex_style)
-                
-                # Ensure transparency is set
-                win32gui.SetLayeredWindowAttributes(
-                    hwnd,
-                    win32api.RGB(255, 0, 255),  # Magenta
-                    255,  # Alpha
-                    win32con.LWA_COLORKEY
-                )
-            else:
-                logger.warning("Overlay window not found after update, recreating...")
-                self.create_overlay_window()
+            # Update window position and properties
+            win32gui.SetWindowPos(
+                hwnd,
+                win32con.HWND_TOPMOST,
+                x, y, width, height,
+                win32con.SWP_NOACTIVATE | win32con.SWP_SHOWWINDOW
+            )
+            
+            # Ensure transparency
+            win32gui.SetLayeredWindowAttributes(
+                hwnd,
+                win32api.RGB(255, 0, 255),
+                255,
+                win32con.LWA_COLORKEY
+            )
             
         except Exception as e:
             logger.error(f"Error updating overlay: {str(e)}", exc_info=True)
-            try:
-                self.create_overlay_window()
-            except Exception as e2:
-                logger.error(f"Failed to recreate overlay window: {str(e2)}", exc_info=True)
 
     def toggle(self) -> None:
         """Toggle the overlay visibility."""
