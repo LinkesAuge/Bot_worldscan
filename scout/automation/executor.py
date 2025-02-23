@@ -13,6 +13,8 @@ from dataclasses import dataclass
 import time
 import logging
 from PyQt6.QtCore import QObject, pyqtSignal
+import win32api
+import win32con
 from scout.automation.core import AutomationPosition, AutomationSequence
 from scout.automation.actions import (
     ActionType, AutomationAction, ActionParamsCommon,
@@ -27,6 +29,13 @@ from scout.automation.gui.debug_tab import AutomationDebugTab
 
 logger = logging.getLogger(__name__)
 
+def is_stop_key_pressed() -> bool:
+    """Check if any stop key (Escape or Q) is pressed."""
+    return (
+        win32api.GetAsyncKeyState(win32con.VK_ESCAPE) & 0x8000 != 0 or  # Escape key
+        win32api.GetAsyncKeyState(ord('Q')) & 0x8000 != 0  # Q key
+    )
+
 @dataclass
 class ExecutionContext:
     """Context for sequence execution."""
@@ -38,6 +47,7 @@ class ExecutionContext:
     debug_tab: Optional[AutomationDebugTab] = None
     simulation_mode: bool = False
     step_delay: float = 0.5
+    loop_enabled: bool = False  # Added loop flag
 
 class SequenceExecutor(QObject):
     """
@@ -91,7 +101,7 @@ class SequenceExecutor(QObject):
         self.is_paused = False
         
         logger.info(f"Starting execution of sequence: {sequence.name}")
-        self._log_debug(f"Starting sequence: {sequence.name}")
+        self._log_debug(f"Starting sequence: {sequence.name} (Loop: {'ON' if self.context.loop_enabled else 'OFF'})")
         
         try:
             self._execute_next_step()
@@ -140,6 +150,12 @@ class SequenceExecutor(QObject):
         if self.is_paused:
             return
             
+        # Check for stop keys
+        if is_stop_key_pressed():
+            self._log_debug("Sequence stopped by user (Escape/Q pressed)")
+            self.stop_execution()
+            return
+            
         if self.current_step >= len(self.current_sequence.actions):
             self._complete_sequence()
             return
@@ -160,8 +176,8 @@ class SequenceExecutor(QObject):
             self.step_completed.emit(self.current_step)
             self.current_step += 1
             
-            # Schedule next step
-            if not self.is_paused:
+            # Schedule next step if not stopped
+            if not self.is_paused and self.is_running:
                 time.sleep(self.context.step_delay)
                 self._execute_next_step()
                 
@@ -285,7 +301,15 @@ class SequenceExecutor(QObject):
             raise ValueError("Invalid parameters for wait action")
             
         self._log_debug(f"Waiting for {params.duration} seconds")
-        time.sleep(params.duration)
+        
+        # Break wait into smaller intervals to check for stop keys
+        start_time = time.time()
+        while time.time() - start_time < params.duration:
+            if is_stop_key_pressed():
+                self._log_debug("Wait interrupted by user (Escape/Q pressed)")
+                self.stop_execution()
+                return
+            time.sleep(0.1)  # Check every 100ms
         
     def _execute_pattern_wait(self, action: AutomationAction) -> None:
         """Execute a pattern wait action."""
@@ -300,6 +324,12 @@ class SequenceExecutor(QObject):
         
         start_time = time.time()
         while time.time() - start_time < params.timeout:
+            # Check for stop keys
+            if is_stop_key_pressed():
+                self._log_debug("Pattern wait interrupted by user (Escape/Q pressed)")
+                self.stop_execution()
+                return
+                
             # Take screenshot and check for pattern
             screenshot = self.context.window_manager.capture_screenshot()
             if screenshot is None:
@@ -332,6 +362,12 @@ class SequenceExecutor(QObject):
         
         start_time = time.time()
         while time.time() - start_time < params.timeout:
+            # Check for stop keys
+            if is_stop_key_pressed():
+                self._log_debug("OCR wait interrupted by user (Escape/Q pressed)")
+                self.stop_execution()
+                return
+                
             # Take screenshot and check for text
             screenshot = self.context.window_manager.capture_screenshot()
             if screenshot is None:
@@ -354,9 +390,17 @@ class SequenceExecutor(QObject):
         
     def _complete_sequence(self) -> None:
         """Handle sequence completion."""
-        self.is_running = False
-        self._log_debug("Sequence completed")
-        self.sequence_completed.emit()
+        if self.context.loop_enabled and self.is_running:
+            # Reset step counter and continue execution
+            self.current_step = 0
+            self._log_debug("Sequence completed - restarting due to loop enabled")
+            time.sleep(self.context.step_delay)  # Add delay between loops
+            self._execute_next_step()
+        else:
+            # Normal completion
+            self.is_running = False
+            self._log_debug("Sequence completed")
+            self.sequence_completed.emit()
         
     def _handle_error(self, message: str) -> None:
         """Handle execution error."""

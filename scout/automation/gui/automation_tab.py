@@ -276,6 +276,14 @@ class SequenceBuilder(QWidget):
         # Create sequence list
         self.list_widget = QListWidget()
         self.list_widget.currentItemChanged.connect(self._on_action_selected)
+        
+        # Add loop toggle button
+        self.loop_btn = QPushButton("Loop Sequence: OFF")
+        self.loop_btn.setCheckable(True)
+        self.loop_btn.clicked.connect(self._toggle_loop)
+        self.loop_btn.setStyleSheet("background-color: #8B0000; color: white; padding: 8px; font-weight: bold;")
+        layout.addWidget(self.loop_btn)
+        
         layout.addWidget(QLabel("Action Sequence:"))
         layout.addWidget(self.list_widget)
         
@@ -780,6 +788,16 @@ class SequenceBuilder(QWidget):
             self.freq_display.setStyleSheet("color: red;")
             logger.debug("Performance poor (<70%) - display red")
 
+    def _toggle_loop(self) -> None:
+        """Toggle sequence looping on/off."""
+        is_active = self.loop_btn.isChecked()
+        self.loop_btn.setText(f"Loop Sequence: {'ON' if is_active else 'OFF'}")
+        self.loop_btn.setStyleSheet(
+            f"background-color: {'#228B22' if is_active else '#8B0000'}; "
+            "color: white; padding: 8px; font-weight: bold;"
+        )
+        logger.debug(f"Sequence looping {'enabled' if is_active else 'disabled'}")
+
 class AutomationTab(QWidget):
     """
     Main automation tab widget.
@@ -966,7 +984,8 @@ class AutomationTab(QWidget):
                 game_actions=self.game_actions,
                 debug_tab=self.debug_window.execution_tab,
                 simulation_mode=simulation,
-                step_delay=delay
+                step_delay=delay,
+                loop_enabled=self.sequence_builder.loop_btn.isChecked()  # Pass loop state
             )
             self.executor = SequenceExecutor(context)
             
@@ -981,6 +1000,7 @@ class AutomationTab(QWidget):
         # Update executor settings
         self.executor.context.simulation_mode = simulation
         self.executor.context.step_delay = delay
+        self.executor.context.loop_enabled = self.sequence_builder.loop_btn.isChecked()  # Update loop state
         
         # Clear debug window
         self.debug_window.clear_log()

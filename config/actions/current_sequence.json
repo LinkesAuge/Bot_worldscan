@@ -10,6 +10,44 @@
                 "description": null,
                 "duration": 0.5
             }
+        },
+        {
+            "type": "WAIT",
+            "params": {
+                "duration": 2.0,
+                "position_name": null,
+                "timeout": 30.0,
+                "description": null
+            }
+        },
+        {
+            "type": "DRAG",
+            "params": {
+                "end_position_name": "Position_1",
+                "position_name": "Position_2",
+                "timeout": 30.0,
+                "description": null,
+                "duration": 0.5
+            }
+        },
+        {
+            "type": "WAIT",
+            "params": {
+                "duration": 2.0,
+                "position_name": null,
+                "timeout": 30.0,
+                "description": null
+            }
+        },
+        {
+            "type": "WAIT_FOR_PATTERN",
+            "params": {
+                "pattern_name": "",
+                "position_name": null,
+                "timeout": 30.0,
+                "description": null,
+                "min_confidence": 0.8
+            }
         }
     ],
     "description": null
