@@ -101,6 +101,18 @@ class WindowManager:
             width = rect[2] - x
             height = rect[3] - y
             
+            # Ensure positive dimensions by adjusting coordinates
+            if x < 0:
+                width += x  # Reduce width by the negative offset
+                x = 0
+            if y < 0:
+                height += y  # Reduce height by the negative offset
+                y = 0
+                
+            # Ensure minimum dimensions
+            width = max(1, width)
+            height = max(1, height)
+            
             logger.debug(f"Window found at ({x}, {y}) with size {width}x{height}")
             return x, y, width, height
             

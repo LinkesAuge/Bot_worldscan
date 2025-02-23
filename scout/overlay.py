@@ -104,58 +104,50 @@ class Overlay(QWidget):
             return
         
         x, y, width, height = pos
-        # Ensure positive coordinates
-        if x < 0:
-            width += x
-            x = 0
-        if y < 0:
-            height += y
-            y = 0
-            
-        logger.debug(f"Creating overlay window at ({x}, {y}) with size {width}x{height}")
         
-        # Create initial transparent overlay
-        overlay = np.zeros((height, width, 3), dtype=np.uint8)
-        overlay[:] = (255, 0, 255)  # Magenta background for transparency
-        
-        # Create window with proper style
-        cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL | cv2.WINDOW_FREERATIO)
-        cv2.imshow(self.window_name, overlay)
-        cv2.waitKey(1)  # Process events
-        
-        hwnd = win32gui.FindWindow(None, self.window_name)
-        if not hwnd:
-            logger.error("Failed to create overlay window")
+        # Validate dimensions
+        if width <= 0 or height <= 0:
+            logger.error(f"Invalid window dimensions: {width}x{height}")
             return
         
-        # Remove window decorations and set styles
-        style = win32gui.GetWindowLong(hwnd, win32con.GWL_STYLE)
-        style &= ~(win32con.WS_CAPTION | win32con.WS_THICKFRAME | win32con.WS_BORDER)
-        style |= win32con.WS_POPUP  # Add popup style for better overlay
-        win32gui.SetWindowLong(hwnd, win32con.GWL_STYLE, style)
+        logger.debug(f"Creating overlay window at ({x}, {y}) with size {width}x{height}")
         
-        # Set window extended styles
-        ex_style = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
-        ex_style |= (win32con.WS_EX_LAYERED | win32con.WS_EX_TRANSPARENT | win32con.WS_EX_TOOLWINDOW)
-        win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, ex_style)
-        
-        # Set transparency color (magenta)
-        win32gui.SetLayeredWindowAttributes(
-            hwnd,
-            win32api.RGB(255, 0, 255),
-            255,
-            win32con.LWA_COLORKEY
-        )
-        
-        # Position window
-        win32gui.SetWindowPos(
-            hwnd,
-            win32con.HWND_TOPMOST,
-            x, y, width, height,
-            win32con.SWP_NOACTIVATE | win32con.SWP_SHOWWINDOW
-        )
-        
-        logger.debug("Overlay window created")
+        try:
+            # Create initial transparent overlay
+            overlay = np.zeros((height, width, 3), dtype=np.uint8)
+            overlay[:] = (255, 0, 255)  # Magenta background for transparency
+            
+            # Create window with proper style
+            cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL | cv2.WINDOW_FREERATIO)
+            cv2.imshow(self.window_name, overlay)
+            cv2.waitKey(1)  # Process events
+            
+            hwnd = win32gui.FindWindow(None, self.window_name)
+            if not hwnd:
+                logger.error("Failed to create overlay window")
+                return
+            
+            # Remove window decorations and set styles
+            style = win32gui.GetWindowLong(hwnd, win32con.GWL_STYLE)
+            style &= ~(win32con.WS_CAPTION | win32con.WS_THICKFRAME | win32con.WS_BORDER)
+            style |= win32con.WS_POPUP  # Add popup style for better overlay
+            win32gui.SetWindowLong(hwnd, win32con.GWL_STYLE, style)
+            
+            # Set window extended styles
+            ex_style = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
+            ex_style |= (win32con.WS_EX_LAYERED | win32con.WS_EX_TRANSPARENT | win32con.WS_EX_TOOLWINDOW)
+            win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, ex_style)
+            
+            # Position window
+            win32gui.SetWindowPos(
+                hwnd, win32con.HWND_TOPMOST,
+                x, y, width, height,
+                win32con.SWP_SHOWWINDOW
+            )
+            
+        except Exception as e:
+            logger.error(f"Error creating overlay window: {e}")
+            return
 
     def start_pattern_matching(self) -> None:
         """Start pattern matching."""

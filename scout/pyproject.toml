@@ -13,6 +13,7 @@ dependencies = [
     "pyqt6>=6.8.1",
     "pytesseract>=0.3.13",
     "pywin32>=308",
+    "pydirectinput>=1.0.4",
 ]
 
 [build-system]

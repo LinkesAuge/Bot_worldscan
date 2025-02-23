@@ -2,7 +2,9 @@ from typing import Optional, Callable, Dict, Any, Tuple
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QPushButton, 
     QLabel, QFrame, QHBoxLayout, QSlider, QColorDialog,
-    QSpinBox, QDoubleSpinBox, QGroupBox, QApplication, QMessageBox
+    QSpinBox, QDoubleSpinBox, QGroupBox, QApplication, QMessageBox,
+    QTabWidget, QListWidget, QListWidgetItem, QLineEdit, QComboBox,
+    QFileDialog, QScrollArea, QCheckBox
 )
 from PyQt6.QtCore import Qt, QTimer, QThread, QObject, pyqtSignal, QPoint
 from PyQt6.QtGui import QPalette, QColor, QIcon, QImage, QPixmap, QPainter, QPen, QBrush, QPaintEvent, QMouseEvent
@@ -21,6 +23,8 @@ import mss
 from pathlib import Path
 from scout.text_ocr import TextOCR
 from scout.window_manager import WindowManager
+from scout.automation.gui.automation_tab import AutomationTab
+from scout.actions import GameActions
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +33,8 @@ class OverlayController(QMainWindow):
     Main GUI window for controlling the overlay.
     """
     
-    def __init__(self, overlay: Overlay, overlay_settings: Dict[str, Any], pattern_settings: Dict[str, Any]) -> None:
+    def __init__(self, overlay: Overlay, overlay_settings: Dict[str, Any], pattern_settings: Dict[str, Any], 
+                 game_actions: GameActions, text_ocr: TextOCR, debug_window: DebugWindow) -> None:
         """
         Initialize the controller window.
         
@@ -37,6 +42,9 @@ class OverlayController(QMainWindow):
             overlay: Overlay instance to control
             overlay_settings: Initial overlay settings
             pattern_settings: Initial pattern matching settings
+            game_actions: GameActions instance for automation
+            text_ocr: TextOCR instance for text recognition
+            debug_window: DebugWindow instance for debugging
         """
         super().__init__()
         
@@ -52,8 +60,8 @@ class OverlayController(QMainWindow):
         # Create window manager first
         self.window_manager = WindowManager("Total Battle")
         
-        # Create debug window first
-        self.debug_window = DebugWindow()
+        # Store debug window
+        self.debug_window = debug_window
         self.debug_window.window_closed.connect(self._on_debug_window_closed)
         
         # Create pattern matcher with window manager and debug window
@@ -68,6 +76,10 @@ class OverlayController(QMainWindow):
         # Create overlay with window manager and pattern matcher
         self.overlay = Overlay(self.window_manager, pattern_settings, overlay_settings)
         
+        # Store game actions and text OCR
+        self.game_actions = game_actions
+        self.text_ocr = text_ocr
+        
         self.config_manager = ConfigManager()
         self.toggle_callback: Optional[Callable[[], None]] = None
         self.quit_callback: Optional[Callable[[], None]] = None
@@ -79,23 +91,43 @@ class OverlayController(QMainWindow):
         
         # Create UI
         self.setWindowTitle("Total Battle Scout")
-        self.setGeometry(100, 100, 400, 600)
+        self.setGeometry(100, 100, 800, 800)  # Made window larger to accommodate tabs
         
-        # Create central widget and layout
+        # Create central widget and main layout
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
-        layout = QVBoxLayout(central_widget)
+        main_layout = QVBoxLayout(central_widget)
         
-        # Create control groups
-        self.create_overlay_controls(layout, overlay_settings)
-        self.create_pattern_matching_controls(layout, pattern_settings)
-        self.create_scan_controls(layout)
+        # Create tab widget
+        self.tab_widget = QTabWidget()
+        main_layout.addWidget(self.tab_widget)
         
-        # Add quit button at the bottom
+        # Create overlay tab
+        overlay_tab = QWidget()
+        overlay_layout = QVBoxLayout(overlay_tab)
+        
+        # Move existing controls to overlay tab
+        self.create_overlay_controls(overlay_layout, overlay_settings)
+        self.create_pattern_matching_controls(overlay_layout, pattern_settings)
+        self.create_scan_controls(overlay_layout)
+        
+        # Add quit button at the bottom of overlay tab
         quit_btn = QPushButton("Quit")
         quit_btn.setStyleSheet("background-color: #aa0000; color: white; padding: 8px; font-weight: bold;")
         quit_btn.clicked.connect(self._handle_quit)
-        layout.addWidget(quit_btn)
+        overlay_layout.addWidget(quit_btn)
+        
+        # Add overlay tab
+        self.tab_widget.addTab(overlay_tab, "Overlay")
+        
+        # Create automation tab
+        self.automation_tab = AutomationTab(
+            window_manager=self.window_manager,
+            pattern_matcher=self.pattern_matcher,
+            text_ocr=self.text_ocr,
+            game_actions=self.game_actions
+        )
+        self.tab_widget.addTab(self.automation_tab, "Automation")
         
         # Create status bar
         self.status_bar = self.statusBar()
@@ -110,12 +142,6 @@ class OverlayController(QMainWindow):
             self.scan_status.setText(
                 f"Minimap region: ({scanner_settings['minimap_left']}, {scanner_settings['minimap_top']})"
             )
-        
-        # Initialize TextOCR after window_manager is created
-        self.text_ocr = TextOCR(
-            debug_window=self.debug_window,
-            window_manager=self.window_manager
-        )
         
         # Load OCR settings
         ocr_settings = self.config_manager.get_ocr_settings()

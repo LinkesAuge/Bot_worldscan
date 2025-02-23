@@ -9,10 +9,13 @@ import win32con
 from scout.overlay import Overlay
 from scout.gui import OverlayController
 from scout.pattern_matcher import PatternMatcher
+from scout.text_ocr import TextOCR
+from scout.actions import GameActions
 import logging
 from scout.config_manager import ConfigManager
 from scout.sound_manager import SoundManager
 from scout.window_manager import WindowManager
+from scout.debug_window import DebugWindow
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -83,6 +86,18 @@ def main() -> None:
         # Initialize window manager first
         window_manager = WindowManager("Total Battle")
         
+        # Create debug window
+        debug_window = DebugWindow()
+        
+        # Create game actions controller
+        game_actions = GameActions(window_manager)
+        
+        # Create text OCR
+        text_ocr = TextOCR(
+            debug_window=debug_window,
+            window_manager=window_manager
+        )
+        
         # Create overlay with window manager and settings
         overlay = Overlay(
             window_manager=window_manager,
@@ -94,7 +109,10 @@ def main() -> None:
         controller = OverlayController(
             overlay=overlay,
             overlay_settings=overlay_settings,
-            pattern_settings=pattern_settings
+            pattern_settings=pattern_settings,
+            game_actions=game_actions,
+            text_ocr=text_ocr,
+            debug_window=debug_window
         )
         
         # Set up callbacks
