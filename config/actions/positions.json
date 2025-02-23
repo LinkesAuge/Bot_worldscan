@@ -10,5 +10,11 @@
         "x": 2359,
         "y": 746,
         "description": null
+    },
+    "Position_3": {
+        "name": "Position_3",
+        "x": 1501,
+        "y": 593,
+        "description": null
     }
 }

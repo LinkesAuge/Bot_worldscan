@@ -63,8 +63,14 @@ class Overlay(QWidget):
         self.window_name = "TB Scout Overlay"
         self.active = overlay_settings.get("active", False)
         self.template_matching_active = False
+        
+        # Separate timers for template matching and drawing
         self.template_matching_timer = QTimer()
         self.template_matching_timer.timeout.connect(self._update_template_matching)
+        
+        self.draw_timer = QTimer()
+        self.draw_timer.timeout.connect(self._draw_overlay)
+        self.draw_timer.setInterval(33)  # ~30 FPS for drawing
         
         # Add match caching with group persistence
         self.cached_matches: List[Tuple[str, int, int, int, int, float]] = []  # Current cached matches
@@ -144,23 +150,33 @@ class Overlay(QWidget):
                 logger.error("Failed to create overlay window")
                 return
             
-            # Remove window decorations and set styles
+            # Set window styles for transparency
             style = win32gui.GetWindowLong(hwnd, win32con.GWL_STYLE)
             style &= ~(win32con.WS_CAPTION | win32con.WS_THICKFRAME | win32con.WS_BORDER)
-            style |= win32con.WS_POPUP  # Add popup style for better overlay
+            style |= win32con.WS_POPUP
             win32gui.SetWindowLong(hwnd, win32con.GWL_STYLE, style)
             
-            # Set window extended styles
+            # Set extended window styles for transparency and click-through
             ex_style = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
             ex_style |= (win32con.WS_EX_LAYERED | win32con.WS_EX_TRANSPARENT | win32con.WS_EX_TOOLWINDOW)
             win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, ex_style)
             
-            # Position window
+            # Position window and ensure it's topmost
             win32gui.SetWindowPos(
                 hwnd, win32con.HWND_TOPMOST,
                 x, y, width, height,
-                win32con.SWP_SHOWWINDOW
+                win32con.SWP_SHOWWINDOW | win32con.SWP_NOACTIVATE
             )
+            
+            # Set transparency color key
+            win32gui.SetLayeredWindowAttributes(
+                hwnd,
+                win32api.RGB(255, 0, 255),  # Magenta color key
+                0,  # Alpha (0 = fully transparent for non-magenta pixels)
+                win32con.LWA_COLORKEY
+            )
+            
+            logger.debug("Overlay window created with transparency settings")
             
         except Exception as e:
             logger.error(f"Error creating overlay window: {e}")
@@ -175,9 +191,10 @@ class Overlay(QWidget):
         if self.active and self.template_matching_active:
             self.create_overlay_window()
         
-        # Start timer for template matching updates
-        self.update_timer_interval()
-        logger.debug("Template matching timer started")
+        # Start both timers
+        self.update_timer_interval()  # This will start the template matching timer
+        self.draw_timer.start()  # Start the drawing timer
+        logger.debug("Template matching and draw timers started")
 
     def update_timer_interval(self) -> None:
         """Update the template matching timer interval based on target frequency."""
@@ -200,7 +217,7 @@ class Overlay(QWidget):
             # Set new interval and start timer
             self.template_matching_timer.setInterval(interval)
             self.template_matching_timer.start()
-            logger.info(f"Timer restarted with new interval: {interval}ms")
+            logger.info(f"Template matching timer restarted with new interval: {interval}ms")
 
     def _destroy_window_safely(self) -> None:
         """Safely destroy the overlay window if it exists."""
@@ -214,18 +231,20 @@ class Overlay(QWidget):
             logger.debug(f"Window destruction skipped: {e}")
 
     def _get_group_key(self, match: Tuple[str, int, int, int, int, float]) -> str:
-        """Get the cache key for a match based on template name and approximate position."""
-        name, x, y, _, _, _ = match
+        """Get the cache key for a match based on approximate position only (not template name)."""
+        _, x, y, _, _, _ = match
         # Use grid-based position to allow for small movements
         grid_size = self.distance_threshold
         grid_x = x // grid_size
         grid_y = y // grid_size
-        return f"{name}_{grid_x}_{grid_y}"
+        # No longer include template name in key since we want to group across templates
+        return f"pos_{grid_x}_{grid_y}"
 
     def _is_same_group(self, match1: Tuple[str, int, int, int, int, float],
                       match2: Tuple[str, int, int, int, int, float]) -> bool:
         """
-        Check if two matches belong to the same group based on template name and position.
+        Check if two matches belong to the same group based on position.
+        Matches from different templates can be grouped if they are close enough.
         
         Args:
             match1: First match tuple (name, x, y, w, h, conf)
@@ -234,16 +253,19 @@ class Overlay(QWidget):
         Returns:
             bool: True if matches are in the same group
         """
-        name1, x1, y1, _, _, _ = match1
-        name2, x2, y2, _, _, _ = match2
+        # Extract positions and dimensions
+        name1, x1, y1, w1, h1, _ = match1
+        name2, x2, y2, w2, h2, _ = match2
         
-        # Must be same template type
-        if name1 != name2:
-            return False
-            
-        # Check if positions are within threshold
-        return (abs(x1 - x2) <= self.distance_threshold and
-                abs(y1 - y2) <= self.distance_threshold)
+        # Calculate centers
+        center1_x = x1 + w1 // 2
+        center1_y = y1 + h1 // 2
+        center2_x = x2 + w2 // 2
+        center2_y = y2 + h2 // 2
+        
+        # Check if centers are within threshold
+        return (abs(center1_x - center2_x) <= self.distance_threshold and
+                abs(center1_y - center2_y) <= self.distance_threshold)
 
     def _update_template_matching(self) -> None:
         """Run template matching update cycle."""
@@ -297,15 +319,31 @@ class Overlay(QWidget):
             # First, add all current matches
             for current_match in current_matches:
                 group_key = self._get_group_key(current_match)
-                all_matches.append(current_match)
-                new_counters[group_key] = 0  # Reset counter for found matches
+                # Check if we already have a match in this group
+                existing_match = None
+                for match in all_matches:
+                    if self._is_same_group(current_match, match):
+                        existing_match = match
+                        break
+                
+                if existing_match:
+                    # If existing match has lower confidence, replace it
+                    if current_match[5] > existing_match[5]:
+                        all_matches.remove(existing_match)
+                        all_matches.append(current_match)
+                        new_counters[group_key] = 0
+                else:
+                    # No existing match in this group, add new match
+                    all_matches.append(current_match)
+                    new_counters[group_key] = 0
+                
                 logger.debug(f"Added current match for group {group_key}")
             
             # Then check cached matches
             for cached_match in self.cached_matches:
                 group_key = self._get_group_key(cached_match)
                 
-                # Skip if this exact group was already handled
+                # Skip if this group already has a match
                 if group_key in new_counters:
                     continue
                 
@@ -329,20 +367,16 @@ class Overlay(QWidget):
             self.cached_matches = all_matches
             self.match_counters = new_counters
             
-            # Update overlay with all matches (new and cached)
-            self.update(all_matches)
-            
         except Exception as e:
             logger.error(f"Error in template matching update: {e}", exc_info=True)
 
-    def update(self, matches: List[Tuple[str, int, int, int, int, float]]) -> None:
-        """Update the overlay window with template matching results."""
+    def _draw_overlay(self) -> None:
+        """Draw the overlay with current matches."""
         if not self.active or not self.template_matching_active:
-            logger.debug(f"Update skipped - active: {self.active}, template matching: {self.template_matching_active}")
             return
         
         if not self.window_manager.find_window():
-            logger.warning("Target window not found during update")
+            logger.warning("Target window not found during draw")
             return
         
         pos = self.window_manager.get_window_position()
@@ -410,10 +444,10 @@ class Overlay(QWidget):
             overlay[:] = (255, 0, 255)  # Set background to magenta
             
             # Only draw matches if we have any
-            if matches:
-                logger.debug(f"Drawing {len(matches)} matches on overlay")
+            if self.cached_matches:
+                logger.debug(f"Drawing {len(self.cached_matches)} matches on overlay")
                 # Draw matches
-                for name, match_x, match_y, match_width, match_height, confidence in matches:
+                for name, match_x, match_y, match_width, match_height, confidence in self.cached_matches:
                     # Adjust match position by client offset
                     match_x = match_x - client_offset_x
                     match_y = match_y - client_offset_y
@@ -498,43 +532,31 @@ class Overlay(QWidget):
             cv2.imshow(self.window_name, overlay)
             cv2.waitKey(1)
             
-            # Update window position and properties
+            # Update window position and ensure topmost
             win32gui.SetWindowPos(
                 hwnd,
                 win32con.HWND_TOPMOST,
                 x, y, width, height,
-                win32con.SWP_NOACTIVATE | win32con.SWP_SHOWWINDOW
+                win32con.SWP_SHOWWINDOW | win32con.SWP_NOACTIVATE
             )
             
-            # Ensure transparency
+            # Refresh transparency settings
             win32gui.SetLayeredWindowAttributes(
                 hwnd,
-                win32api.RGB(255, 0, 255),
-                255,
+                win32api.RGB(255, 0, 255),  # Magenta color key
+                0,  # Alpha (0 = fully transparent for non-magenta pixels)
                 win32con.LWA_COLORKEY
             )
             
         except Exception as e:
             logger.error(f"Error updating overlay: {str(e)}", exc_info=True)
 
-    def toggle(self) -> None:
-        """Toggle the overlay visibility."""
-        previous_state = self.active
-        self.active = not self.active
-        logger.info(f"Overlay {'activated' if self.active else 'deactivated'}")
-        
-        # Only destroy window if we're turning off
-        if not self.active:
-            self._destroy_window_safely()
-        # Only create window if we're turning on AND template matching is active
-        elif self.template_matching_active:
-            self.create_overlay_window() 
-
     def stop_template_matching(self) -> None:
         """Stop template matching."""
         logger.info("Stopping template matching")
         self.template_matching_active = False
         self.template_matching_timer.stop()
+        self.draw_timer.stop()
         
         # Reset template matcher frequency
         self.template_matcher.update_frequency = 0.0
@@ -548,4 +570,17 @@ class Overlay(QWidget):
         self._destroy_window_safely()
         
         # Clear any existing matches from display
-        self.update([]) 
+        self._draw_overlay()
+
+    def toggle(self) -> None:
+        """Toggle the overlay visibility."""
+        previous_state = self.active
+        self.active = not self.active
+        logger.info(f"Overlay {'activated' if self.active else 'deactivated'}")
+        
+        # Only destroy window if we're turning off
+        if not self.active:
+            self._destroy_window_safely()
+        # Only create window if we're turning on AND template matching is active
+        elif self.template_matching_active:
+            self.create_overlay_window() 
