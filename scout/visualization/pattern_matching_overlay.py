@@ -236,24 +236,21 @@ class PatternMatchingOverlay(QWidget):
             self.error_occurred.emit(str(e))
     
     def _update_geometry(self) -> None:
-        """Update overlay geometry with DPI scaling."""
+        """Update overlay geometry to match client area."""
         try:
+            # Get client rect
             client_rect = self.window_tracker.get_client_rect()
-            if client_rect:
-                # Get screen-relative coordinates
-                scaled_rect = QRect(
-                    int(client_rect.x() * self._last_dpi_scale),
-                    int(client_rect.y() * self._last_dpi_scale),
-                    int(client_rect.width() * self._last_dpi_scale),
-                    int(client_rect.height() * self._last_dpi_scale)
-                )
+            if not client_rect:
+                logger.warning("Could not get client rect")
+                return
                 
-                # Update geometry and ensure visibility
-                logger.debug(f"Updating overlay geometry from {self.geometry()} to {scaled_rect}")
-                self.setGeometry(scaled_rect)
-                self.show()
-                self.raise_()  # Bring to front
-                logger.debug(f"Updated overlay geometry and raised window")
+            # Set overlay geometry to match client area exactly
+            self.setGeometry(client_rect)
+            self.show()
+            self.raise_()
+            
+            logger.debug(f"Updated overlay geometry to: {client_rect}")
+            
         except Exception as e:
             logger.error(f"Error updating geometry: {e}")
             self.error_occurred.emit(str(e))
@@ -291,17 +288,8 @@ class PatternMatchingOverlay(QWidget):
     def _on_window_moved(self, rect: QRect) -> None:
         """Handle window moved event."""
         try:
-            logger.debug(f"Window moved event received: {rect}")
-            # Update overlay position and size
-            client_rect = self.window_tracker.get_client_rect()
-            if client_rect:
-                logger.debug(f"Updating overlay geometry to: {client_rect}")
-                self.setGeometry(client_rect)
-                self.show()
-                self.raise_()
-                logger.info(f"Overlay repositioned at: {self.geometry()}")
-            else:
-                logger.warning("Window moved but could not get client rect")
+            logger.debug("Window moved, updating geometry")
+            self._update_geometry()
         except Exception as e:
             logger.error(f"Error handling window move: {e}")
             self.error_occurred.emit(str(e))
@@ -327,89 +315,160 @@ class PatternMatchingOverlay(QWidget):
         logger.debug("Overlay settings updated")
     
     def paintEvent(self, event: QPaintEvent) -> None:
-        """Draw overlay content."""
+        """Draw pattern matches on the overlay.
+        
+        This method handles:
+        - Drawing rectangles around matches
+        - Drawing crosshairs at match centers
+        - Drawing labels with match info
+        - Proper coordinate transformation from screen to overlay space
+        """
         try:
-            if not self.is_active:
-                logger.debug("Paint event skipped - overlay not active")
+            # Get client rect for coordinate transformation
+            client_rect = self.window_tracker.get_client_rect()
+            if not client_rect:
+                logger.warning("Could not get client rect for coordinate transformation")
                 return
                 
-            logger.debug("Paint event started")
+            # Create painter
             painter = QPainter(self)
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             
-            # Clear background to fully transparent
-            painter.fillRect(self.rect(), QColor(0, 0, 0, 0))
+            # Make window transparent
+            painter.fillRect(self.rect(), QColor(0, 0, 0, 1))
             
-            # Draw grouped matches with z-ordering
-            for group in sorted(self.grouped_matches, key=lambda g: g.confidence):
+            # Draw all match groups
+            for group in self._group_matches():
                 self._draw_group(painter, group)
                 
-            logger.debug(f"Paint event completed - drew {len(self.grouped_matches)} match groups")
-                
         except Exception as e:
-            logger.error(f"Error painting overlay: {e}")
+            logger.error(f"Error in paintEvent: {e}")
             self.error_occurred.emit(str(e))
-    
+            
     def _draw_group(self, painter: QPainter, group: GroupedMatch) -> None:
-        """Draw a grouped match."""
+        """Draw a group of matches.
+        
+        Args:
+            painter: QPainter instance
+            group: Group of matches to draw
+        """
         try:
-            logger.debug(f"Drawing group: {group.template_name} (conf={group.confidence:.2f}, count={group.count})")
-            # Scale rectangle
-            rect = self.settings.scale_match_rect(group.rect)
+            # Get client rect for coordinate transformation
+            client_rect = self.window_tracker.get_client_rect()
+            if not client_rect:
+                logger.warning("Could not get client rect for coordinate transformation")
+                return
+                
+            # Get screen rect for offset calculation
+            screen_rect = group.rect
+            
+            # Transform to overlay coordinates by subtracting client rect position
+            # This works because the overlay is positioned exactly at the client rect
+            overlay_rect = QRect(
+                screen_rect.x() - client_rect.x(),
+                screen_rect.y() - client_rect.y(),
+                screen_rect.width(),
+                screen_rect.height()
+            )
+            
+            # Scale rect based on settings
+            scaled_rect = self.settings.scale_match_rect(overlay_rect)
+            
+            logger.debug(
+                f"Drawing match: screen={screen_rect}, "
+                f"client={client_rect}, "
+                f"overlay={overlay_rect}, "
+                f"scaled={scaled_rect}"
+            )
             
             # Draw rectangle
-            self._draw_rectangle(painter, rect)
+            self._draw_rectangle(painter, scaled_rect)
             
             # Draw crosshair at center
-            self._draw_crosshair(painter, rect.center())
+            center = scaled_rect.center()
+            self._draw_crosshair(painter, center)
             
-            # Draw label with group info
-            self._draw_group_label(painter, rect, group)
+            # Draw label
+            self._draw_group_label(painter, scaled_rect, group)
             
         except Exception as e:
-            logger.error(f"Error drawing group: {e}")
-            self.error_occurred.emit(str(e))
-    
+            logger.error(f"Error drawing match group: {e}")
+            self.error_occurred.emit(f"Error drawing match group: {e}")
+            
     def _draw_rectangle(self, painter: QPainter, rect: QRect) -> None:
-        """Draw match rectangle."""
-        pen = QPen(QColor(*self._bgr_to_rgb(self.settings.rect_color)))
+        """Draw rectangle with current settings.
+        
+        Args:
+            painter: QPainter instance
+            rect: Rectangle to draw
+        """
+        color = self._bgr_to_rgb(self.settings.rect_color)
+        pen = QPen(QColor(*color))
         pen.setWidth(self.settings.rect_thickness)
         painter.setPen(pen)
         painter.drawRect(rect)
-    
+        
     def _draw_crosshair(self, painter: QPainter, center: QPoint) -> None:
-        """Draw crosshair at center point."""
-        size = self.settings.crosshair_size
-        pen = QPen(QColor(*self._bgr_to_rgb(self.settings.crosshair_color)))
+        """Draw crosshair with current settings.
+        
+        Args:
+            painter: QPainter instance
+            center: Center point to draw at
+        """
+        color = self._bgr_to_rgb(self.settings.crosshair_color)
+        pen = QPen(QColor(*color))
         pen.setWidth(self.settings.crosshair_thickness)
         painter.setPen(pen)
+        
+        size = self.settings.crosshair_size
+        half_size = size // 2
+        
+        # Draw horizontal line
         painter.drawLine(
-            center.x() - size//2, center.y(),
-            center.x() + size//2, center.y()
+            center.x() - half_size,
+            center.y(),
+            center.x() + half_size,
+            center.y()
         )
+        
+        # Draw vertical line
         painter.drawLine(
-            center.x(), center.y() - size//2,
-            center.x(), center.y() + size//2
+            center.x(),
+            center.y() - half_size,
+            center.x(),
+            center.y() + half_size
         )
-    
+        
     def _draw_group_label(self, painter: QPainter, rect: QRect, group: GroupedMatch) -> None:
-        """Draw label for grouped match."""
+        """Draw label for match group.
+        
+        Args:
+            painter: QPainter instance
+            rect: Rectangle the label is for
+            group: Match group to label
+        """
+        # Format label text
         label = self.settings.label_format.format(
             name=group.template_name,
-            conf=group.confidence
+            conf=group.confidence,
+            count=group.count
         )
-        if group.count > 1:
-            label += f" (x{group.count})"
-            
-        pen = QPen(QColor(*self._bgr_to_rgb(self.settings.label_color)))
+        
+        # Set label style
+        color = self._bgr_to_rgb(self.settings.label_color)
+        pen = QPen(QColor(*color))
         pen.setWidth(self.settings.label_thickness)
         painter.setPen(pen)
+        
+        # Calculate font size based on rect height
         font = painter.font()
-        font.setPointSizeF(self.settings.label_size * 12)
+        font.setPointSizeF(self.settings.label_size * rect.height() / 100)
         painter.setFont(font)
+        
+        # Draw above rectangle
         painter.drawText(
             rect.left(),
-            rect.top() - 5,
+            rect.top() - font.pointSize(),
             label
         )
     

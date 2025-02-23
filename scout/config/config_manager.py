@@ -157,97 +157,136 @@ class ConfigManager:
     """Configuration manager for TB Scout application."""
     
     def __init__(self, config_path: str = "config.ini") -> None:
-        """Initialize configuration manager."""
+        """Initialize configuration manager.
+        
+        Args:
+            config_path: Path to configuration file
+        """
         self.config_path = Path(config_path)
-        self.config = configparser.ConfigParser()
+        self.parser = configparser.ConfigParser()
         
         # Load or create config
         if self.config_path.exists():
+            logger.info(f"Loading configuration from {self.config_path}")
             self.load_config()
         else:
-            self.create_default_config()
+            logger.info(f"Creating new configuration at {self.config_path}")
+            self._create_default_config()
             
         logger.debug("Configuration manager initialized")
     
-    def create_default_config(self) -> None:
+    def load_config(self) -> None:
+        """Load configuration from file."""
+        try:
+            self.parser.read(self.config_path, encoding="utf-8")
+            logger.debug("Configuration loaded successfully")
+        except Exception as e:
+            logger.error(f"Error loading config: {e}")
+            logger.info("Creating default configuration")
+            self._create_default_config()
+    
+    def save_config(self) -> None:
+        """Save configuration to file."""
+        try:
+            with open(self.config_path, "w", encoding="utf-8") as f:
+                self.parser.write(f)
+            logger.debug("Configuration saved successfully")
+        except Exception as e:
+            logger.error(f"Error saving config: {e}")
+    
+    def _create_default_config(self) -> None:
         """Create default configuration."""
-        # Window section
-        window_config = WindowConfig()
-        self.config["Window"] = {
-            "standalone_priority": str(window_config.standalone_priority),
-            "browser_detection": str(window_config.browser_detection),
-            "update_interval": str(window_config.update_interval)
+        # Window settings
+        self.parser["Window"] = {
+            "standalone_priority": "true",
+            "browser_detection": "true",
+            "update_interval": "1000",
         }
         
-        # Capture section
-        capture_config = CaptureConfig()
-        self.config["Capture"] = {
-            "debug_screenshots": str(capture_config.debug_screenshots),
-            "debug_dir": capture_config.debug_dir,
-            "save_failures": str(capture_config.save_failures)
+        # Capture settings
+        self.parser["Capture"] = {
+            "debug_screenshots": "true",
+            "debug_dir": "debug_screenshots",
+            "save_failures": "true",
         }
         
-        # OCR section
-        ocr_config = OCRConfig()
-        self.config["OCR"] = {
-            "tesseract_path": str(ocr_config.tesseract_path or ""),
-            "language": ocr_config.language,
-            "psm_mode": str(ocr_config.psm_mode),
-            "oem_mode": str(ocr_config.oem_mode),
-            "char_whitelist": ocr_config.char_whitelist
+        # OCR settings
+        self.parser["OCR"] = {
+            "tesseract_path": "",
+            "language": "eng",
+            "psm_mode": "7",
+            "oem_mode": "3",
+            "char_whitelist": "0123456789",
         }
         
-        # Pattern section
-        pattern_config = PatternConfig()
-        self.config["Pattern"] = {
-            "template_dir": pattern_config.template_dir,
-            "confidence_threshold": str(pattern_config.confidence_threshold),
-            "save_matches": str(pattern_config.save_matches)
+        # Pattern matching settings
+        self.parser["Pattern"] = {
+            "template_dir": "scout/templates",
+            "confidence_threshold": "0.9",  # Updated to 0.9
+            "save_matches": "true",
         }
         
-        # Sound section
-        sound_config = SoundConfig()
-        self.config["Sound"] = {
-            "enabled": str(sound_config.enabled),
-            "cooldown": str(sound_config.cooldown),
-            "sounds_dir": sound_config.sounds_dir
+        # Pattern matching overlay settings
+        self.parser["PatternMatchingOverlay"] = {
+            "update_rate": "1.0",
+            "rect_color": "(0, 255, 0)",
+            "rect_thickness": "2",
+            "rect_scale": "1.0",
+            "rect_min_size": "20",
+            "rect_max_size": "500",
+            "crosshair_color": "(255, 0, 0)",
+            "crosshair_size": "20",
+            "crosshair_thickness": "1",
+            "label_color": "(0, 255, 0)",
+            "label_size": "0.8",
+            "label_thickness": "2",
+            "label_format": "{name} ({conf:.2f})",
+            "group_distance": "50",
+            "max_matches": "100"
         }
         
-        # Debug section
-        debug_config = DebugConfig()
-        self.config["Debug"] = {
-            "enabled": str(debug_config.enabled),
-            "log_level": debug_config.log_level,
-            "log_dir": debug_config.log_dir,
-            "update_interval": str(debug_config.update_interval)
+        # Sound settings
+        self.parser["Sound"] = {
+            "enabled": "true",
+            "cooldown": "5.0",
+            "sounds_dir": "sounds",
         }
         
-        # Pattern Matching Overlay section
-        overlay_config = PatternMatchingOverlayConfig()
-        self.config["PatternMatchingOverlay"] = overlay_config.to_dict()
+        # Debug settings
+        self.parser["Debug"] = {
+            "enabled": "true",
+            "log_level": "DEBUG",
+            "log_dir": "logs",
+            "update_interval": "1000",
+        }
         
-        # Save default config
+        # Save default configuration
         self.save_config()
         logger.info("Created default configuration")
     
     def get_pattern_matching_overlay_config(self) -> PatternMatchingOverlayConfig:
         """Get pattern matching overlay configuration."""
         try:
-            section = self.config["PatternMatchingOverlay"]
+            section = self.parser["PatternMatchingOverlay"]
             return PatternMatchingOverlayConfig.from_dict(dict(section))
         except Exception as e:
             logger.error(f"Error loading overlay config: {e}")
             return PatternMatchingOverlayConfig()  # Return defaults
     
     def update_section(self, section: str, values: Dict[str, Any]) -> None:
-        """Update configuration section."""
+        """Update configuration section.
+        
+        Args:
+            section: Section name to update
+            values: Dictionary of values to update
+        """
         try:
-            if section not in self.config:
-                self.config[section] = {}
+            if section not in self.parser:
+                self.parser[section] = {}
                 
             # Update values
             for key, value in values.items():
-                self.config[section][key] = str(value)
+                self.parser[section][key] = str(value)
                 
             # Save changes
             self.save_config()
@@ -256,66 +295,22 @@ class ConfigManager:
         except Exception as e:
             logger.error(f"Error updating config section: {e}")
     
-    def load_config(self) -> None:
-        """Load configuration from file."""
+    def get_pattern_config(self) -> PatternConfig:
+        """Get pattern matching configuration."""
         try:
-            self.config.read(self.config_path, encoding="utf-8")
-            logger.info(f"Loaded configuration from {self.config_path}")
-            
-            # Validate and update all sections
-            required_sections = {
-                "Window": WindowConfig(),
-                "Capture": CaptureConfig(),
-                "OCR": OCRConfig(),
-                "Pattern": PatternConfig(),
-                "Sound": SoundConfig(),
-                "Debug": DebugConfig(),
-                "PatternMatchingOverlay": PatternMatchingOverlayConfig()
-            }
-            
-            config_updated = False
-            for section_name, default_config in required_sections.items():
-                if section_name not in self.config:
-                    if hasattr(default_config, "to_dict"):
-                        self.config[section_name] = default_config.to_dict()
-                    else:
-                        self.config[section_name] = {
-                            k: str(v) for k, v in asdict(default_config).items()
-                        }
-                    config_updated = True
-                    logger.debug(f"Added missing section: {section_name}")
-            
-            if config_updated:
-                self.save_config()
-                logger.info("Updated configuration with missing sections")
-                
+            section = self.parser["Pattern"]
+            return PatternConfig(
+                template_dir=section.get("template_dir", "scout/templates"),
+                confidence_threshold=float(section.get("confidence_threshold", "0.9")),
+                save_matches=section.getboolean("save_matches", True)
+            )
         except Exception as e:
-            logger.error(f"Error loading config: {e}")
-            self.create_default_config()
-    
-    def save_config(self) -> None:
-        """Save configuration to file."""
-        try:
-            # Ensure directory exists
-            self.config_path.parent.mkdir(parents=True, exist_ok=True)
-            
-            with open(self.config_path, "w", encoding="utf-8") as f:
-                self.config.write(f)
-            logger.info(f"Saved configuration to {self.config_path}")
-            
-        except Exception as e:
-            logger.error(f"Error saving config: {e}")
-            
-    def get_debug_info(self) -> Dict[str, Any]:
-        """Get configuration state for debugging."""
-        return {
-            section: dict(self.config[section])
-            for section in self.config.sections()
-        }
+            logger.error(f"Error loading pattern config: {e}")
+            return PatternConfig()  # Return defaults
 
     def get_window_config(self) -> WindowConfig:
         """Get window tracking configuration."""
-        section = self.config["Window"]
+        section = self.parser["Window"]
         return WindowConfig(
             standalone_priority=section.getboolean("standalone_priority"),
             browser_detection=section.getboolean("browser_detection"),
@@ -324,7 +319,7 @@ class ConfigManager:
         
     def get_capture_config(self) -> CaptureConfig:
         """Get screen capture configuration."""
-        section = self.config["Capture"]
+        section = self.parser["Capture"]
         return CaptureConfig(
             debug_screenshots=section.getboolean("debug_screenshots"),
             debug_dir=section.get("debug_dir"),
@@ -333,7 +328,7 @@ class ConfigManager:
         
     def get_ocr_config(self) -> OCRConfig:
         """Get OCR processing configuration."""
-        section = self.config["OCR"]
+        section = self.parser["OCR"]
         return OCRConfig(
             tesseract_path=section.get("tesseract_path") or None,
             language=section.get("language"),
@@ -342,18 +337,9 @@ class ConfigManager:
             char_whitelist=section.get("char_whitelist")
         )
         
-    def get_pattern_config(self) -> PatternConfig:
-        """Get pattern matching configuration."""
-        section = self.config["Pattern"]
-        return PatternConfig(
-            template_dir=section.get("template_dir"),
-            confidence_threshold=section.getfloat("confidence_threshold"),
-            save_matches=section.getboolean("save_matches")
-        )
-        
     def get_sound_config(self) -> SoundConfig:
         """Get sound system configuration."""
-        section = self.config["Sound"]
+        section = self.parser["Sound"]
         return SoundConfig(
             enabled=section.getboolean("enabled"),
             cooldown=section.getfloat("cooldown"),
@@ -362,7 +348,7 @@ class ConfigManager:
         
     def get_debug_config(self) -> DebugConfig:
         """Get debug system configuration."""
-        section = self.config["Debug"]
+        section = self.parser["Debug"]
         return DebugConfig(
             enabled=section.getboolean("enabled"),
             log_level=section.get("log_level"),

@@ -21,6 +21,7 @@ from PyQt6.QtCore import QSettings
 
 from ...capture import PatternMatcher
 from ...core import CoordinateManager
+from ...config import ConfigManager
 
 logger = logging.getLogger(__name__)
 
@@ -38,12 +39,13 @@ class PatternMatchingWidget(QWidget):
     
     # Signals
     template_added = pyqtSignal(str)  # template_name
-    template_removed = pyqtSignal(str)  # template_name
+    template_removed = pyqtSignal(str)
     
     def __init__(
         self,
         pattern_matcher: PatternMatcher,
         coordinate_manager: CoordinateManager,
+        config: ConfigManager,
         parent: Optional[QWidget] = None
     ) -> None:
         """
@@ -52,20 +54,19 @@ class PatternMatchingWidget(QWidget):
         Args:
             pattern_matcher: Pattern matcher instance
             coordinate_manager: Coordinate manager instance
+            config: Configuration manager instance
             parent: Optional parent widget
         """
         super().__init__(parent)
         
         self.pattern_matcher = pattern_matcher
         self.coordinate_manager = coordinate_manager
+        self.config = config
         
         # Initialize state
         self.active = False
         self.update_interval = 1000  # ms
         self.is_updating = False  # Flag to prevent overlapping updates
-        
-        # Load settings
-        self.settings = QSettings()
         
         # Setup UI
         self._setup_ui()
@@ -170,33 +171,24 @@ class PatternMatchingWidget(QWidget):
     def _connect_signals(self) -> None:
         """Connect widget signals."""
         try:
-            # Activation signals
-            self.active_checkbox.stateChanged.connect(
-                self._on_active_changed
-            )
-            self.interval_spinbox.valueChanged.connect(
-                self._on_interval_changed
-            )
+            # Connect controls
+            self.active_checkbox.stateChanged.connect(self._on_active_changed)
+            self.interval_spinbox.valueChanged.connect(self._on_interval_changed)
+            self.confidence_spinbox.valueChanged.connect(self._on_confidence_changed)
             
-            # Confidence signals
-            self.confidence_spinbox.valueChanged.connect(
-                self._on_confidence_changed
-            )
-            
-            # Template signals
+            # Connect buttons
             self.add_button.clicked.connect(self._add_template)
             self.remove_button.clicked.connect(self._remove_template)
             self.reload_button.clicked.connect(self._reload_templates)
             
-            # Pattern matcher signals
-            self.pattern_matcher.match_found.connect(
-                self._on_match_found
-            )
-            self.pattern_matcher.match_failed.connect(
-                self._on_match_failed
-            )
+            # Connect template list
+            self.template_list.itemChanged.connect(self._on_template_state_changed)
             
-            logger.debug("Signals connected")
+            # Connect pattern matcher signals
+            self.pattern_matcher.match_found.connect(self._on_match_found)
+            self.pattern_matcher.match_failed.connect(self._on_match_failed)
+            
+            logger.debug("Pattern matching widget signals connected")
             
         except Exception as e:
             logger.error(f"Error connecting signals: {e}")
@@ -204,38 +196,18 @@ class PatternMatchingWidget(QWidget):
     def _load_settings(self) -> None:
         """Load saved settings."""
         try:
+            # Get pattern config
+            pattern_config = self.config.get_pattern_config()
+            
             # Load confidence threshold
-            confidence = self.settings.value(
-                "pattern_matching/confidence_threshold",
-                0.8,
-                type=float
-            )
-            self.confidence_spinbox.setValue(confidence)
-            self.pattern_matcher.confidence_threshold = confidence
+            self.confidence_spinbox.setValue(pattern_config.confidence_threshold)
+            self.pattern_matcher.confidence_threshold = pattern_config.confidence_threshold
             
             # Load update interval
-            interval = self.settings.value(
-                "pattern_matching/update_interval",
-                1000,
-                type=int
-            )
-            self.interval_spinbox.setValue(interval)
-            self.update_interval = interval
+            self.interval_spinbox.setValue(self.update_interval)
             
             # Load active state
-            active = self.settings.value(
-                "pattern_matching/active",
-                False,
-                type=bool
-            )
-            self.active_checkbox.setChecked(active)
-            
-            # Load active templates
-            active_templates = self.settings.value(
-                "pattern_matching/active_templates",
-                [],
-                type=list
-            )
+            self.active_checkbox.setChecked(False)  # Always start inactive
             
             # Ensure template directory exists
             self.pattern_matcher.template_dir.mkdir(parents=True, exist_ok=True)
@@ -246,12 +218,15 @@ class PatternMatchingWidget(QWidget):
             # Update template list
             self.template_list.clear()
             for name in self.pattern_matcher.templates:
-                self.template_list.addItem(name)
-                # Select if was previously active
-                if name in active_templates:
-                    self.template_list.findItems(name, Qt.MatchFlag.MatchExactly)[0].setSelected(True)
+                item = QListWidgetItem(name)
+                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                item.setCheckState(Qt.CheckState.Unchecked)
+                self.template_list.addItem(item)
             
-            logger.debug(f"Settings loaded: confidence={confidence}, interval={interval}, active={active}, templates={active_templates}")
+            logger.debug(
+                f"Settings loaded: confidence={pattern_config.confidence_threshold}, "
+                f"interval={self.update_interval}"
+            )
             
         except Exception as e:
             logger.error(f"Error loading settings: {e}")
@@ -259,31 +234,17 @@ class PatternMatchingWidget(QWidget):
     def _save_settings(self) -> None:
         """Save current settings."""
         try:
-            self.settings.setValue(
-                "pattern_matching/confidence_threshold",
-                self.confidence_spinbox.value()
-            )
-            self.settings.setValue(
-                "pattern_matching/update_interval",
-                self.interval_spinbox.value()
-            )
-            self.settings.setValue(
-                "pattern_matching/active",
-                self.active_checkbox.isChecked()
-            )
+            # Update pattern config
+            self.config.update_section("Pattern", {
+                "confidence_threshold": self.confidence_spinbox.value(),
+                "template_dir": str(self.pattern_matcher.template_dir),
+                "save_matches": "true"
+            })
             
-            # Save active templates
-            active_templates = [
-                item.text() for item in self.template_list.selectedItems()
-            ]
-            self.settings.setValue(
-                "pattern_matching/active_templates",
-                active_templates
+            logger.debug(
+                f"Settings saved: confidence={self.confidence_spinbox.value()}, "
+                f"interval={self.interval_spinbox.value()}"
             )
-            
-            self.settings.sync()
-            
-            logger.debug(f"Settings saved: confidence={self.confidence_spinbox.value()}, interval={self.interval_spinbox.value()}, active={self.active_checkbox.isChecked()}, templates={active_templates}")
             
         except Exception as e:
             logger.error(f"Error saving settings: {e}")
@@ -410,7 +371,7 @@ class PatternMatchingWidget(QWidget):
             logger.error(f"Error removing template: {e}")
             
     def _reload_templates(self) -> None:
-        """Reload template list from pattern matcher."""
+        """Reload templates and restore selection."""
         try:
             # Clear current list
             self.template_list.clear()
@@ -418,17 +379,54 @@ class PatternMatchingWidget(QWidget):
             # Get template info
             templates = self.pattern_matcher.get_template_info()
             
+            # Get previously selected templates
+            selected = self.config.get_pattern_config().active_templates
+            selected = [t.strip() for t in selected if t.strip()]
+            
             # Add templates to list
             for name in sorted(templates.keys()):
                 item = QListWidgetItem(name)
                 item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-                item.setCheckState(Qt.CheckState.Checked)  # Default to selected
+                item.setCheckState(
+                    Qt.CheckState.Checked if name in selected else Qt.CheckState.Unchecked
+                )
                 self.template_list.addItem(item)
                 
-            logger.debug(f"Reloaded {len(templates)} templates")
+            logger.debug(f"Reloaded {len(templates)} templates, {len(selected)} selected")
             
         except Exception as e:
             logger.error(f"Error reloading templates: {e}")
+
+    def _save_template_selection(self) -> None:
+        """Save currently selected templates to config."""
+        try:
+            selected = []
+            for i in range(self.template_list.count()):
+                item = self.template_list.item(i)
+                if item.checkState() == Qt.CheckState.Checked:
+                    selected.append(item.text())
+            
+            # Save to config
+            self.config.update_section("Pattern", {
+                "active_templates": selected
+            })
+            self.config.sync()
+            logger.debug(f"Saved {len(selected)} selected templates")
+            
+        except Exception as e:
+            logger.error(f"Error saving template selection: {e}")
+
+    def _on_template_state_changed(self, item: QListWidgetItem) -> None:
+        """Handle template selection change."""
+        try:
+            # Save selection
+            self._save_template_selection()
+            
+            # Update matches
+            self._update_matches()
+            
+        except Exception as e:
+            logger.error(f"Error handling template state change: {e}")
 
     def _check_update(self) -> None:
         """Check if update should proceed."""
@@ -447,7 +445,7 @@ class PatternMatchingWidget(QWidget):
             selected_templates = []
             for i in range(self.template_list.count()):
                 item = self.template_list.item(i)
-                if item and item.checkState() == Qt.CheckState.Checked:
+                if item.checkState() == Qt.CheckState.Checked:
                     selected_templates.append(item.text())
             
             if not selected_templates:

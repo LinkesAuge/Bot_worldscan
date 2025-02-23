@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
     QStatusBar,
     QMessageBox
 )
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QRect, QPoint, QObject
 from PyQt6.QtGui import QCloseEvent
 
 from ..core import WindowTracker, CoordinateManager
@@ -150,17 +150,24 @@ class MainWindow(QMainWindow):
     def _create_pattern_matching_tab(self) -> None:
         """Create pattern matching tab."""
         try:
+            # Create pattern matching widget
             self.pattern_widget = PatternMatchingWidget(
-                self.pattern_matcher,
-                self.coordinate_manager
+                pattern_matcher=self.pattern_matcher,
+                coordinate_manager=self.coordinate_manager,
+                config=self.config  # Pass config to widget
             )
+            
+            # Add to tab widget
             self.tab_widget.addTab(
                 self.pattern_widget,
                 "Pattern Matching"
             )
             
+            logger.debug("Pattern matching tab created")
+            
         except Exception as e:
             logger.error(f"Error creating pattern matching tab: {e}")
+            raise
             
     def _create_ocr_tab(self) -> None:
         """Create OCR tab."""

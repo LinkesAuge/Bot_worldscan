@@ -319,4 +319,15 @@ class CoordinateManager(QObject):
         
     def on_window_moved(self, rect: QRect) -> None:
         """Handle window moved event."""
-        logger.debug(f"Window moved: {rect}") 
+        try:
+            # Just log the move without string formatting to avoid recursion
+            logger.debug("Window moved")
+            
+            # Update any regions that need to be transformed
+            for name, region in self.regions.items():
+                if region["space"] == CoordinateSpace.WINDOW:
+                    # Transform region to new window position
+                    self.get_region(name, CoordinateSpace.SCREEN)
+                    
+        except Exception as e:
+            logger.error("Error handling window move", exc_info=True) 

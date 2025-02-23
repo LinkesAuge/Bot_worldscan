@@ -40,39 +40,38 @@ class PatternMatcher(QObject):
     # Signals
     match_found = pyqtSignal(str, float, QPoint)  # template, confidence, position
     match_failed = pyqtSignal(str, str)  # template, error
+    error_occurred = pyqtSignal(str)  # error message
     
     def __init__(
         self,
         capture_manager: CaptureManager,
-        template_dir: str = "images",
-        confidence_threshold: float = 0.95
+        template_dir: str = "scout/templates",
+        confidence_threshold: float = 0.8
     ) -> None:
-        """
-        Initialize pattern matcher.
+        """Initialize pattern matcher.
         
         Args:
             capture_manager: Capture manager instance
             template_dir: Directory containing template images
-            confidence_threshold: Minimum confidence for valid matches (0.0 to 1.0)
+            confidence_threshold: Minimum confidence for matches (0-1)
         """
         super().__init__()
         
         self.capture_manager = capture_manager
         self.template_dir = Path(template_dir)
         self.confidence_threshold = confidence_threshold
-        
-        # Template storage
         self.templates: Dict[str, np.ndarray] = {}
-        self.template_sizes: Dict[str, Tuple[int, int]] = {}
         
-        # Load initial templates
+        # Create template directory if it doesn't exist
+        self.template_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Load templates
         self.reload_templates()
         
-        logger.debug("Pattern matcher initialized")
+        logger.debug(f"Pattern matcher initialized with template dir: {template_dir}")
         
     def reload_templates(self, subdir: Optional[str] = None) -> None:
-        """
-        Reload template images from directory.
+        """Reload template images from disk.
         
         Args:
             subdir: Optional subdirectory to load from
@@ -80,45 +79,47 @@ class PatternMatcher(QObject):
         try:
             # Clear existing templates
             self.templates.clear()
-            self.template_sizes.clear()
             
-            # Build template path
+            # Get template path
             template_path = self.template_dir
             if subdir:
                 template_path = template_path / subdir
                 
             # Create directory if it doesn't exist
             template_path.mkdir(parents=True, exist_ok=True)
-                
-            # Load template images
-            for img_path in template_path.glob("*.png"):
-                try:
-                    # Load template in BGR format
-                    template = cv2.imread(str(img_path), cv2.IMREAD_COLOR)
-                    if template is None:
-                        logger.error(f"Failed to load template: {img_path}")
+            
+            # Load all template images
+            for ext in ["*.png", "*.jpg", "*.jpeg"]:
+                for file in template_path.glob(ext):
+                    try:
+                        # Load image
+                        image = cv2.imread(str(file))
+                        if image is None:
+                            logger.error(f"Failed to load template: {file}")
+                            continue
+                            
+                        # Convert to grayscale
+                        if len(image.shape) == 3:
+                            image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+                            
+                        # Store template
+                        name = file.stem
+                        self.templates[name] = image
+                        logger.debug(f"Loaded template '{name}' from {file}")
+                        
+                    except Exception as e:
+                        logger.error(f"Error loading template {file}: {e}")
                         continue
-                    
-                    # Store template size before conversion
-                    template_size = (template.shape[1], template.shape[0])
-                    
-                    # Convert to grayscale for matching
-                    template_gray = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
-                    
-                    # Store template
-                    name = img_path.stem
-                    self.templates[name] = template_gray  # Store grayscale version
-                    self.template_sizes[name] = template_size
-                    logger.debug(f"Loaded template '{name}': {template_size}")
-                    
-                except Exception as e:
-                    logger.error(f"Error loading template {img_path}: {e}")
-                    
-            logger.info(f"Loaded {len(self.templates)} templates from {template_path}")
-            
+                        
+            if not self.templates:
+                logger.warning(f"No templates found in {template_path}")
+            else:
+                logger.info(f"Loaded {len(self.templates)} templates from {template_path}")
+                
         except Exception as e:
-            logger.error(f"Error loading templates: {e}")
-            
+            logger.error(f"Error reloading templates: {e}")
+            self.templates.clear()
+        
     def _non_max_suppression(
         self,
         matches: List[MatchResult],
@@ -239,122 +240,65 @@ class PatternMatcher(QObject):
                     locations = np.where(result >= self.confidence_threshold)
                     for pt in zip(*locations[::-1]):  # Switch columns and rows
                         # Calculate match center and rectangle
-                        template_w, template_h = self.template_sizes[name]
-                        center_x = pt[0] + template_w // 2
-                        center_y = pt[1] + template_h // 2
+                        template_w, template_h = template.shape[::-1]  # Width and height are reversed in shape
+                        
+                        # Calculate match rectangle in screen coordinates
+                        rect = QRect(
+                            int(pt[0]),  # Left
+                            int(pt[1]),  # Top
+                            template_w,   # Width
+                            template_h    # Height
+                        )
+                        
+                        # Calculate center point
+                        center = QPoint(
+                            rect.x() + rect.width() // 2,
+                            rect.y() + rect.height() // 2
+                        )
                         
                         # Get confidence at this point
                         confidence = float(result[pt[1], pt[0]])
-                        
-                        # Apply DPI scaling
-                        dpi_scale = self.capture_manager.dpi_scale
-                        scaled_x = int(center_x / dpi_scale)
-                        scaled_y = int(center_y / dpi_scale)
-                        scaled_w = int(template_w / dpi_scale)
-                        scaled_h = int(template_h / dpi_scale)
                         
                         # Create match result
                         match = MatchResult(
                             template_name=name,
                             confidence=confidence,
-                            position=QPoint(scaled_x, scaled_y),
-                            rect=QRect(
-                                scaled_x - scaled_w // 2,
-                                scaled_y - scaled_h // 2,
-                                scaled_w,
-                                scaled_h
-                            )
+                            position=center,
+                            rect=rect
                         )
                         results.append(match)
                         
-                        logger.debug(
-                            f"Found match for '{name}': "
-                            f"confidence={confidence:.2f}, "
-                            f"position=({scaled_x}, {scaled_y})"
-                        )
-                        
-                    if not locations[0].size:
-                        msg = f"No matches above threshold {self.confidence_threshold:.2f}"
-                        failed_templates.append((name, msg))
-                        logger.debug(f"No match for '{name}': {msg}")
+                        # Emit match found signal
+                        self.match_found.emit(name, confidence, center)
+                        logger.debug(f"Found match: {name} at {center} with confidence {confidence:.2f}")
                         
                 except Exception as e:
-                    error_msg = f"Error matching template '{name}': {e}"
-                    failed_templates.append((name, error_msg))
+                    error_msg = f"Error matching template {name}: {e}"
                     logger.error(error_msg)
+                    failed_templates.append((name, error_msg))
+                    continue
                     
-            # Apply non-maxima suppression
-            if results:
-                results = self._non_max_suppression(results)
-                
-            # Save debug image if requested
-            if save_debug:
-                debug_img = image.copy()  # Use original BGR image for visualization
-                
-                # Draw all template matches
-                for match in results:
-                    # Draw rectangle in green
-                    pt1 = (
-                        int(match.rect.left() * self.capture_manager.dpi_scale),
-                        int(match.rect.top() * self.capture_manager.dpi_scale)
-                    )
-                    pt2 = (
-                        int(match.rect.right() * self.capture_manager.dpi_scale),
-                        int(match.rect.bottom() * self.capture_manager.dpi_scale)
-                    )
-                    cv2.rectangle(
-                        debug_img,
-                        pt1,
-                        pt2,
-                        (0, 255, 0),  # BGR green
-                        2
-                    )
-                    
-                    # Draw label
-                    label = f"{match.template_name} ({match.confidence:.2f})"
-                    label_pt = (
-                        pt1[0],
-                        max(0, pt1[1] - 10)  # Ensure label is in image
-                    )
-                    cv2.putText(
-                        debug_img,
-                        label,
-                        label_pt,
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.5,
-                        (0, 255, 0),  # BGR green
-                        1
-                    )
-                
-                # Save debug image
-                cv2.imwrite("debug_screenshots/matches.png", debug_img)
-                logger.debug(f"Saved debug image with {len(results)} matches")
-                
-            # Emit signals for matches
-            for match in results:
-                self.match_found.emit(
-                    match.template_name,
-                    match.confidence,
-                    match.position
-                )
-                
-            # Emit failure signals in batch
+            # Emit failures
             for name, error in failed_templates:
                 self.match_failed.emit(name, error)
+                
+            # Apply non-maxima suppression to remove overlapping matches
+            if results:
+                results = self._non_max_suppression(results)
                 
             return results
             
         except Exception as e:
-            error_msg = f"Pattern matching failed: {e}"
+            error_msg = f"Error finding matches: {e}"
             logger.error(error_msg)
-            self.match_failed.emit("", error_msg)
+            self.error_occurred.emit(error_msg)
             return []
             
     def get_template_info(self) -> Dict[str, Dict[str, Any]]:
         """Get information about loaded templates."""
         return {
             name: {
-                "size": self.template_sizes[name],
+                "size": self.templates[name].shape,
                 "shape": self.templates[name].shape
             }
             for name in self.templates
