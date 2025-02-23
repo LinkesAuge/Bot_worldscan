@@ -235,16 +235,38 @@ class Overlay(QWidget):
                 
             logger.debug(f"Captured image with shape: {image.shape}")
             
-            # Find matches in captured image using the tuple format
-            matches = self.template_matcher.find_all_templates(image)
-            logger.debug(f"Found {len(matches)} matches")
+            # First get all matches in GroupedMatch format
+            matches = self.template_matcher.find_matches(image)
+            logger.debug(f"Found {len(matches)} match groups")
             
-            # Log match details
-            for name, x, y, w, h, conf in matches:
-                logger.debug(f"Match: {name} at ({x}, {y}, {w}, {h}) with confidence {conf:.2f}")
+            # Convert grouped matches to tuple format with averaged positions
+            tuple_matches = []
+            for group in matches:
+                # Calculate average position for the group
+                avg_x = sum(m.bounds[0] for m in group.matches) // len(group.matches)
+                avg_y = sum(m.bounds[1] for m in group.matches) // len(group.matches)
+                # Use width and height from first match since they should be the same
+                width = group.matches[0].bounds[2]
+                height = group.matches[0].bounds[3]
+                # Use highest confidence from the group
+                confidence = max(m.confidence for m in group.matches)
+                
+                tuple_matches.append((
+                    group.template_name,
+                    avg_x,
+                    avg_y,
+                    width,
+                    height,
+                    confidence
+                ))
+                
+                logger.debug(
+                    f"Group for {group.template_name}: {len(group.matches)} matches, "
+                    f"average position: ({avg_x}, {avg_y}), confidence: {confidence:.2f}"
+                )
             
-            # Update overlay with matches
-            self.update(matches)
+            # Update overlay with grouped matches
+            self.update(tuple_matches)
             
         except Exception as e:
             logger.error(f"Error in template matching update: {e}", exc_info=True)
