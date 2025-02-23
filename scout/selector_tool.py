@@ -7,6 +7,8 @@ import win32gui
 import win32con
 import ctypes
 from ctypes.wintypes import RECT, POINT
+from scout.window_capture import WindowCapture
+from scout.window_manager import WindowManager
 
 logger = logging.getLogger(__name__)
 
@@ -14,10 +16,10 @@ class SelectorTool(QWidget):
     """
     A widget for selecting a region of the screen.
     
-    This tool creates a transparent overlay over the entire screen space
+    This tool creates a transparent overlay over the game window
     and allows users to click and drag to select a rectangular region.
-    It provides visual feedback during selection and confirms the selection
-    with the user before finalizing.
+    It uses the same window manager as the main overlay to ensure
+    consistent coordinate handling across the application.
     
     Signals:
         region_selected: Emits a dict containing the selected region coordinates
@@ -27,15 +29,18 @@ class SelectorTool(QWidget):
     region_selected = pyqtSignal(dict)  # Emits region as dict (left, top, width, height)
     selection_cancelled = pyqtSignal()  # Emits when selection is cancelled
     
-    def __init__(self, instruction_text: str = "Click and drag to select a region") -> None:
+    def __init__(self, window_manager: WindowManager, instruction_text: str = "Click and drag to select a region") -> None:
         """
         Initialize the selector tool.
         
         Args:
+            window_manager: The window manager instance for coordinate handling
             instruction_text: Text to display as instructions for the user
         """
         super().__init__()
         logger.info("Initializing selector tool")
+        
+        self.window_manager = window_manager
         
         # Set window flags for a fullscreen overlay
         self.setWindowFlags(
@@ -50,21 +55,19 @@ class SelectorTool(QWidget):
         self.current_pos = None
         self.is_selecting = False
         
-        # Get the geometry that covers all screens
-        total_rect = QApplication.primaryScreen().virtualGeometry()
-        logger.debug(f"Primary screen geometry: {total_rect}")
-        
-        # Track screen DPI scales
-        self.screen_dpi_scales = {}
-        for screen in QApplication.screens():
-            screen_geom = screen.geometry()
-            dpi_scale = screen.devicePixelRatio()
-            self.screen_dpi_scales[screen] = dpi_scale
-            logger.debug(f"Found screen with geometry: {screen_geom}, DPI scale: {dpi_scale}")
-            total_rect = total_rect.united(screen_geom)
-        
-        logger.debug(f"Setting selector to cover all screens: {total_rect}")
-        self.setGeometry(total_rect)
+        # Get the game window position
+        if not self.window_manager.find_window():
+            logger.error("Game window not found")
+            return
+            
+        window_pos = self.window_manager.get_window_position()
+        if not window_pos:
+            logger.error("Could not get window position")
+            return
+            
+        x, y, width, height = window_pos
+        logger.debug(f"Setting selector to cover game window: pos=({x}, {y}), size={width}x{height}")
+        self.setGeometry(x, y, width, height)
         
         # Add instruction label
         self.instruction_label = QLabel(instruction_text, self)
@@ -126,7 +129,7 @@ class SelectorTool(QWidget):
         if event.button() == Qt.MouseButton.LeftButton and self.is_selecting:
             self.is_selecting = False
             if self.start_pos and self.current_pos:
-                # Calculate region in logical coordinates
+                # Calculate region in logical coordinates (relative to game window)
                 x1, y1 = self.start_pos.x(), self.start_pos.y()
                 x2, y2 = self.current_pos.x(), self.current_pos.y()
                 left = min(x1, x2)
@@ -134,7 +137,7 @@ class SelectorTool(QWidget):
                 width = abs(x2 - x1)
                 height = abs(y2 - y1)
                 
-                # Get screen info and DPI scale
+                # Get screen info for DPI scaling
                 screen = QApplication.screenAt(event.pos())
                 if not screen:
                     logger.warning("Could not determine screen for selection")
@@ -143,67 +146,23 @@ class SelectorTool(QWidget):
                 dpi_scale = screen.devicePixelRatio()
                 logger.debug(f"Selection on screen with DPI scale: {dpi_scale}")
                 
-                # Get screen geometry
-                screen_geom = screen.geometry()
-                logger.debug(f"Screen geometry: {screen_geom}")
-                
-                # Get window handle and client area
-                def find_game_window(hwnd, _):
-                    if win32gui.IsWindowVisible(hwnd):
-                        title = win32gui.GetWindowText(hwnd)
-                        if "Total Battle" in title:
-                            game_windows.append(hwnd)
-                    return True
-                
-                game_windows = []
-                win32gui.EnumWindows(find_game_window, None)
-                
-                if not game_windows:
-                    logger.warning("Could not find game window, using raw coordinates")
-                    hwnd = None
-                else:
-                    hwnd = game_windows[0]
-                    logger.debug(f"Found game window: {win32gui.GetWindowText(hwnd)}")
-                
-                # Convert to physical pixels first
+                # Convert to physical coordinates using DPI scale
                 physical_left = int(left * dpi_scale)
                 physical_top = int(top * dpi_scale)
                 physical_width = int(width * dpi_scale)
                 physical_height = int(height * dpi_scale)
                 
-                # If we found the game window, adjust for client area
-                if hwnd:
-                    try:
-                        # Get window rect
-                        window_rect = win32gui.GetWindowRect(hwnd)
-                        
-                        # Get client rect
-                        client_rect = RECT()
-                        ctypes.windll.user32.GetClientRect(hwnd, ctypes.byref(client_rect))
-                        
-                        # Get client area position
-                        client_point = POINT(0, 0)
-                        ctypes.windll.user32.ClientToScreen(hwnd, ctypes.byref(client_point))
-                        
-                        # Calculate client area offset
-                        client_offset_x = client_point.x - window_rect[0]
-                        client_offset_y = client_point.y - window_rect[1]
-                        
-                        logger.debug(f"Window rect: {window_rect}")
-                        logger.debug(f"Client point: ({client_point.x}, {client_point.y})")
-                        logger.debug(f"Client offset: ({client_offset_x}, {client_offset_y})")
-                        
-                        # Adjust physical coordinates for client area
-                        physical_left -= int(client_offset_x * dpi_scale)
-                        physical_top -= int(client_offset_y * dpi_scale)
-                        
-                        logger.debug("Adjusted coordinates for client area")
-                    except Exception as e:
-                        logger.error(f"Error adjusting for client area: {e}")
+                # Get window position to make coordinates relative to screen
+                window_pos = self.window_manager.get_window_position()
+                if window_pos:
+                    window_x, window_y, _, _ = window_pos
+                    physical_left += window_x
+                    physical_top += window_y
                 
                 logger.debug(f"Coordinate conversion:")
-                logger.debug(f"Original coords: ({x1}, {y1}) -> ({x2}, {y2})")
-                logger.debug(f"Final physical coords: ({physical_left}, {physical_top}) {physical_width}x{physical_height}")
+                logger.debug(f"Window-relative coords: ({left}, {top})")
+                logger.debug(f"Screen coords: ({physical_left}, {physical_top})")
+                logger.debug(f"Physical size: {physical_width}x{physical_height}")
                 
                 region = {
                     'left': physical_left,

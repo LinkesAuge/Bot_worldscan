@@ -1,12 +1,12 @@
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional, Dict, Any
 import numpy as np
 import cv2
 import logging
-from pathlib import Path
 import pytesseract
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
-from scout.window_capture import WindowCapture
 from scout.debug_window import DebugWindow
+from scout.window_manager import WindowManager
+import mss
 
 logger = logging.getLogger(__name__)
 
@@ -21,22 +21,24 @@ class TextOCR(QObject):
     - Configurable update frequency
     
     The OCR processing is independent of pattern matching and runs at its own
-    configurable frequency.
+    configurable frequency. Uses the window_manager for all coordinate handling
+    to ensure consistency with the overlay.
     """
     
     # Signal for debug images
     debug_image = pyqtSignal(str, object, dict)  # name, image, metadata
     
-    def __init__(self, debug_window: DebugWindow) -> None:
+    def __init__(self, debug_window: DebugWindow, window_manager: WindowManager) -> None:
         """
         Initialize Text OCR processor.
         
         Args:
             debug_window: Debug window for visualization
+            window_manager: Window manager instance for window tracking and coordinate handling
         """
         super().__init__()
         self.debug_window = debug_window
-        self.window_capture = WindowCapture()  # For region capture
+        self.window_manager = window_manager
         self.active = False
         self.region: Optional[Dict[str, int]] = None
         self.update_frequency = 0.5  # Default 0.5 updates/sec
@@ -52,7 +54,7 @@ class TextOCR(QObject):
         Set the region to process.
         
         Args:
-            region: Dictionary with left, top, width, height
+            region: Dictionary with left, top, width, height in physical coordinates
         """
         self.region = region
         logger.info(f"OCR region set to: {region}")
@@ -101,11 +103,24 @@ class TextOCR(QObject):
             return
             
         try:
-            # Capture region
-            screenshot = self.window_capture.capture_screenshot(
-                method="mss",
-                region=self.region
-            )
+            # Get window position from window manager
+            if not self.window_manager.find_window():
+                logger.warning("Target window not found")
+                return
+            
+            # Set up capture region using the coordinates directly
+            capture_region = {
+                'left': self.region['left'],
+                'top': self.region['top'],
+                'width': self.region['width'],
+                'height': self.region['height']
+            }
+            
+            logger.debug(f"Capturing region at: {capture_region}")
+            
+            # Capture region using mss
+            with mss.mss() as sct:
+                screenshot = np.array(sct.grab(capture_region))
             
             if screenshot is None:
                 logger.warning("Failed to capture OCR region")
@@ -139,6 +154,7 @@ class TextOCR(QObject):
                 screenshot,
                 metadata={
                     "size": f"{screenshot.shape[1]}x{screenshot.shape[0]}",
+                    "coords": f"({self.region['left']}, {self.region['top']})",
                     "raw_text": text.strip(),
                     "value": value
                 },

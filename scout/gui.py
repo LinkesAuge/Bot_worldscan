@@ -20,6 +20,7 @@ import cv2
 import mss
 from pathlib import Path
 from scout.text_ocr import TextOCR
+from scout.window_manager import WindowManager
 
 logger = logging.getLogger(__name__)
 
@@ -48,17 +49,23 @@ class OverlayController(QMainWindow):
         }
         config.update_debug_settings(debug_settings)
         
-        self.overlay = overlay
+        # Create window manager first
+        self.window_manager = WindowManager("Total Battle")
+        
+        # Create overlay with window manager
+        self.overlay = Overlay(self.window_manager, pattern_settings, overlay_settings)
+        
+        # Create pattern matcher with window manager
+        self.pattern_matcher = PatternMatcher(
+            window_manager=self.window_manager,
+            confidence=pattern_settings["confidence"],
+            target_frequency=pattern_settings["target_frequency"],
+            sound_enabled=pattern_settings["sound_enabled"]
+        )
+        
         self.config_manager = ConfigManager()
         self.toggle_callback: Optional[Callable[[], None]] = None
         self.quit_callback: Optional[Callable[[], None]] = None
-        
-        # Get pattern matcher reference
-        if hasattr(self.overlay, 'pattern_matcher'):
-            self.pattern_matcher = self.overlay.pattern_matcher
-        else:
-            logger.error("Overlay does not have pattern_matcher attribute")
-            raise AttributeError("Overlay must have pattern_matcher attribute")
         
         # Store colors
         self.current_color = overlay_settings["rect_color"]
@@ -103,8 +110,11 @@ class OverlayController(QMainWindow):
                 f"Minimap region: ({scanner_settings['minimap_left']}, {scanner_settings['minimap_top']})"
             )
         
-        # Initialize TextOCR
-        self.text_ocr = TextOCR(self.debug_window)
+        # Initialize TextOCR after window_manager is created
+        self.text_ocr = TextOCR(
+            debug_window=self.debug_window,
+            window_manager=self.window_manager
+        )
         
         # Load OCR settings
         ocr_settings = self.config_manager.get_ocr_settings()
@@ -143,6 +153,11 @@ class OverlayController(QMainWindow):
         self.ocr_freq_input.valueChanged.connect(on_ocr_spinbox_change)
         
         logger.debug("GUI initialized")
+        
+        # Create pattern update timer - moved to end after all UI elements are initialized
+        self.pattern_update_timer = QTimer()
+        self.pattern_update_timer.timeout.connect(self.update_pattern_frequency_display)
+        self.pattern_update_timer.start(500)  # Update every 500ms
         
         # Create pattern update timer - moved to end after all UI elements are initialized
         self.pattern_update_timer = QTimer()
@@ -924,7 +939,10 @@ class OverlayController(QMainWindow):
                 self.region_selector.deleteLater()
             
             logger.debug("Creating new SelectorTool instance")
-            self.region_selector = SelectorTool("Click and drag to select minimap region")
+            self.region_selector = SelectorTool(
+                window_manager=self.window_manager,
+                instruction_text="Click and drag to select minimap region"
+            )
             self.region_selector.region_selected.connect(self._on_region_selected)
             self.region_selector.selection_cancelled.connect(self._on_region_cancelled)
             
@@ -1315,7 +1333,10 @@ class OverlayController(QMainWindow):
                 self.region_selector.deleteLater()
             
             logger.debug("Creating new SelectorTool instance")
-            self.region_selector = SelectorTool("Click and drag to select Text OCR region")
+            self.region_selector = SelectorTool(
+                window_manager=self.window_manager,
+                instruction_text="Click and drag to select Text OCR region"
+            )
             self.region_selector.region_selected.connect(self._on_ocr_region_selected)
             self.region_selector.selection_cancelled.connect(self._on_ocr_region_cancelled)
             

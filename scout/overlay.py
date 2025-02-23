@@ -304,6 +304,10 @@ class Overlay(QWidget):
                     match_x2 = match.bounds[2] - client_offset_x
                     match_y2 = match.bounds[3] - client_offset_y
                     
+                    logger.debug(f"Drawing match - Original bounds: {match.bounds}")
+                    logger.debug(f"Client offset being applied: ({client_offset_x}, {client_offset_y})")
+                    logger.debug(f"Adjusted coordinates: ({match_x}, {match_y}) -> ({match_x2}, {match_y2})")
+                    
                     # Calculate center point and dimensions
                     center_x = (match_x + match_x2) // 2
                     center_y = (match_y + match_y2) // 2

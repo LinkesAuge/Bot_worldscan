@@ -3,6 +3,10 @@ description: General rules for the project
 globs: *.py
 ---
 ---
+description: General rules for the project
+globs: *.py
+---
+---
 description: General guidance and coding for the project
 globs: *.py
 ---
