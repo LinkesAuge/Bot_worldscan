@@ -1,0 +1,2 @@
+[console_scripts]
+tb-scout = scout.__main__:main
