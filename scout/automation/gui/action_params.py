@@ -354,7 +354,7 @@ class TemplateSearchParamsWidget(BaseParamsWidget):
     def _load_templates(self) -> None:
         """Load available templates from templates directory."""
         try:
-            templates_dir = Path('templates')
+            templates_dir = Path('scout/templates')
             if templates_dir.exists():
                 for template_file in templates_dir.glob('*.png'):
                     item = QListWidgetItem(template_file.stem)

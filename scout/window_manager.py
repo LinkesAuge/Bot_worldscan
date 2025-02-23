@@ -55,24 +55,29 @@ class WindowManager:
             bool: True if the window was found, False otherwise
         """
         matching_windows = []  # List to store all matching windows
+        all_windows = []  # List to store all visible windows for debugging
         
         def enum_windows_callback(hwnd: int, _: Any) -> bool:
             if not win32gui.IsWindowVisible(hwnd):
                 return True
             
             window_title = win32gui.GetWindowText(hwnd)
+            all_windows.append(window_title)  # Store all window titles for debugging
             
             # Skip our own application windows
             if window_title == "Total Battle Scout" or window_title == "TB Scout Overlay":
+                logger.debug(f"Skipping our own window: {window_title}")
                 return True
             
             # Look for "Total Battle" anywhere in the window title
             if self.window_title in window_title:
+                logger.debug(f"Found matching window: {window_title} (hwnd: {hwnd})")
                 matching_windows.append(window_title)  # Add to list of matches
                 self.hwnd = hwnd
                 return False
             return True
         
+        logger.debug(f"Starting window search for title containing: {self.window_title}")
         self.hwnd = None
         win32gui.EnumWindows(enum_windows_callback, None)
         
@@ -83,6 +88,9 @@ class WindowManager:
                 logger.info(f"  • {window}")
         else:
             logger.warning(f"No window found matching '{self.window_title}'")
+            logger.debug("All visible windows:")
+            for window in all_windows:
+                logger.debug(f"  • {window}")
         
         return self.hwnd is not None
     
@@ -228,26 +236,45 @@ class WindowManager:
             Optional[np.ndarray]: Screenshot as numpy array in BGR format, or None if failed
         """
         try:
+            logger.debug("Attempting to capture screenshot...")
+            
             if not self.find_window():
                 logger.warning("Window not found when capturing screenshot")
+                logger.debug(f"Looking for window with title containing: {self.window_title}")
                 return None
                 
+            logger.debug(f"Found window with handle: {self.hwnd}")
+            
             # Get window position and size
             if pos := self.get_window_position():
                 x, y, width, height = pos
+                logger.debug(f"Window position: x={x}, y={y}, width={width}, height={height}")
                 
                 # Take screenshot using mss
-                with mss.mss() as sct:
-                    monitor = {"top": y, "left": x, "width": width, "height": height}
-                    screenshot = np.array(sct.grab(monitor))
-                    
-                    # Convert from BGRA to BGR
-                    screenshot = cv2.cvtColor(screenshot, cv2.COLOR_BGRA2BGR)
-                    
-                    return screenshot
-                    
-            return None
+                try:
+                    with mss.mss() as sct:
+                        monitor = {"top": y, "left": x, "width": width, "height": height}
+                        logger.debug(f"Attempting to capture with monitor settings: {monitor}")
+                        screenshot = np.array(sct.grab(monitor))
+                        
+                        if screenshot is None:
+                            logger.error("mss.grab returned None")
+                            return None
+                            
+                        logger.debug(f"Captured image shape before conversion: {screenshot.shape}")
+                        
+                        # Convert from BGRA to BGR
+                        screenshot = cv2.cvtColor(screenshot, cv2.COLOR_BGRA2BGR)
+                        logger.debug(f"Converted image shape: {screenshot.shape}")
+                        
+                        return screenshot
+                except Exception as mss_error:
+                    logger.error(f"Error during mss capture: {mss_error}", exc_info=True)
+                    return None
+            else:
+                logger.warning("Failed to get window position")
+                return None
             
         except Exception as e:
-            logger.error(f"Error capturing screenshot: {e}")
+            logger.error(f"Error capturing screenshot: {e}", exc_info=True)
             return None 

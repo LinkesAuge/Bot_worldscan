@@ -1,3 +1,13 @@
+"""
+Overlay System
+
+This module provides a transparent overlay for visualizing detected game elements.
+It handles:
+- Template matching visualization
+- Real-time updates
+- Visual feedback
+"""
+
 from typing import Optional, List, Tuple, Dict, Any
 import cv2
 import numpy as np
@@ -5,7 +15,7 @@ import win32gui
 import win32con
 import win32api
 from scout.window_manager import WindowManager
-from scout.pattern_matcher import MatchResult, GroupedMatch, PatternMatcher
+from scout.template_matcher import TemplateMatch, GroupedMatch, TemplateMatcher
 import logging
 from PyQt6.QtWidgets import QWidget
 from PyQt6.QtCore import QTimer
@@ -29,14 +39,14 @@ class Overlay(QWidget):
     - Configurable in terms of colors, sizes, and display options
     
     Key Features:
-    - Real-time pattern match visualization
+    - Real-time template match visualization
     - Click-through transparency
     - Automatic window tracking
     - Configurable visual elements
     """
     
     def __init__(self, window_manager: WindowManager, 
-                 pattern_settings: Dict[str, Any], overlay_settings: Dict[str, Any]) -> None:
+                 template_settings: Dict[str, Any], overlay_settings: Dict[str, Any]) -> None:
         """
         Initialize the overlay window with specified settings.
         
@@ -45,16 +55,16 @@ class Overlay(QWidget):
         
         Args:
             window_manager: Manager for tracking the game window
-            pattern_settings: Pattern matching configuration
+            template_settings: Template matching configuration
             overlay_settings: Visual settings (colors, sizes, etc.)
         """
         super().__init__()
         self.window_manager = window_manager
         self.window_name = "TB Scout Overlay"
         self.active = overlay_settings.get("active", False)
-        self.pattern_matching_active = False
-        self.pattern_matching_timer = QTimer()
-        self.pattern_matching_timer.timeout.connect(self._update_pattern_matching)
+        self.template_matching_active = False
+        self.template_matching_timer = QTimer()
+        self.template_matching_timer.timeout.connect(self._update_template_matching)
         
         # Convert QColor to BGR format for OpenCV
         rect_color = overlay_settings["rect_color"]
@@ -73,20 +83,20 @@ class Overlay(QWidget):
         self.cross_thickness = overlay_settings["cross_thickness"]
         self.cross_scale = overlay_settings.get("cross_scale", 1.0)  # Default to 1.0 if not set
         
-        # Create pattern matcher and make it accessible
-        self.pattern_matcher = PatternMatcher(
+        # Create template matcher and make it accessible
+        self.template_matcher = TemplateMatcher(
             window_manager=self.window_manager,
-            confidence=pattern_settings["confidence"],
-            target_frequency=pattern_settings["target_frequency"],
-            sound_enabled=pattern_settings["sound_enabled"]
+            confidence=template_settings["confidence"],
+            target_frequency=template_settings["target_frequency"],
+            sound_enabled=template_settings["sound_enabled"]
         )
         
         # Ensure templates are loaded
-        self.pattern_matcher.reload_templates()
-        template_count = len(self.pattern_matcher.templates)
-        logger.info(f"Loaded {template_count} templates for pattern matching")
+        self.template_matcher.reload_templates()
+        template_count = len(self.template_matcher.templates)
+        logger.info(f"Loaded {template_count} templates for template matching")
         if template_count == 0:
-            logger.warning("No templates found! Pattern matching will not work without templates")
+            logger.warning("No templates found! Template matching will not work without templates")
 
         logger.debug(f"Initialized overlay with rect_color={self.rect_color}, "
                     f"font_color={self.font_color}, "
@@ -149,40 +159,40 @@ class Overlay(QWidget):
             logger.error(f"Error creating overlay window: {e}")
             return
 
-    def start_pattern_matching(self) -> None:
-        """Start pattern matching."""
-        logger.info("Starting pattern matching")
-        self.pattern_matching_active = True
+    def start_template_matching(self) -> None:
+        """Start template matching."""
+        logger.info("Starting template matching")
+        self.template_matching_active = True
         
-        # Create overlay window if both overlay and pattern matching are now active
-        if self.active and self.pattern_matching_active:
+        # Create overlay window if both overlay and template matching are now active
+        if self.active and self.template_matching_active:
             self.create_overlay_window()
         
-        # Start timer for pattern matching updates
+        # Start timer for template matching updates
         self.update_timer_interval()
-        logger.debug("Pattern matching timer started")
+        logger.debug("Template matching timer started")
 
     def update_timer_interval(self) -> None:
-        """Update the pattern matching timer interval based on target frequency."""
-        if not hasattr(self.pattern_matcher, 'target_frequency'):
-            logger.warning("Pattern matcher has no target_frequency attribute")
+        """Update the template matching timer interval based on target frequency."""
+        if not hasattr(self.template_matcher, 'target_frequency'):
+            logger.warning("Template matcher has no target_frequency attribute")
             return
             
-        interval = max(int(1000 / self.pattern_matcher.target_frequency), 16)  # Minimum 16ms (60 FPS max)
+        interval = max(int(1000 / self.template_matcher.target_frequency), 16)  # Minimum 16ms (60 FPS max)
         logger.debug(
-            f"Updating pattern matching timer interval: "
-            f"target_frequency={self.pattern_matcher.target_frequency:.2f} updates/sec -> "
+            f"Updating template matching timer interval: "
+            f"target_frequency={self.template_matcher.target_frequency:.2f} updates/sec -> "
             f"interval={interval}ms"
         )
         
-        if self.pattern_matching_active:
+        if self.template_matching_active:
             # Stop the timer if it's running
-            if self.pattern_matching_timer.isActive():
-                self.pattern_matching_timer.stop()
+            if self.template_matching_timer.isActive():
+                self.template_matching_timer.stop()
             
             # Set new interval and start timer
-            self.pattern_matching_timer.setInterval(interval)
-            self.pattern_matching_timer.start()
+            self.template_matching_timer.setInterval(interval)
+            self.template_matching_timer.start()
             logger.info(f"Timer restarted with new interval: {interval}ms")
 
     def _destroy_window_safely(self) -> None:
@@ -196,46 +206,53 @@ class Overlay(QWidget):
         except Exception as e:
             logger.debug(f"Window destruction skipped: {e}")
 
-    def stop_pattern_matching(self) -> None:
-        """Stop pattern matching."""
-        logger.info("Stopping pattern matching")
-        self.pattern_matching_active = False
-        self.pattern_matching_timer.stop()
+    def stop_template_matching(self) -> None:
+        """Stop template matching."""
+        logger.info("Stopping template matching")
+        self.template_matching_active = False
+        self.template_matching_timer.stop()
         
-        # Reset pattern matcher frequency
-        self.pattern_matcher.update_frequency = 0.0
-        self.pattern_matcher.last_update_time = 0.0
+        # Reset template matcher frequency
+        self.template_matcher.update_frequency = 0.0
+        self.template_matcher.last_update_time = 0.0
         
-        # Safely destroy window when pattern matching stops
+        # Safely destroy window when template matching stops
         self._destroy_window_safely()
         
         # Clear any existing matches from display
         self.update([])
 
-    def _update_pattern_matching(self) -> None:
-        """Run pattern matching update cycle."""
+    def _update_template_matching(self) -> None:
+        """Run template matching update cycle."""
         try:
-            logger.debug("Running pattern matching update")
+            logger.debug("Running template matching update")
             
             # Capture window image
-            image = self.pattern_matcher.capture_window()
+            image = self.template_matcher.capture_window()
             if image is None:
-                logger.warning("Failed to capture window for pattern matching")
+                logger.warning("Failed to capture window for template matching")
                 return
+                
+            logger.debug(f"Captured image with shape: {image.shape}")
             
-            # Find matches in captured image
-            matches = self.pattern_matcher.find_matches(image)
+            # Find matches in captured image using the tuple format
+            matches = self.template_matcher.find_all_templates(image)
+            logger.debug(f"Found {len(matches)} matches")
+            
+            # Log match details
+            for name, x, y, w, h, conf in matches:
+                logger.debug(f"Match: {name} at ({x}, {y}, {w}, {h}) with confidence {conf:.2f}")
             
             # Update overlay with matches
             self.update(matches)
             
         except Exception as e:
-            logger.error(f"Error in pattern matching update: {e}", exc_info=True)
+            logger.error(f"Error in template matching update: {e}", exc_info=True)
 
-    def update(self, matches: List[GroupedMatch]) -> None:
-        """Update the overlay window with pattern matching results."""
-        if not self.active or not self.pattern_matching_active:
-            logger.debug(f"Update skipped - active: {self.active}, pattern matching: {self.pattern_matching_active}")
+    def update(self, matches: List[Tuple[str, int, int, int, int, float]]) -> None:
+        """Update the overlay window with template matching results."""
+        if not self.active or not self.template_matching_active:
+            logger.debug(f"Update skipped - active: {self.active}, template matching: {self.template_matching_active}")
             return
         
         if not self.window_manager.find_window():
@@ -310,40 +327,31 @@ class Overlay(QWidget):
             if matches:
                 logger.debug(f"Drawing {len(matches)} matches on overlay")
                 # Draw matches
-                for match in matches:
+                for name, match_x, match_y, match_width, match_height, confidence in matches:
                     # Adjust match position by client offset
-                    match_x = match.bounds[0] - client_offset_x
-                    match_y = match.bounds[1] - client_offset_y
-                    match_x2 = match.bounds[2] - client_offset_x
-                    match_y2 = match.bounds[3] - client_offset_y
+                    match_x = match_x - client_offset_x
+                    match_y = match_y - client_offset_y
                     
                     # Adjust for negative window position
                     if x < 0:
                         match_x += abs(x)
-                        match_x2 += abs(x)
                     if y < 0:
                         match_y += abs(y)
-                        match_y2 += abs(y)
                     
-                    logger.debug(f"Drawing match - Original bounds: {match.bounds}")
+                    logger.debug(f"Drawing match - Original bounds: ({match_x}, {match_y}, {match_width}, {match_height})")
                     logger.debug(f"Client offset being applied: ({client_offset_x}, {client_offset_y})")
-                    logger.debug(f"Adjusted coordinates: ({match_x}, {match_y}) -> ({match_x2}, {match_y2})")
-                    
-                    # Calculate template dimensions
-                    template_width = match_x2 - match_x
-                    template_height = match_y2 - match_y
                     
                     # Skip if dimensions are invalid
-                    if template_width <= 0 or template_height <= 0:
+                    if match_width <= 0 or match_height <= 0:
                         continue
                     
                     # Calculate center point
-                    center_x = (match_x + match_x2) // 2
-                    center_y = (match_y + match_y2) // 2
+                    center_x = match_x + match_width // 2
+                    center_y = match_y + match_height // 2
                     
                     # Calculate scaled dimensions
-                    scaled_width = int(template_width * self.rect_scale)
-                    scaled_height = int(template_height * self.rect_scale)
+                    scaled_width = int(match_width * self.rect_scale)
+                    scaled_height = int(match_height * self.rect_scale)
                     
                     # Calculate new bounds ensuring they're integers
                     new_x1 = max(0, min(int(center_x - scaled_width // 2), width))
@@ -368,7 +376,7 @@ class Overlay(QWidget):
                     )
                     
                     # Draw text above the rectangle
-                    text = f"{match.template_name} ({match.confidence:.2f})"
+                    text = f"{name} ({confidence:.2f})"
                     cv2.putText(
                         overlay,
                         text,
@@ -428,6 +436,6 @@ class Overlay(QWidget):
         # Only destroy window if we're turning off
         if not self.active:
             self._destroy_window_safely()
-        # Only create window if we're turning on AND pattern matching is active
-        elif self.pattern_matching_active:
+        # Only create window if we're turning on AND template matching is active
+        elif self.template_matching_active:
             self.create_overlay_window() 

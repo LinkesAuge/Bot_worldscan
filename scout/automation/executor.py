@@ -22,7 +22,7 @@ from scout.automation.actions import (
     TemplateSearchParams, OCRWaitParams
 )
 from scout.window_manager import WindowManager
-from scout.pattern_matcher import PatternMatcher
+from scout.template_matcher import TemplateMatcher
 from scout.text_ocr import TextOCR
 from scout.actions import GameActions
 from scout.automation.gui.debug_tab import AutomationDebugTab
@@ -41,7 +41,7 @@ class ExecutionContext:
     """Context for sequence execution."""
     positions: Dict[str, AutomationPosition]
     window_manager: WindowManager
-    pattern_matcher: PatternMatcher
+    template_matcher: TemplateMatcher
     text_ocr: TextOCR
     game_actions: GameActions
     debug_tab: Optional[AutomationDebugTab] = None
@@ -322,14 +322,14 @@ class SequenceExecutor(QObject):
             f"(Update freq: {params.update_frequency}/s, Duration: {params.duration}s)"
         )
         
-        # Configure pattern matcher
-        self.context.pattern_matcher.confidence = params.min_confidence
-        self.context.pattern_matcher.target_frequency = params.update_frequency
-        self.context.pattern_matcher.sound_enabled = params.sound_enabled
+        # Configure template matcher
+        self.context.template_matcher.confidence = params.min_confidence
+        self.context.template_matcher.target_frequency = params.update_frequency
+        self.context.template_matcher.sound_enabled = params.sound_enabled
         
-        # Start pattern matching if overlay is enabled
+        # Start template matching if overlay is enabled
         if params.overlay_enabled:
-            self.context.pattern_matcher.start_pattern_matching()
+            self.context.template_matcher.start_template_matching()
         
         start_time = time.time()
         try:
@@ -340,22 +340,22 @@ class SequenceExecutor(QObject):
                     self.stop_execution()
                     return
                     
-                # Take screenshot and check for patterns
+                # Take screenshot and check for templates
                 screenshot = self.context.window_manager.capture_screenshot()
                 if screenshot is None:
                     continue
                     
-                # Use existing pattern matcher to find matches
-                matches = self.context.pattern_matcher.find_all_patterns(screenshot)
+                # Use existing template matcher to find matches
+                matches = self.context.template_matcher.find_all_templates(screenshot)
                 if matches:
-                    self._log_debug(f"Found {len(matches)} pattern matches")
+                    self._log_debug(f"Found {len(matches)} template matches")
                     
                 time.sleep(1.0 / params.update_frequency)  # Control update rate
                 
         finally:
-            # Always stop pattern matching when done
+            # Always stop template matching when done
             if params.overlay_enabled:
-                self.context.pattern_matcher.stop_pattern_matching()
+                self.context.template_matcher.stop_template_matching()
             
             self._log_debug("Template search completed")
         

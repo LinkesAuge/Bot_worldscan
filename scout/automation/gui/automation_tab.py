@@ -809,13 +809,13 @@ class AutomationTab(QWidget):
     - Import/export functionality
     """
     
-    def __init__(self, window_manager, pattern_matcher, text_ocr, game_actions):
+    def __init__(self, window_manager, template_matcher, text_ocr, game_actions):
         """Initialize the automation tab."""
         super().__init__()
         
         # Store components
         self.window_manager = window_manager
-        self.pattern_matcher = pattern_matcher
+        self.template_matcher = template_matcher
         self.text_ocr = text_ocr
         self.game_actions = game_actions
         
@@ -979,7 +979,7 @@ class AutomationTab(QWidget):
             context = ExecutionContext(
                 positions=self.position_list.positions,
                 window_manager=self.window_manager,
-                pattern_matcher=self.pattern_matcher,
+                template_matcher=self.template_matcher,
                 text_ocr=self.text_ocr,
                 game_actions=self.game_actions,
                 debug_tab=self.debug_window.execution_tab,
@@ -1043,11 +1043,11 @@ class AutomationTab(QWidget):
         action_data = self.executor.current_sequence.actions[step]
         action = AutomationAction.from_dict(action_data)
         
-        # Update pattern matches if searching for templates
+        # Update template matches if searching for templates
         if action.action_type == ActionType.TEMPLATE_SEARCH:
             if screenshot is not None:
-                matches = self.pattern_matcher.find_all_patterns(screenshot)
-                self.debug_window.update_pattern_matches(matches)
+                matches = self.template_matcher.find_all_templates(screenshot)
+                self.debug_window.update_template_matches(matches)
                 
         # Update OCR text if waiting for text
         elif action.action_type == ActionType.WAIT_FOR_OCR:

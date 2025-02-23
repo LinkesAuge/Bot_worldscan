@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional, List, Dict, Any
 import pyautogui
 import cv2
 import numpy as np
@@ -10,9 +10,10 @@ import pytesseract
 from mss import mss
 import time
 from PyQt6.QtCore import QObject, pyqtSignal
-from scout.pattern_matcher import PatternMatcher
+from scout.template_matcher import TemplateMatcher
 from scout.config_manager import ConfigManager
 from scout.debug_window import DebugWindow
+from scout.window_manager import WindowManager
 
 # Set Tesseract executable path
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'  # Adjust path if needed
@@ -36,6 +37,7 @@ class WorldPosition:
     x: int  # 0-999
     y: int  # 0-999
     k: int  # World number
+    description: Optional[str] = None
     
 class WorldScanner:
     """
@@ -58,44 +60,20 @@ class WorldScanner:
     - Integration with pattern matching for target detection
     """
     
-    def __init__(self, 
-                 start_pos: WorldPosition,
-                 scan_step: int = 50,  # How many coordinates to move each step
-                 move_delay: float = 1.0,  # Delay after each move
-                 minimap_left: int = 0,
-                 minimap_top: int = 0,
-                 minimap_width: int = 0,
-                 minimap_height: int = 0,
-                 dpi_scale: float = 1.0
-                 ) -> None:
-        """
-        Initialize the world scanner with starting parameters.
-        
-        The scanner begins at a specified position (usually the player's city)
-        and explores outward in a spiral pattern. The scan_step determines how
-        far to move each time, while move_delay ensures the game has time to
-        update between movements.
-        
-        Args:
-            start_pos: Initial position to start scanning from
-            scan_step: Distance between each scan position (in coordinate units)
-            move_delay: Time to wait after moving (in seconds)
-            minimap_left: Left coordinate of minimap region
-            minimap_top: Top coordinate of minimap region
-            minimap_width: Width of minimap region
-            minimap_height: Height of minimap region
-            dpi_scale: DPI scaling factor
-        """
-        self.current_pos = start_pos
-        self.start_pos = start_pos
-        self.scan_step = scan_step
-        self.move_delay = move_delay
+    def __init__(self, window_manager: WindowManager):
+        """Initialize the world scanner."""
+        self.window_manager = window_manager
+        self.config_manager = ConfigManager()
+        self.current_pos = None
+        self.start_pos = None
+        self.scan_step = 50
+        self.move_delay = 1.0
         self.visited_positions: List[WorldPosition] = []
-        self.minimap_left = minimap_left
-        self.minimap_top = minimap_top
-        self.minimap_width = minimap_width
-        self.minimap_height = minimap_height
-        self.dpi_scale = dpi_scale
+        self.minimap_left = 0
+        self.minimap_top = 0
+        self.minimap_width = 0
+        self.minimap_height = 0
+        self.dpi_scale = 1.0
         
         # Create debug window
         self.debug_window = DebugWindow()
@@ -319,46 +297,38 @@ class WorldScanner:
             
         return positions
         
-    def scan_world_until_match(self, pattern_matcher: 'PatternMatcher', 
-                             max_distance: int = 500) -> Optional[WorldPosition]:
+    def scan_world_until_match(self, template_matcher: 'TemplateMatcher',
+                             max_attempts: int = 10) -> Optional[Tuple[int, int]]:
         """
-        Scan the world in a spiral pattern until a match is found.
+        Scan the world until a template match is found.
         
         Args:
-            pattern_matcher: PatternMatcher instance to detect matches
-            max_distance: Maximum distance from start position to search
+            template_matcher: TemplateMatcher instance to detect matches
+            max_attempts: Maximum number of scan attempts
             
         Returns:
-            Optional[WorldPosition]: Position where match was found
+            Tuple of (x, y) coordinates if match found, None otherwise
         """
-        logger.info(f"Starting world scan with max distance: {max_distance}")
-        positions = self.generate_spiral_pattern(max_distance)
-        logger.info(f"Generated {len(positions)} positions to scan")
-        
-        for pos in positions:
-            logger.info(f"Scanning position: X={pos.x}, Y={pos.y}, K={pos.k}")
+        attempts = 0
+        while attempts < max_attempts:
+            # Take screenshot
+            screenshot = self.window_manager.capture_screenshot()
+            if screenshot is None:
+                continue
+                
+            # Look for matches
+            matches = template_matcher.find_matches()
+            if matches:
+                match = matches[0]  # Take first match
+                return (match.bounds[0], match.bounds[1])
+                
+            attempts += 1
             
-            if self.move_to_position(pos):
-                self.visited_positions.append(pos)
-                logger.debug(f"Moved to position: X={pos.x}, Y={pos.y}, K={pos.k}")
-                
-                # Wait for any game animations
-                sleep(self.move_delay)
-                
-                # Check for matches
-                matches = pattern_matcher.find_matches()
-                if matches:
-                    logger.info(f"Found match at position: X={pos.x}, Y={pos.y}, K={pos.k}")
-                    return pos
-                else:
-                    logger.debug("No match found at current position")
-                    
-        logger.info("No matches found in search area")
-        return None 
+        return None
 
 def test_coordinate_reading():
     """Test function to check coordinate reading."""
-    scanner = WorldScanner(WorldPosition(x=0, y=0, k=0))
+    scanner = WorldScanner(WindowManager())
     
     logger.info("Starting coordinate reading test...")
     position = scanner.get_current_position()
@@ -413,17 +383,17 @@ class ScanWorker(QObject):
     finished = pyqtSignal()
     debug_image = pyqtSignal(object, str, int)  # image, coord_type, value
     
-    def __init__(self, scanner: WorldScanner, pattern_matcher: 'PatternMatcher') -> None:
+    def __init__(self, scanner: WorldScanner, template_matcher: 'TemplateMatcher') -> None:
         """
         Initialize scan worker.
         
         Args:
             scanner: WorldScanner instance
-            pattern_matcher: PatternMatcher instance
+            template_matcher: TemplateMatcher instance
         """
         super().__init__()
         self.scanner = scanner
-        self.pattern_matcher = pattern_matcher
+        self.template_matcher = template_matcher
         self.should_stop = False
         # Pass the debug signal to the scanner
         self.scanner.debug_image = self.debug_image
@@ -455,8 +425,8 @@ class ScanWorker(QObject):
                     
                     # Start scanning from current position
                     found_pos = self.scanner.scan_world_until_match(
-                        self.pattern_matcher,
-                        max_distance=500
+                        self.template_matcher,
+                        max_attempts=10
                     )
                     
                     if found_pos:

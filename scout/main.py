@@ -8,7 +8,7 @@ import win32api
 import win32con
 from scout.overlay import Overlay
 from scout.gui import OverlayController
-from scout.pattern_matcher import PatternMatcher
+from scout.template_matcher import TemplateMatcher
 from scout.text_ocr import TextOCR
 from scout.actions import GameActions
 import logging
@@ -29,13 +29,13 @@ logger = logging.getLogger(__name__)
 Total Battle Scout - Game Automation Tool
 
 This is the main entry point for the Total Battle Scout application, which provides automated 
-scanning and pattern matching capabilities for the Total Battle game. The application creates
+scanning and template matching capabilities for the Total Battle game. The application creates
 a transparent overlay on top of the game window to highlight detected elements and provides
 a control interface for scanning the game world.
 
 Key Components:
 - Overlay: Transparent window that highlights detected game elements
-- Pattern Matcher: Detects specific game elements using image recognition
+- Template Matcher: Detects specific game elements using image recognition
 - World Scanner: Systematically explores the game world
 - GUI Controller: User interface for controlling all features
 """
@@ -81,7 +81,7 @@ def main() -> None:
         
         # Load settings
         overlay_settings = config_manager.get_overlay_settings()
-        pattern_settings = config_manager.get_pattern_matching_settings()
+        template_settings = config_manager.get_template_matching_settings()
         
         # Initialize window manager first
         window_manager = WindowManager("Total Battle")
@@ -101,7 +101,7 @@ def main() -> None:
         # Create overlay with window manager and settings
         overlay = Overlay(
             window_manager=window_manager,
-            pattern_settings=pattern_settings,
+            template_settings=template_settings,
             overlay_settings=overlay_settings
         )
         
@@ -109,7 +109,7 @@ def main() -> None:
         controller = OverlayController(
             overlay=overlay,
             overlay_settings=overlay_settings,
-            pattern_settings=pattern_settings,
+            template_settings=template_settings,
             game_actions=game_actions,
             text_ocr=text_ocr,
             debug_window=debug_window

@@ -13,7 +13,7 @@ class ConfigManager:
     
     This class handles all persistent settings for the application, including:
     - Overlay appearance (colors, sizes, positions)
-    - Pattern matching parameters (confidence levels, FPS)
+    - Template matching parameters (confidence levels, FPS)
     - Scanner settings (regions, coordinates)
     - OCR settings (region, frequency)
     - Sound settings
@@ -74,12 +74,14 @@ class ConfigManager:
             "cross_scale": "1.0"
         }
         
-        # Pattern matching settings
-        self.config["PatternMatching"] = {
+        # Template matching settings
+        self.config["template_matching"] = {
             "active": "false",
             "confidence": "0.8",
             "target_frequency": "1.0",
-            "sound_enabled": "false"
+            "sound_enabled": "false",
+            "templates_dir": "scout/templates",
+            "grouping_threshold": "10"
         }
         
         # Scanner settings
@@ -171,13 +173,13 @@ class ConfigManager:
         self.save_config()
         logger.debug(f"Updated OCR settings: {settings}")
 
-    def get_pattern_matching_settings(self) -> Dict[str, Any]:
+    def get_template_matching_settings(self) -> Dict[str, Any]:
         """
-        Get pattern matching settings from config.
+        Get template matching settings from config.
         
         Returns:
-            Dictionary containing pattern matching settings:
-            - active: Whether pattern matching is active
+            Dictionary containing template matching settings:
+            - active: Whether template matching is active
             - confidence: Match confidence threshold
             - target_frequency: Target updates per second
             - sound_enabled: Whether sound alerts are enabled
@@ -187,21 +189,21 @@ class ConfigManager:
         config = self._load_config()
         
         return {
-            "active": config.getboolean("pattern_matching", "active", fallback=False),
-            "confidence": config.getfloat("pattern_matching", "confidence", fallback=0.8),
-            "target_frequency": config.getfloat("pattern_matching", "target_frequency", fallback=1.0),
-            "sound_enabled": config.getboolean("pattern_matching", "sound_enabled", fallback=False),
-            "templates_dir": config.get("pattern_matching", "templates_dir", fallback="scout/templates"),
-            "grouping_threshold": config.getint("pattern_matching", "grouping_threshold", fallback=10)
+            "active": config.getboolean("template_matching", "active", fallback=False),
+            "confidence": config.getfloat("template_matching", "confidence", fallback=0.8),
+            "target_frequency": config.getfloat("template_matching", "target_frequency", fallback=1.0),
+            "sound_enabled": config.getboolean("template_matching", "sound_enabled", fallback=False),
+            "templates_dir": config.get("template_matching", "templates_dir", fallback="scout/templates"),
+            "grouping_threshold": config.getint("template_matching", "grouping_threshold", fallback=10)
         }
 
-    def update_pattern_matching_settings(self, settings: Dict[str, Any]) -> None:
+    def update_template_matching_settings(self, settings: Dict[str, Any]) -> None:
         """
-        Update pattern matching settings in config.
+        Update template matching settings in config.
         
         Args:
-            settings: Dictionary containing pattern matching settings:
-                - active: Whether pattern matching is active
+            settings: Dictionary containing template matching settings:
+                - active: Whether template matching is active
                 - confidence: Match confidence threshold
                 - target_frequency: Target updates per second
                 - sound_enabled: Whether sound alerts are enabled
@@ -210,18 +212,18 @@ class ConfigManager:
         """
         config = self._load_config()
         
-        if not config.has_section("pattern_matching"):
-            config.add_section("pattern_matching")
+        if not config.has_section("template_matching"):
+            config.add_section("template_matching")
             
-        config.set("pattern_matching", "active", str(settings.get("active", False)))
-        config.set("pattern_matching", "confidence", str(settings.get("confidence", 0.8)))
-        config.set("pattern_matching", "target_frequency", str(settings.get("target_frequency", 1.0)))
-        config.set("pattern_matching", "sound_enabled", str(settings.get("sound_enabled", False)))
-        config.set("pattern_matching", "templates_dir", str(settings.get("templates_dir", "scout/templates")))
-        config.set("pattern_matching", "grouping_threshold", str(settings.get("grouping_threshold", 10)))
+        config.set("template_matching", "active", str(settings.get("active", False)))
+        config.set("template_matching", "confidence", str(settings.get("confidence", 0.8)))
+        config.set("template_matching", "target_frequency", str(settings.get("target_frequency", 1.0)))
+        config.set("template_matching", "sound_enabled", str(settings.get("sound_enabled", False)))
+        config.set("template_matching", "templates_dir", str(settings.get("templates_dir", "scout/templates")))
+        config.set("template_matching", "grouping_threshold", str(settings.get("grouping_threshold", 10)))
         
         self._save_config(config)
-        logger.debug(f"Updated pattern matching settings: {settings}")
+        logger.debug(f"Updated template matching settings: {settings}")
 
     def get_overlay_settings(self) -> Dict[str, Any]:
         """Get overlay settings from config."""

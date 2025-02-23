@@ -32,7 +32,7 @@ class ImagePreview(QLabel):
     Widget for displaying image previews with overlays.
     
     Features:
-    - Pattern match visualization
+    - Template match visualization
     - OCR text highlighting
     - Position markers
     - Mouse movement preview
@@ -47,14 +47,14 @@ class ImagePreview(QLabel):
         
         # Display settings
         self.show_positions = True
-        self.show_patterns = True
+        self.show_templates = True
         self.show_ocr = True
         self.show_mouse = True
         
         # Current state
         self.current_image: Optional[np.ndarray] = None
         self.positions: Dict[str, AutomationPosition] = {}
-        self.pattern_matches: List[tuple] = []  # [(name, x, y, w, h, conf)]
+        self.template_matches: List[tuple] = []  # [(name, x, y, w, h, conf)]
         self.ocr_regions: List[tuple] = []  # [(text, x, y, w, h)]
         self.mouse_position: Optional[tuple] = None  # (x, y)
         
@@ -70,7 +70,7 @@ class ImagePreview(QLabel):
         
     def update_pattern_matches(self, matches: List[tuple]) -> None:
         """Update pattern match regions."""
-        self.pattern_matches = matches
+        self.template_matches = matches
         self._update_display()
         
     def update_ocr_regions(self, regions: List[tuple]) -> None:
@@ -112,9 +112,9 @@ class ImagePreview(QLabel):
                     1
                 )
                 
-        # Draw pattern matches
-        if self.show_patterns:
-            for name, x, y, w, h, conf in self.pattern_matches:
+        # Draw template matches
+        if self.show_templates:
+            for name, x, y, w, h, conf in self.template_matches:
                 cv2.rectangle(
                     display,
                     (x, y),
@@ -182,7 +182,7 @@ class AutomationDebugWindow(QMainWindow):
     Features:
     - Execution log viewer
     - Image preview with overlays
-    - Position and pattern visualization
+    - Template visualization
     - OCR text display
     - Execution controls
     """
@@ -216,10 +216,10 @@ class AutomationDebugWindow(QMainWindow):
         self.show_positions_check.stateChanged.connect(self._on_preview_options_changed)
         control_layout.addWidget(self.show_positions_check)
         
-        self.show_patterns_check = QCheckBox("Show Patterns")
-        self.show_patterns_check.setChecked(True)
-        self.show_patterns_check.stateChanged.connect(self._on_preview_options_changed)
-        control_layout.addWidget(self.show_patterns_check)
+        self.show_templates_check = QCheckBox("Show Templates")
+        self.show_templates_check.setChecked(True)
+        self.show_templates_check.stateChanged.connect(self._on_preview_options_changed)
+        control_layout.addWidget(self.show_templates_check)
         
         self.show_ocr_check = QCheckBox("Show OCR")
         self.show_ocr_check.setChecked(True)
@@ -246,17 +246,17 @@ class AutomationDebugWindow(QMainWindow):
         self.execution_tab = AutomationDebugTab()
         tabs.addTab(self.execution_tab, "Execution")
         
-        # Pattern tab
-        pattern_tab = QWidget()
-        pattern_layout = QVBoxLayout()
-        pattern_tab.setLayout(pattern_layout)
+        # Template tab
+        template_tab = QWidget()
+        template_layout = QVBoxLayout()
+        template_tab.setLayout(template_layout)
         
-        self.pattern_table = QTableWidget()
-        self.pattern_table.setColumnCount(4)
-        self.pattern_table.setHorizontalHeaderLabels(['Pattern', 'Position', 'Confidence', 'Status'])
-        pattern_layout.addWidget(self.pattern_table)
+        self.template_table = QTableWidget()
+        self.template_table.setColumnCount(4)
+        self.template_table.setHorizontalHeaderLabels(['Template', 'Position', 'Confidence', 'Status'])
+        template_layout.addWidget(self.template_table)
         
-        tabs.addTab(pattern_tab, "Patterns")
+        tabs.addTab(template_tab, "Templates")
         
         # OCR tab
         ocr_tab = QWidget()
@@ -277,7 +277,7 @@ class AutomationDebugWindow(QMainWindow):
     def _on_preview_options_changed(self) -> None:
         """Handle changes to preview display options."""
         self.preview.show_positions = self.show_positions_check.isChecked()
-        self.preview.show_patterns = self.show_patterns_check.isChecked()
+        self.preview.show_templates = self.show_templates_check.isChecked()
         self.preview.show_ocr = self.show_ocr_check.isChecked()
         self.preview.show_mouse = self.show_mouse_check.isChecked()
         self.preview._update_display()
@@ -291,17 +291,17 @@ class AutomationDebugWindow(QMainWindow):
         self.preview.update_positions(positions)
         self.execution_tab.update_positions(positions)
         
-    def update_pattern_matches(self, matches: List[tuple]) -> None:
-        """Update pattern match information."""
+    def update_template_matches(self, matches: List[tuple]) -> None:
+        """Update template match information."""
         self.preview.update_pattern_matches(matches)
         
-        # Update pattern table
-        self.pattern_table.setRowCount(len(matches))
+        # Update template table
+        self.template_table.setRowCount(len(matches))
         for i, (name, x, y, w, h, conf) in enumerate(matches):
-            self.pattern_table.setItem(i, 0, QTableWidgetItem(name))
-            self.pattern_table.setItem(i, 1, QTableWidgetItem(f"({x}, {y})"))
-            self.pattern_table.setItem(i, 2, QTableWidgetItem(f"{conf:.2f}"))
-            self.pattern_table.setItem(i, 3, QTableWidgetItem("Found"))
+            self.template_table.setItem(i, 0, QTableWidgetItem(name))
+            self.template_table.setItem(i, 1, QTableWidgetItem(f"({x}, {y})"))
+            self.template_table.setItem(i, 2, QTableWidgetItem(f"{conf:.2f}"))
+            self.template_table.setItem(i, 3, QTableWidgetItem("Found"))
             
     def update_ocr_text(self, text: str, regions: List[tuple]) -> None:
         """Update OCR text and regions."""

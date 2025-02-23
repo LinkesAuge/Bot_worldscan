@@ -1,3 +1,9 @@
+"""
+Main GUI Controller
+
+This module provides the main GUI window for controlling the application.
+"""
+
 from typing import Optional, Callable, Dict, Any, Tuple
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QPushButton, 
@@ -11,7 +17,7 @@ from PyQt6.QtGui import QPalette, QColor, QIcon, QImage, QPixmap, QPainter, QPen
 import logging
 from scout.config_manager import ConfigManager
 from scout.overlay import Overlay
-from scout.pattern_matcher import PatternMatcher
+from scout.template_matcher import TemplateMatcher
 from scout.world_scanner import WorldScanner, WorldPosition, ScanLogHandler, ScanWorker
 from scout.debug_window import DebugWindow
 import numpy as np
@@ -33,7 +39,7 @@ class OverlayController(QMainWindow):
     Main GUI window for controlling the overlay.
     """
     
-    def __init__(self, overlay: Overlay, overlay_settings: Dict[str, Any], pattern_settings: Dict[str, Any], 
+    def __init__(self, overlay: Overlay, overlay_settings: Dict[str, Any], template_settings: Dict[str, Any], 
                  game_actions: GameActions, text_ocr: TextOCR, debug_window: DebugWindow) -> None:
         """
         Initialize the controller window.
@@ -41,7 +47,7 @@ class OverlayController(QMainWindow):
         Args:
             overlay: Overlay instance to control
             overlay_settings: Initial overlay settings
-            pattern_settings: Initial pattern matching settings
+            template_settings: Initial template matching settings
             game_actions: GameActions instance for automation
             text_ocr: TextOCR instance for text recognition
             debug_window: DebugWindow instance for debugging
@@ -59,7 +65,7 @@ class OverlayController(QMainWindow):
         
         # Store components
         self.overlay = overlay
-        self.pattern_matcher = self.overlay.pattern_matcher
+        self.template_matcher = self.overlay.template_matcher
         self.game_actions = game_actions
         self.text_ocr = text_ocr
         self.debug_window = debug_window
@@ -136,7 +142,7 @@ class OverlayController(QMainWindow):
         
         # Move existing controls to overlay tab
         self.create_overlay_controls(overlay_layout, overlay_settings)
-        self.create_pattern_matching_controls(overlay_layout, pattern_settings)
+        self.create_pattern_matching_controls(overlay_layout, template_settings)
         self.create_scan_controls(overlay_layout)
         
         # Add quit button at the bottom of overlay tab
@@ -151,7 +157,7 @@ class OverlayController(QMainWindow):
         # Create automation tab
         self.automation_tab = AutomationTab(
             window_manager=self.window_manager,
-            pattern_matcher=self.pattern_matcher,
+            template_matcher=self.template_matcher,
             text_ocr=self.text_ocr,
             game_actions=self.game_actions
         )
@@ -370,7 +376,7 @@ class OverlayController(QMainWindow):
         
         # Pattern matching toggle button
         is_active = settings.get("active", False)
-        self.pattern_btn = QPushButton(f"Pattern Matching: {'ON' if is_active else 'OFF'}")
+        self.pattern_btn = QPushButton(f"Template Matching: {'ON' if is_active else 'OFF'}")
         self.pattern_btn.clicked.connect(self._toggle_pattern_matching)
         self._update_pattern_button_color(is_active)
         layout.addWidget(self.pattern_btn)
@@ -455,8 +461,8 @@ class OverlayController(QMainWindow):
             freq = value / 10.0
             logger.debug(f"Frequency slider changed: {value} -> {freq} updates/sec")
             self.freq_input.setValue(freq)
-            if hasattr(self.pattern_matcher, 'target_frequency'):
-                self.pattern_matcher.target_frequency = freq
+            if hasattr(self.template_matcher, 'target_frequency'):
+                self.template_matcher.target_frequency = freq
                 logger.debug(f"Updated pattern matcher target_frequency to: {freq}")
                 # Update overlay timer interval
                 if hasattr(self.overlay, 'update_timer_interval'):
@@ -467,8 +473,8 @@ class OverlayController(QMainWindow):
         def on_spinbox_change(value: float) -> None:
             logger.debug(f"Frequency spinbox changed to: {value} updates/sec")
             self.freq_slider.setValue(int(value * 10))
-            if hasattr(self.pattern_matcher, 'target_frequency'):
-                self.pattern_matcher.target_frequency = value
+            if hasattr(self.template_matcher, 'target_frequency'):
+                self.template_matcher.target_frequency = value
                 logger.debug(f"Updated pattern matcher target_frequency to: {value}")
                 # Update overlay timer interval
                 if hasattr(self.overlay, 'update_timer_interval'):
@@ -518,7 +524,7 @@ class OverlayController(QMainWindow):
         if not hasattr(self, 'automation_tab'):
             self.automation_tab = AutomationTab(
                 window_manager=self.window_manager,
-                pattern_matcher=self.pattern_matcher,
+                template_matcher=self.template_matcher,
                 text_ocr=self.text_ocr,
                 game_actions=self.game_actions
             )
@@ -669,8 +675,8 @@ class OverlayController(QMainWindow):
         - Orange: >= 70% of target
         - Red: < 70% of target
         """
-        if hasattr(self.pattern_matcher, 'update_frequency'):
-            actual_freq = self.pattern_matcher.update_frequency
+        if hasattr(self.template_matcher, 'update_frequency'):
+            actual_freq = self.template_matcher.update_frequency
             target_freq = self.freq_input.value()
             
             # logger.debug(f"Updating pattern frequency display - Target: {target_freq:.1f}, Actual: {actual_freq:.1f}")
@@ -863,8 +869,8 @@ class OverlayController(QMainWindow):
     
     def _reload_templates(self) -> None:
         """Reload pattern matching templates."""
-        if hasattr(self.pattern_matcher, 'reload_templates'):
-            self.pattern_matcher.reload_templates()
+        if hasattr(self.template_matcher, 'reload_templates'):
+            self.template_matcher.reload_templates()
             logger.info("Templates reloaded")
             
     def _update_toggle_button_color(self, is_active: bool) -> None:
@@ -879,21 +885,21 @@ class OverlayController(QMainWindow):
             )
 
     def _update_pattern_button_color(self, is_active: bool) -> None:
-        """Update pattern matching button color based on state."""
+        """Update template matching button color based on state."""
         if is_active:
             self.pattern_btn.setStyleSheet(
                 "background-color: #228B22; color: white; padding: 8px; font-weight: bold;"
             )
-            self.pattern_btn.setText("Pattern Matching: ON")
-            self.overlay.start_pattern_matching()
-            logger.info("Pattern matching activated")
+            self.pattern_btn.setText("Template Matching: ON")
+            self.overlay.start_template_matching()
+            logger.info("Template matching activated")
         else:
             self.pattern_btn.setStyleSheet(
                 "background-color: #8B0000; color: white; padding: 8px; font-weight: bold;"
             )
-            self.pattern_btn.setText("Pattern Matching: OFF")
-            self.overlay.stop_pattern_matching()
-            logger.info("Pattern matching deactivated")
+            self.pattern_btn.setText("Template Matching: OFF")
+            self.overlay.stop_template_matching()
+            logger.info("Template matching deactivated")
 
     def _update_sound_button_color(self, is_active: bool) -> None:
         """Update sound button color based on state."""
@@ -919,7 +925,7 @@ class OverlayController(QMainWindow):
         if not hasattr(self, 'automation_tab'):
             self.automation_tab = AutomationTab(
                 window_manager=self.window_manager,
-                pattern_matcher=self.pattern_matcher,
+                template_matcher=self.template_matcher,
                 text_ocr=self.text_ocr,
                 game_actions=self.game_actions
             )
@@ -967,7 +973,7 @@ class OverlayController(QMainWindow):
         is_enabled = not debug_settings["enabled"]
         
         # Update pattern matcher debug mode
-        self.pattern_matcher.set_debug_mode(is_enabled)
+        self.template_matcher.set_debug_mode(is_enabled)
         
         # Update debug settings
         debug_settings = {
@@ -1072,8 +1078,8 @@ class OverlayController(QMainWindow):
         self._update_debug_button_color(False)
         
         # Update pattern matcher debug mode
-        if hasattr(self.pattern_matcher, 'set_debug_mode'):
-            self.pattern_matcher.set_debug_mode(False)
+        if hasattr(self.template_matcher, 'set_debug_mode'):
+            self.template_matcher.set_debug_mode(False)
         
         # Update config
         debug_settings = {
@@ -1293,9 +1299,9 @@ class OverlayController(QMainWindow):
             self.config_manager.update_debug_settings(debug_settings)
             
             # Stop pattern matching if active
-            if hasattr(self, 'pattern_matcher'):
+            if hasattr(self, 'template_matcher'):
                 logger.debug("Stopping pattern matching")
-                self.pattern_matcher.set_debug_mode(False)
+                self.template_matcher.set_debug_mode(False)
             
             # Save all settings
             self.save_settings()
@@ -1310,29 +1316,29 @@ class OverlayController(QMainWindow):
             super().closeEvent(event)
 
     def _toggle_pattern_matching(self) -> None:
-        """Toggle pattern matching on/off."""
+        """Toggle template matching on/off."""
         try:
             # Get current settings
-            settings = self.config_manager.get_pattern_matching_settings()
+            settings = self.config_manager.get_template_matching_settings()
             
             # Toggle active state
             settings["active"] = not settings["active"]
             
             # Update settings in config
-            self.config_manager.update_pattern_matching_settings(settings)
+            self.config_manager.update_template_matching_settings(settings)
             
-            # Update pattern matcher
+            # Update template matcher
             if settings["active"]:
-                self.overlay.start_pattern_matching()
+                self.overlay.start_template_matching()
                 self._update_pattern_button_color(True)
-                logger.info("Pattern matching activated")
+                logger.info("Template matching activated")
             else:
-                self.overlay.stop_pattern_matching()
+                self.overlay.stop_template_matching()
                 self._update_pattern_button_color(False)
-                logger.info("Pattern matching deactivated")
+                logger.info("Template matching deactivated")
                 
         except Exception as e:
-            logger.error(f"Error toggling pattern matching: {e}", exc_info=True)
+            logger.error(f"Error toggling template matching: {e}", exc_info=True)
             self._update_pattern_button_color(False)
 
     def _toggle_sound(self) -> None:
@@ -1345,14 +1351,14 @@ class OverlayController(QMainWindow):
         self._update_sound_button_color(new_state)
         
         # Update pattern matcher sound state
-        if hasattr(self.pattern_matcher, 'sound_enabled'):
-            self.pattern_matcher.sound_enabled = new_state
+        if hasattr(self.template_matcher, 'sound_enabled'):
+            self.template_matcher.sound_enabled = new_state
         
         # Save the new state
         self.save_settings()
         
         # Play test sound if enabled
-        if new_state and hasattr(self.pattern_matcher, 'sound_manager'):
-            self.pattern_matcher.sound_manager.play_if_ready()
+        if new_state and hasattr(self.template_matcher, 'sound_manager'):
+            self.template_matcher.sound_manager.play_if_ready()
             
         logger.info(f"Sound alerts {'enabled' if new_state else 'disabled'}") 
