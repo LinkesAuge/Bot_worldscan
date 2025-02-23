@@ -22,7 +22,6 @@ class ActionType(Enum):
     DRAG = auto()           # Mouse drag operation
     TYPE_TEXT = auto()      # Type text at current position
     WAIT = auto()           # Wait for specified time
-    TEMPLATE_SEARCH = auto()  # Search for templates
     WAIT_FOR_OCR = auto()   # Wait for OCR condition
 
 @dataclass
@@ -63,38 +62,6 @@ class WaitParams:
     position_name: Optional[str] = None  # Name of position to act on
     timeout: float = 30.0  # Timeout in seconds for conditions
     description: Optional[str] = None  # Optional description
-
-@dataclass
-class TemplateSearchParams(ActionParamsCommon):
-    """Parameters for template search action."""
-    templates: List[str] = field(default_factory=list)  # List of template names to search for
-    use_all_templates: bool = True  # Whether to use all available templates
-    overlay_enabled: bool = True  # Whether to show overlay during search
-    sound_enabled: bool = True  # Whether to enable sound alerts
-    duration: float = 30.0  # Duration to search in seconds
-    update_frequency: float = 1.0  # Updates per second
-    min_confidence: float = 0.8  # Minimum confidence for matches
-    description: Optional[str] = None  # Optional description of the action
-    timeout: float = 30.0  # Timeout for the action
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert parameters to dictionary for storage."""
-        return {
-            'templates': self.templates,
-            'use_all_templates': self.use_all_templates,
-            'overlay_enabled': self.overlay_enabled,
-            'sound_enabled': self.sound_enabled,
-            'duration': self.duration,
-            'update_frequency': self.update_frequency,
-            'min_confidence': self.min_confidence,
-            'timeout': self.timeout,
-            'description': self.description
-        }
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'TemplateSearchParams':
-        """Create parameters from dictionary."""
-        return cls(**data)
 
 @dataclass
 class OCRWaitParams:
@@ -145,7 +112,6 @@ class AutomationAction:
             ActionType.DRAG: DragParams,
             ActionType.TYPE_TEXT: TypeParams,
             ActionType.WAIT: WaitParams,
-            ActionType.TEMPLATE_SEARCH: TemplateSearchParams,
             ActionType.WAIT_FOR_OCR: OCRWaitParams
         }[action_type]
         

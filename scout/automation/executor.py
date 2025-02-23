@@ -19,7 +19,7 @@ from scout.automation.core import AutomationPosition, AutomationSequence
 from scout.automation.actions import (
     ActionType, AutomationAction, ActionParamsCommon,
     ClickParams, DragParams, TypeParams, WaitParams,
-    TemplateSearchParams, OCRWaitParams
+    OCRWaitParams
 )
 from scout.window_manager import WindowManager
 from scout.template_matcher import TemplateMatcher
@@ -207,8 +207,6 @@ class SequenceExecutor(QObject):
             self._execute_type(action, position)
         elif action.action_type == ActionType.WAIT:
             self._execute_wait(action)
-        elif action.action_type == ActionType.TEMPLATE_SEARCH:
-            self._execute_template_search(action)
         elif action.action_type == ActionType.WAIT_FOR_OCR:
             self._execute_ocr_wait(action)
             
@@ -310,59 +308,6 @@ class SequenceExecutor(QObject):
                 self.stop_execution()
                 return
             time.sleep(0.1)  # Check every 100ms
-        
-    def _execute_template_search(self, action: AutomationAction) -> None:
-        """Execute a template search action."""
-        params = action.params
-        if not isinstance(params, TemplateSearchParams):
-            raise ValueError("Invalid parameters for template search action")
-            
-        self._log_debug(
-            f"Starting template search with {len(params.templates) if not params.use_all_templates else 'all'} templates "
-            f"(Update freq: {params.update_frequency}/s, Duration: {params.duration}s)"
-        )
-        
-        # Store original template matcher settings
-        original_confidence = self.context.template_matcher.confidence
-        original_frequency = self.context.template_matcher.target_frequency
-        original_sound = self.context.template_matcher.sound_enabled
-        
-        try:
-            # Configure template matcher with action parameters
-            self.context.template_matcher.confidence = params.min_confidence
-            self.context.template_matcher.target_frequency = params.update_frequency
-            self.context.template_matcher.sound_enabled = params.sound_enabled
-            
-            # If specific templates are selected, filter them
-            if not params.use_all_templates:
-                # Verify templates exist
-                available_templates = set(self.context.template_matcher.templates.keys())
-                requested_templates = set(params.templates)
-                missing_templates = requested_templates - available_templates
-                if missing_templates:
-                    raise ValueError(f"Templates not found: {missing_templates}")
-            
-            # Start template matching process
-            self.context.template_matcher.start_template_matching()
-            
-            # Wait for the specified duration
-            start_time = time.time()
-            while time.time() - start_time < params.duration:
-                # Check for stop keys
-                if is_stop_key_pressed():
-                    self._log_debug("Template search interrupted by user (Escape/Q pressed)")
-                    self.stop_execution()
-                    return
-                time.sleep(0.1)  # Small sleep to prevent CPU hogging
-                
-        finally:
-            # Stop template matching and restore original settings
-            self.context.template_matcher.stop_template_matching()
-            self.context.template_matcher.confidence = original_confidence
-            self.context.template_matcher.target_frequency = original_frequency
-            self.context.template_matcher.sound_enabled = original_sound
-            
-        self._log_debug("Template search completed")
         
     def _execute_ocr_wait(self, action: AutomationAction) -> None:
         """Execute an OCR wait action."""
