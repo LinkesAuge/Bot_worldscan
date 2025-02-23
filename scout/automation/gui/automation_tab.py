@@ -1043,8 +1043,8 @@ class AutomationTab(QWidget):
         action_data = self.executor.current_sequence.actions[step]
         action = AutomationAction.from_dict(action_data)
         
-        # Update pattern matches if waiting for pattern
-        if action.action_type == ActionType.WAIT_FOR_PATTERN:
+        # Update pattern matches if searching for templates
+        if action.action_type == ActionType.TEMPLATE_SEARCH:
             if screenshot is not None:
                 matches = self.pattern_matcher.find_all_patterns(screenshot)
                 self.debug_window.update_pattern_matches(matches)

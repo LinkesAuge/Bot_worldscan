@@ -19,7 +19,7 @@ from scout.automation.core import AutomationPosition, AutomationSequence
 from scout.automation.actions import (
     ActionType, AutomationAction, ActionParamsCommon,
     ClickParams, DragParams, TypeParams, WaitParams,
-    PatternWaitParams, OCRWaitParams
+    TemplateSearchParams, OCRWaitParams
 )
 from scout.window_manager import WindowManager
 from scout.pattern_matcher import PatternMatcher
@@ -207,8 +207,8 @@ class SequenceExecutor(QObject):
             self._execute_type(action, position)
         elif action.action_type == ActionType.WAIT:
             self._execute_wait(action)
-        elif action.action_type == ActionType.WAIT_FOR_PATTERN:
-            self._execute_pattern_wait(action)
+        elif action.action_type == ActionType.TEMPLATE_SEARCH:
+            self._execute_template_search(action)
         elif action.action_type == ActionType.WAIT_FOR_OCR:
             self._execute_ocr_wait(action)
             
@@ -311,43 +311,53 @@ class SequenceExecutor(QObject):
                 return
             time.sleep(0.1)  # Check every 100ms
         
-    def _execute_pattern_wait(self, action: AutomationAction) -> None:
-        """Execute a pattern wait action."""
+    def _execute_template_search(self, action: AutomationAction) -> None:
+        """Execute a template search action."""
         params = action.params
-        if not isinstance(params, PatternWaitParams):
-            raise ValueError("Invalid parameters for pattern wait action")
+        if not isinstance(params, TemplateSearchParams):
+            raise ValueError("Invalid parameters for template search action")
             
         self._log_debug(
-            f"Waiting for pattern '{params.pattern_name}' "
-            f"with confidence {params.min_confidence}"
+            f"Starting template search with {len(params.templates)} templates "
+            f"(Update freq: {params.update_frequency}/s, Duration: {params.duration}s)"
         )
         
+        # Configure pattern matcher
+        self.context.pattern_matcher.confidence = params.min_confidence
+        self.context.pattern_matcher.target_frequency = params.update_frequency
+        self.context.pattern_matcher.sound_enabled = params.sound_enabled
+        
+        # Start pattern matching if overlay is enabled
+        if params.overlay_enabled:
+            self.context.pattern_matcher.start_pattern_matching()
+        
         start_time = time.time()
-        while time.time() - start_time < params.timeout:
-            # Check for stop keys
-            if is_stop_key_pressed():
-                self._log_debug("Pattern wait interrupted by user (Escape/Q pressed)")
-                self.stop_execution()
-                return
+        try:
+            while time.time() - start_time < params.duration:
+                # Check for stop keys
+                if is_stop_key_pressed():
+                    self._log_debug("Template search interrupted by user (Escape/Q pressed)")
+                    self.stop_execution()
+                    return
+                    
+                # Take screenshot and check for patterns
+                screenshot = self.context.window_manager.capture_screenshot()
+                if screenshot is None:
+                    continue
+                    
+                # Use existing pattern matcher to find matches
+                matches = self.context.pattern_matcher.find_all_patterns(screenshot)
+                if matches:
+                    self._log_debug(f"Found {len(matches)} pattern matches")
+                    
+                time.sleep(1.0 / params.update_frequency)  # Control update rate
                 
-            # Take screenshot and check for pattern
-            screenshot = self.context.window_manager.capture_screenshot()
-            if screenshot is None:
-                continue
-                
-            match = self.context.pattern_matcher.find_pattern(
-                params.pattern_name,
-                screenshot,
-                params.min_confidence
-            )
+        finally:
+            # Always stop pattern matching when done
+            if params.overlay_enabled:
+                self.context.pattern_matcher.stop_pattern_matching()
             
-            if match:
-                self._log_debug(f"Pattern '{params.pattern_name}' found")
-                return
-                
-            time.sleep(0.1)
-            
-        raise TimeoutError(f"Pattern '{params.pattern_name}' not found")
+            self._log_debug("Template search completed")
         
     def _execute_ocr_wait(self, action: AutomationAction) -> None:
         """Execute an OCR wait action."""

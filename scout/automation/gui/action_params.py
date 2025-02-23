@@ -5,18 +5,23 @@ This module provides specialized widgets for configuring different types of acti
 Each action type has its own parameter widget that shows relevant configuration options.
 """
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QLineEdit, QSpinBox, QDoubleSpinBox, QCheckBox,
-    QComboBox
+    QComboBox, QListWidget, QListWidgetItem
 )
 from PyQt6.QtCore import Qt, pyqtSignal
+import logging
+from pathlib import Path
 from scout.automation.actions import (
     ActionType, ActionParamsCommon, ClickParams, DragParams,
-    TypeParams, WaitParams, PatternWaitParams, OCRWaitParams
+    TypeParams, WaitParams, TemplateSearchParams, OCRWaitParams
 )
 from scout.automation.core import AutomationPosition
+from scout.config_manager import ConfigManager
+
+logger = logging.getLogger(__name__)
 
 class BaseParamsWidget(QWidget):
     """Base class for all parameter widgets."""
@@ -261,68 +266,202 @@ class WaitParamsWidget(BaseParamsWidget):
         self.duration_spin.setValue(params.duration)
         self._creating_widgets = False
 
-class PatternWaitParamsWidget(BaseParamsWidget):
-    """Widget for configuring pattern wait action parameters."""
+class TemplateSearchParamsWidget(BaseParamsWidget):
+    """Widget for configuring template search parameters."""
     
     def __init__(self):
-        """Initialize the pattern wait parameters widget."""
+        """Initialize the template search parameters widget."""
         super().__init__()
         layout = QVBoxLayout()
         self.setLayout(layout)
+        
+        # Template selection
+        template_group = QVBoxLayout()
+        template_group.addWidget(QLabel("Template Selection:"))
+        
+        self.use_all_templates = QCheckBox("Use All Templates")
+        self.use_all_templates.setChecked(True)
+        self.use_all_templates.stateChanged.connect(self._on_use_all_changed)
+        template_group.addWidget(self.use_all_templates)
+        
+        self.template_list = QListWidget()
+        self.template_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
+        template_group.addWidget(self.template_list)
+        layout.addLayout(template_group)
+        
+        # Load available templates
+        self._load_templates()
+        
+        # Overlay toggle
+        self.overlay_enabled = QCheckBox("Show Overlay")
+        self.overlay_enabled.setChecked(True)
+        layout.addWidget(self.overlay_enabled)
+        
+        # Sound toggle
+        self.sound_enabled = QCheckBox("Enable Sound Alerts")
+        self.sound_enabled.setChecked(True)
+        layout.addWidget(self.sound_enabled)
+        
+        # Duration
+        duration_layout = QHBoxLayout()
+        duration_layout.addWidget(QLabel("Duration (s):"))
+        self.duration_spin = QDoubleSpinBox()
+        self.duration_spin.setRange(1.0, 3600.0)  # 1 second to 1 hour
+        self.duration_spin.setValue(30.0)
+        duration_layout.addWidget(self.duration_spin)
+        layout.addLayout(duration_layout)
+        
+        # Update frequency
+        freq_layout = QHBoxLayout()
+        freq_layout.addWidget(QLabel("Updates/sec:"))
+        self.freq_spin = QDoubleSpinBox()
+        self.freq_spin.setRange(0.1, 10.0)
+        self.freq_spin.setValue(1.0)
+        freq_layout.addWidget(self.freq_spin)
+        layout.addLayout(freq_layout)
+        
+        # Confidence
+        conf_layout = QHBoxLayout()
+        conf_layout.addWidget(QLabel("Min Confidence:"))
+        self.confidence_spin = QDoubleSpinBox()
+        self.confidence_spin.setRange(0.1, 1.0)
+        self.confidence_spin.setSingleStep(0.1)
+        self.confidence_spin.setValue(0.8)
+        conf_layout.addWidget(self.confidence_spin)
+        layout.addLayout(conf_layout)
         
         # Description field
         desc_layout = QHBoxLayout()
         desc_layout.addWidget(QLabel("Description:"))
         self.description_edit = QLineEdit()
-        self.description_edit.textChanged.connect(self.params_changed.emit)
+        self.description_edit.setPlaceholderText("Description (optional)")
         desc_layout.addWidget(self.description_edit)
         layout.addLayout(desc_layout)
         
-        # Pattern name field
-        pattern_layout = QHBoxLayout()
-        pattern_layout.addWidget(QLabel("Pattern:"))
-        self.pattern_edit = QLineEdit()
-        self.pattern_edit.textChanged.connect(self.params_changed.emit)
-        pattern_layout.addWidget(self.pattern_edit)
-        layout.addLayout(pattern_layout)
+        # Load saved settings
+        self._load_settings()
         
-        # Confidence field
-        confidence_layout = QHBoxLayout()
-        confidence_layout.addWidget(QLabel("Min Confidence:"))
-        self.confidence_spin = QDoubleSpinBox()
-        self.confidence_spin.setRange(0.1, 1.0)
-        self.confidence_spin.setSingleStep(0.1)
-        self.confidence_spin.setValue(0.8)
-        self.confidence_spin.valueChanged.connect(self.params_changed.emit)
-        confidence_layout.addWidget(self.confidence_spin)
-        layout.addLayout(confidence_layout)
+        # Connect signals
+        self.use_all_templates.stateChanged.connect(self.params_changed)
+        self.template_list.itemSelectionChanged.connect(self.params_changed)
+        self.overlay_enabled.stateChanged.connect(self.params_changed)
+        self.sound_enabled.stateChanged.connect(self.params_changed)
+        self.duration_spin.valueChanged.connect(self.params_changed)
+        self.freq_spin.valueChanged.connect(self.params_changed)
+        self.confidence_spin.valueChanged.connect(self.params_changed)
+        self.description_edit.textChanged.connect(self.params_changed)
         
-        # Timeout field
-        timeout_layout = QHBoxLayout()
-        timeout_layout.addWidget(QLabel("Timeout (s):"))
-        self.timeout_spin = QDoubleSpinBox()
-        self.timeout_spin.setRange(0.01, 999)
-        self.timeout_spin.setValue(30.0)
-        self.timeout_spin.valueChanged.connect(self.params_changed.emit)
-        timeout_layout.addWidget(self.timeout_spin)
-        layout.addLayout(timeout_layout)
+    def _load_templates(self) -> None:
+        """Load available templates from templates directory."""
+        try:
+            templates_dir = Path('templates')
+            if templates_dir.exists():
+                for template_file in templates_dir.glob('*.png'):
+                    item = QListWidgetItem(template_file.stem)
+                    self.template_list.addItem(item)
+            
+            # Update template list enabled state
+            self._on_use_all_changed()
+            
+        except Exception as e:
+            logger.error(f"Failed to load templates: {e}")
+            
+    def _on_use_all_changed(self) -> None:
+        """Handle use all templates toggle."""
+        use_all = self.use_all_templates.isChecked()
+        self.template_list.setEnabled(not use_all)
+        if use_all:
+            # Deselect all items
+            self.template_list.clearSelection()
+            
+    def _load_settings(self) -> None:
+        """Load saved template search settings."""
+        try:
+            config = ConfigManager()
+            settings = config.get_template_search_settings()
+            
+            if settings:
+                self.overlay_enabled.setChecked(settings.get("overlay_enabled", True))
+                self.sound_enabled.setChecked(settings.get("sound_enabled", True))
+                self.duration_spin.setValue(settings.get("duration", 30.0))
+                self.freq_spin.setValue(settings.get("update_frequency", 1.0))
+                self.confidence_spin.setValue(settings.get("min_confidence", 0.8))
+                
+                # Load template selection
+                use_all = settings.get("use_all_templates", True)
+                self.use_all_templates.setChecked(use_all)
+                if not use_all:
+                    selected_templates = settings.get("templates", [])
+                    for i in range(self.template_list.count()):
+                        item = self.template_list.item(i)
+                        if item.text() in selected_templates:
+                            item.setSelected(True)
+                            
+        except Exception as e:
+            logger.error(f"Failed to load template search settings: {e}")
+            
+    def _save_settings(self) -> None:
+        """Save template search settings."""
+        try:
+            config = ConfigManager()
+            settings = {
+                "overlay_enabled": self.overlay_enabled.isChecked(),
+                "sound_enabled": self.sound_enabled.isChecked(),
+                "duration": self.duration_spin.value(),
+                "update_frequency": self.freq_spin.value(),
+                "min_confidence": self.confidence_spin.value(),
+                "use_all_templates": self.use_all_templates.isChecked(),
+                "templates": [item.text() for item in self.template_list.selectedItems()]
+            }
+            
+            config.update_template_search_settings(settings)
+            
+        except Exception as e:
+            logger.error(f"Failed to save template search settings: {e}")
+            
+    def get_params(self) -> TemplateSearchParams:
+        """Get the current template search parameters."""
+        # Save settings before returning
+        self._save_settings()
         
-    def get_params(self) -> PatternWaitParams:
-        """Get the current pattern wait parameters."""
-        return PatternWaitParams(
-            description=self.description_edit.text() or None,
-            timeout=self.timeout_spin.value(),
-            pattern_name=self.pattern_edit.text(),
-            min_confidence=self.confidence_spin.value()
+        # Get selected templates
+        if self.use_all_templates.isChecked():
+            templates = [self.template_list.item(i).text() 
+                       for i in range(self.template_list.count())]
+        else:
+            templates = [item.text() for item in self.template_list.selectedItems()]
+            
+        return TemplateSearchParams(
+            templates=templates,
+            use_all_templates=self.use_all_templates.isChecked(),
+            overlay_enabled=self.overlay_enabled.isChecked(),
+            sound_enabled=self.sound_enabled.isChecked(),
+            duration=self.duration_spin.value(),
+            update_frequency=self.freq_spin.value(),
+            min_confidence=self.confidence_spin.value(),
+            description=self.description_edit.text() or None
         )
         
-    def set_params(self, params: PatternWaitParams) -> None:
-        """Set the pattern wait parameters."""
+    def set_params(self, params: TemplateSearchParams) -> None:
+        """Set the template search parameters."""
         self._creating_widgets = True
-        self.description_edit.setText(params.description or "")
-        self.timeout_spin.setValue(params.timeout)
-        self.pattern_edit.setText(params.pattern_name)
+        
+        self.use_all_templates.setChecked(params.use_all_templates)
+        self.overlay_enabled.setChecked(params.overlay_enabled)
+        self.sound_enabled.setChecked(params.sound_enabled)
+        self.duration_spin.setValue(params.duration)
+        self.freq_spin.setValue(params.update_frequency)
         self.confidence_spin.setValue(params.min_confidence)
+        self.description_edit.setText(params.description or "")
+        
+        # Set selected templates
+        self.template_list.clearSelection()
+        if not params.use_all_templates:
+            for i in range(self.template_list.count()):
+                item = self.template_list.item(i)
+                if item.text() in params.templates:
+                    item.setSelected(True)
+                    
         self._creating_widgets = False
 
 class OCRWaitParamsWidget(BaseParamsWidget):
@@ -403,7 +542,7 @@ def create_params_widget(action_type: ActionType) -> BaseParamsWidget:
         ActionType.DRAG: DragParamsWidget,
         ActionType.TYPE_TEXT: TypeParamsWidget,
         ActionType.WAIT: WaitParamsWidget,
-        ActionType.WAIT_FOR_PATTERN: PatternWaitParamsWidget,
+        ActionType.TEMPLATE_SEARCH: TemplateSearchParamsWidget,
         ActionType.WAIT_FOR_OCR: OCRWaitParamsWidget
     }
     

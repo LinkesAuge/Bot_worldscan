@@ -111,6 +111,17 @@ class ConfigManager:
             "debug_screenshots_dir": "scout/debug_screenshots"
         }
         
+        # Template search settings
+        self.config["TemplateSearch"] = {
+            "overlay_enabled": "true",
+            "sound_enabled": "true",
+            "duration": "30.0",
+            "update_frequency": "1.0",
+            "min_confidence": "0.8",
+            "use_all_templates": "true",
+            "templates": ""  # Comma-separated list of template names
+        }
+        
         self.save_config()
         logger.info("Default configuration created")
 
@@ -352,6 +363,49 @@ class ConfigManager:
             
         self.save_config()
         logger.debug(f"Updated debug settings: {settings}")
+
+    def get_template_search_settings(self) -> Dict[str, Any]:
+        """Get template search settings."""
+        if not self.config.has_section("TemplateSearch"):
+            self.config.add_section("TemplateSearch")
+            
+        # Get templates list (stored as comma-separated string)
+        templates_str = self.config.get("TemplateSearch", "templates", fallback="")
+        templates = [t.strip() for t in templates_str.split(",") if t.strip()]
+            
+        return {
+            "overlay_enabled": self.config.getboolean("TemplateSearch", "overlay_enabled", fallback=True),
+            "sound_enabled": self.config.getboolean("TemplateSearch", "sound_enabled", fallback=True),
+            "duration": self.config.getfloat("TemplateSearch", "duration", fallback=30.0),
+            "update_frequency": self.config.getfloat("TemplateSearch", "update_frequency", fallback=1.0),
+            "min_confidence": self.config.getfloat("TemplateSearch", "min_confidence", fallback=0.8),
+            "use_all_templates": self.config.getboolean("TemplateSearch", "use_all_templates", fallback=True),
+            "templates": templates
+        }
+
+    def update_template_search_settings(self, settings: Dict[str, Any]) -> None:
+        """
+        Update template search settings.
+        
+        Args:
+            settings: Dictionary containing template search settings
+        """
+        if not self.config.has_section("TemplateSearch"):
+            self.config.add_section("TemplateSearch")
+            
+        self.config["TemplateSearch"]["overlay_enabled"] = str(settings.get("overlay_enabled", True)).lower()
+        self.config["TemplateSearch"]["sound_enabled"] = str(settings.get("sound_enabled", True)).lower()
+        self.config["TemplateSearch"]["duration"] = str(settings.get("duration", 30.0))
+        self.config["TemplateSearch"]["update_frequency"] = str(settings.get("update_frequency", 1.0))
+        self.config["TemplateSearch"]["min_confidence"] = str(settings.get("min_confidence", 0.8))
+        self.config["TemplateSearch"]["use_all_templates"] = str(settings.get("use_all_templates", True)).lower()
+        
+        # Store templates as comma-separated string
+        templates = settings.get("templates", [])
+        self.config["TemplateSearch"]["templates"] = ",".join(templates)
+        
+        self.save_config()
+        logger.debug("Updated template search settings")
 
     def _load_config(self):
         """Load the configuration file."""

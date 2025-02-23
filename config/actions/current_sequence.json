@@ -40,13 +40,45 @@
             }
         },
         {
-            "type": "WAIT_FOR_PATTERN",
+            "type": "TEMPLATE_SEARCH",
             "params": {
-                "pattern_name": "",
                 "position_name": null,
                 "timeout": 30.0,
                 "description": null,
-                "min_confidence": 0.8
+                "templates": [],
+                "use_all_templates": true,
+                "overlay_enabled": true,
+                "sound_enabled": true,
+                "duration": 3.0,
+                "update_frequency": 1.0,
+                "min_confidence": 0.9
+            }
+        },
+        {
+            "type": "WAIT",
+            "params": {
+                "duration": 2.0,
+                "position_name": null,
+                "timeout": 30.0,
+                "description": null
+            }
+        },
+        {
+            "type": "DRAG",
+            "params": {
+                "end_position_name": "Position_1",
+                "position_name": null,
+                "timeout": 30.0,
+                "description": null,
+                "duration": 0.5
+            }
+        },
+        {
+            "type": "CLICK",
+            "params": {
+                "position_name": null,
+                "timeout": 30.0,
+                "description": null
             }
         }
     ],
