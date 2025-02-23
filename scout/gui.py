@@ -49,47 +49,75 @@ class OverlayController(QMainWindow):
         super().__init__()
         
         # Initialize debug mode to off
-        config = ConfigManager()
+        self.config_manager = ConfigManager()
         debug_settings = {
             "enabled": False,
             "save_screenshots": False,
             "save_templates": False
         }
-        config.update_debug_settings(debug_settings)
+        self.config_manager.update_debug_settings(debug_settings)
         
-        # Create window manager first
-        self.window_manager = WindowManager("Total Battle")
-        
-        # Store debug window
-        self.debug_window = debug_window
-        self.debug_window.window_closed.connect(self._on_debug_window_closed)
-        
-        # Create pattern matcher with window manager and debug window
-        self.pattern_matcher = PatternMatcher(
-            window_manager=self.window_manager,
-            confidence=pattern_settings["confidence"],
-            target_frequency=pattern_settings["target_frequency"],
-            sound_enabled=pattern_settings["sound_enabled"],
-            debug_window=self.debug_window
-        )
-        
-        # Create overlay with window manager and pattern matcher
-        self.overlay = Overlay(self.window_manager, pattern_settings, overlay_settings)
-        
-        # Store game actions and text OCR
+        # Store components
+        self.overlay = overlay
+        self.pattern_matcher = self.overlay.pattern_matcher
         self.game_actions = game_actions
         self.text_ocr = text_ocr
+        self.debug_window = debug_window
+        self.window_manager = self.overlay.window_manager  # Get window_manager from overlay
+        self.debug_window.window_closed.connect(self._on_debug_window_closed)
         
-        self.config_manager = ConfigManager()
-        self.toggle_callback: Optional[Callable[[], None]] = None
-        self.quit_callback: Optional[Callable[[], None]] = None
-        
-        # Store colors
+        # Store colors from settings
         self.current_color = overlay_settings["rect_color"]
         self.font_color = overlay_settings["font_color"]
         self.cross_color = overlay_settings["cross_color"]
         
-        # Create UI
+        # Store callbacks
+        self.toggle_callback: Optional[Callable[[], None]] = None
+        self.quit_callback: Optional[Callable[[], None]] = None
+        
+        # Initialize UI elements that will be created later
+        # Overlay controls
+        self.toggle_btn = None
+        self.rect_color_btn = None
+        self.font_color_btn = None
+        self.cross_color_btn = None
+        self.thickness_slider = None
+        self.thickness_input = None
+        self.scale_slider = None
+        self.scale_input = None
+        self.cross_scale_slider = None
+        self.cross_scale_input = None
+        self.font_size_slider = None
+        self.font_size_input = None
+        self.text_thickness_slider = None
+        self.text_thickness_input = None
+        self.cross_thickness_slider = None
+        self.cross_thickness_input = None
+        
+        # Pattern matching controls
+        self.pattern_btn = None
+        self.sound_btn = None
+        self.reload_btn = None
+        self.debug_btn = None
+        self.confidence_slider = None
+        self.confidence_input = None
+        self.freq_slider = None
+        self.freq_input = None
+        self.freq_display = None
+        
+        # Automation controls
+        self.sequence_btn = None
+        self.sequence_status = None
+        
+        # OCR controls
+        self.ocr_btn = None
+        self.ocr_freq_slider = None
+        self.ocr_freq_input = None
+        self.select_ocr_region_btn = None
+        self.ocr_status = None
+        self.ocr_coords_label = None
+        
+        # Create window
         self.setWindowTitle("Total Battle Scout")
         self.setGeometry(100, 100, 800, 800)  # Made window larger to accommodate tabs
         
@@ -139,18 +167,14 @@ class OverlayController(QMainWindow):
         # Initialize scan controls with current region
         scanner_settings = self.config_manager.get_scanner_settings()
         if scanner_settings:
-            self.scan_status.setText(
-                f"Minimap region: ({scanner_settings['minimap_left']}, {scanner_settings['minimap_top']})"
-            )
+            self.sequence_status.setText("Sequence: Inactive")
         
         # Load OCR settings
         ocr_settings = self.config_manager.get_ocr_settings()
         if ocr_settings['region']['width'] > 0:
             self.text_ocr.set_region(ocr_settings['region'])
             self.text_ocr.set_frequency(ocr_settings['frequency'])
-            self.ocr_status.setText(
-                f"OCR region: ({ocr_settings['region']['left']}, {ocr_settings['region']['top']})"
-            )
+            self.ocr_status.setText("Text OCR: Inactive")
         
         # Connect OCR frequency controls
         def on_ocr_slider_change(value: int) -> None:
@@ -158,7 +182,6 @@ class OverlayController(QMainWindow):
             logger.debug(f"OCR frequency slider changed: {value} -> {freq} updates/sec")
             self.ocr_freq_input.setValue(freq)
             self.text_ocr.set_frequency(freq)
-            self.ocr_freq_display.setText(f"Target: {freq:.1f} updates/sec")
             
             # Save to config
             ocr_settings = self.config_manager.get_ocr_settings()
@@ -169,7 +192,6 @@ class OverlayController(QMainWindow):
             logger.debug(f"OCR frequency spinbox changed to: {value} updates/sec")
             self.ocr_freq_slider.setValue(int(value * 10))
             self.text_ocr.set_frequency(value)
-            self.ocr_freq_display.setText(f"Target: {value:.1f} updates/sec")
             
             # Save to config
             ocr_settings = self.config_manager.get_ocr_settings()
@@ -483,35 +505,34 @@ class OverlayController(QMainWindow):
     
     def create_scan_controls(self, layout: QVBoxLayout) -> None:
         """
-        Create controls for world scanning and OCR functionality.
+        Create controls for automation and OCR functionality.
         
         This method sets up:
-        1. World scanning controls (toggle button, status)
+        1. Automation controls (sequence execution)
         2. OCR controls (toggle button, frequency slider, region selection)
         
         Args:
             layout: Parent layout to add controls to
         """
         # Get OCR settings from config manager
-        config = ConfigManager()
-        ocr_settings = config.get_ocr_settings()
+        ocr_settings = self.config_manager.get_ocr_settings()
         
-        # Create group box for world scanning
-        scan_group = QGroupBox("World Scanning")
-        scan_layout = QVBoxLayout()
+        # Create group box for automation
+        automation_group = QGroupBox("Automation")
+        automation_layout = QVBoxLayout()
         
-        # Create scan toggle button
-        self.scan_btn = QPushButton("Start World Scan")
-        self.scan_btn.setCheckable(True)
-        self.scan_btn.clicked.connect(self._toggle_scan)
-        scan_layout.addWidget(self.scan_btn)
+        # Create sequence execution button
+        self.sequence_btn = QPushButton("Start Sequence")
+        self.sequence_btn.setCheckable(True)
+        self.sequence_btn.clicked.connect(self._toggle_sequence)
+        automation_layout.addWidget(self.sequence_btn)
         
-        # Create scan status label
-        self.scan_status = QLabel("World Scan: Inactive")
-        scan_layout.addWidget(self.scan_status)
+        # Create sequence status label
+        self.sequence_status = QLabel("Sequence: Inactive")
+        automation_layout.addWidget(self.sequence_status)
         
-        scan_group.setLayout(scan_layout)
-        layout.addWidget(scan_group)
+        automation_group.setLayout(automation_layout)
+        layout.addWidget(automation_group)
         
         # Create group box for OCR
         ocr_group = QGroupBox("Text OCR")
@@ -524,7 +545,7 @@ class OverlayController(QMainWindow):
         ocr_layout.addWidget(self.ocr_btn)
         
         # Create OCR frequency controls
-        freq_layout = QVBoxLayout()  # Changed to vertical layout
+        freq_layout = QVBoxLayout()
         
         # Create horizontal layout for slider and spinbox
         freq_controls = QHBoxLayout()
@@ -553,6 +574,7 @@ class OverlayController(QMainWindow):
         self.ocr_freq_input.valueChanged.connect(self.on_ocr_spinbox_change)
         freq_controls.addWidget(self.ocr_freq_input)
         
+        freq_layout.addLayout(freq_controls)
         ocr_layout.addLayout(freq_layout)
         
         # Create OCR region selection button
@@ -642,7 +664,7 @@ class OverlayController(QMainWindow):
             actual_freq = self.pattern_matcher.update_frequency
             target_freq = self.freq_input.value()
             
-            logger.debug(f"Updating pattern frequency display - Target: {target_freq:.1f}, Actual: {actual_freq:.1f}")
+            # logger.debug(f"Updating pattern frequency display - Target: {target_freq:.1f}, Actual: {actual_freq:.1f}")
             
             # Update display with frequency values
             self.freq_display.setText(f"Target: {target_freq:.1f} updates/sec, Actual: {actual_freq:.1f} updates/sec")
@@ -650,13 +672,13 @@ class OverlayController(QMainWindow):
             # Color code the display based on performance
             if actual_freq >= target_freq * 0.9:  # Within 90% of target
                 self.freq_display.setStyleSheet("color: green;")
-                logger.debug("Performance good (>90%) - display green")
+                # logger.debug("Performance good (>90%) - display green")
             elif actual_freq >= target_freq * 0.7:  # Within 70% of target
                 self.freq_display.setStyleSheet("color: orange;")
-                logger.debug("Performance moderate (70-90%) - display orange")
+                # logger.debug("Performance moderate (70-90%) - display orange")
             else:  # Below 70% of target
                 self.freq_display.setStyleSheet("color: red;")
-                logger.debug("Performance poor (<70%) - display red")
+                # logger.debug("Performance poor (<70%) - display red")
         else:
             logger.warning("Pattern matcher has no update_frequency attribute")
             self.freq_display.setText("Updates/sec: N/A")
@@ -875,311 +897,41 @@ class OverlayController(QMainWindow):
                 "background-color: #8B0000; color: white; padding: 8px; font-weight: bold;"  # Dark red
             )
 
-    def _toggle_scan(self) -> None:
-        """Toggle world scanning."""
-        if self.scan_btn.isChecked():
-            self.start_scan()
+    def _toggle_sequence(self) -> None:
+        """Toggle sequence execution."""
+        if self.sequence_btn.isChecked():
+            self.start_sequence()
         else:
-            self.stop_scan()
+            self.stop_sequence()
             
-    def start_scan(self) -> None:
-        """Start world scanning."""
-        self.scan_btn.setText("Stop Scanning")
-        self.scan_status.setText("Scanner: Active")
-        self._start_world_scan()
+    def start_sequence(self) -> None:
+        """Start sequence execution."""
+        # Get the current sequence from the automation tab
+        if not hasattr(self, 'controller') or not hasattr(self.controller, 'automation_tab'):
+            logger.error("Automation tab not available")
+            self.sequence_btn.setChecked(False)
+            return
+            
+        sequence = self.controller.automation_tab.sequence_builder.sequence
+        if not sequence:
+            QMessageBox.warning(self, "Error", "No sequence loaded")
+            self.sequence_btn.setChecked(False)
+            return
+            
+        self.sequence_btn.setText("Stop Sequence")
+        self.sequence_status.setText("Sequence: Active")
         
-    def stop_scan(self) -> None:
-        """Stop world scanning."""
-        self.scan_btn.setText("Start World Scan")
-        self.scan_status.setText("Scanner: Inactive")
+        # Start sequence execution using the automation tab's sequence builder
+        self.controller.automation_tab.sequence_builder._on_run_clicked()
         
-        if hasattr(self, 'scan_worker'):
-            self.scan_worker.stop()
-            self.scan_thread.quit()
-            self.scan_thread.wait()
-            self.log_handler.cleanup()
-            self.debug_window.hide()
-    
-    def _start_world_scan(self) -> None:
-        """Start the world scanning process."""
-        try:
-            # Create and configure scanner
-            scanner_settings = self.config_manager.get_scanner_settings()
-            if not scanner_settings:
-                logger.error("No scanner settings found")
-                return
-                
-            self.world_scanner = WorldScanner(
-                minimap_left=scanner_settings['minimap_left'],
-                minimap_top=scanner_settings['minimap_top'],
-                minimap_width=scanner_settings['minimap_width'],
-                minimap_height=scanner_settings['minimap_height'],
-                dpi_scale=scanner_settings['dpi_scale']
-            )
-            
-            # Create worker and thread
-            self.scan_worker = ScanWorker(self.world_scanner, self.pattern_matcher)
-            self.scan_thread = QThread()
-            
-            # Move worker to thread
-            self.scan_worker.moveToThread(self.scan_thread)
-            
-            # Connect signals
-            self.scan_thread.started.connect(self.scan_worker.run)
-            self.scan_worker.finished.connect(self.scan_thread.quit)
-            self.scan_worker.finished.connect(self.scan_worker.deleteLater)
-            self.scan_thread.finished.connect(self.scan_thread.deleteLater)
-            
-            self.scan_worker.position_found.connect(self._on_position_found)
-            self.scan_worker.error.connect(self._on_scan_error)
-            
-            # Connect debug image signal to debug window
-            self.scan_worker.debug_image.connect(
-                lambda img, coord_type, value: self.debug_window.update_image(
-                    f"Coordinate {coord_type}",
-                    img,
-                    metadata={"value": value},
-                    save=True
-                )
-            )
-            
-            # Start scanning
-            self.scan_thread.start()
-            logger.info("World scan started with pattern matching active")
-            
-        except Exception as e:
-            logger.error(f"Error starting scan: {e}", exc_info=True)
-            self.stop_scan()
-            
-    def _on_position_found(self, position: WorldPosition) -> None:
-        """Handle when a matching position is found."""
-        self.scan_status.setText(f"Match found at X={position.x}, Y={position.y}, K={position.k}")
-        self.stop_scan()
+    def stop_sequence(self) -> None:
+        """Stop sequence execution."""
+        self.sequence_btn.setText("Start Sequence")
+        self.sequence_status.setText("Sequence: Inactive")
         
-    def _on_scan_error(self, error_msg: str) -> None:
-        """Handle scan errors."""
-        self.scan_status.setText(f"Error: {error_msg}")
-        self.stop_scan()
-
-    def _start_region_selection(self) -> None:
-        """Start the region selection process."""
-        logger.info("Starting minimap region selection")
-        
-        try:
-            if hasattr(self, 'region_selector'):
-                logger.debug("Cleaning up previous region selector")
-                self.region_selector.close()
-                self.region_selector.deleteLater()
-            
-            logger.debug("Creating new SelectorTool instance")
-            self.region_selector = SelectorTool(
-                window_manager=self.window_manager,
-                instruction_text="Click and drag to select minimap region"
-            )
-            self.region_selector.region_selected.connect(self._on_region_selected)
-            self.region_selector.selection_cancelled.connect(self._on_region_cancelled)
-            
-            # Don't hide main window, just show selector
-            logger.debug("Scheduling selector display")
-            QTimer.singleShot(100, lambda: self._show_selector())
-            
-            logger.debug("Region selector initialization complete")
-            
-        except Exception as e:
-            logger.error(f"Error starting region selection: {e}", exc_info=True)
-            
-    def _show_selector(self) -> None:
-        """Helper method to show and activate the selector."""
-        try:
-            logger.debug("Showing selector tool")
-            self.region_selector.show()
-            logger.debug("Activating selector window")
-            self.region_selector.activateWindow()
-            logger.debug("Selector display complete")
-        except Exception as e:
-            logger.error(f"Error showing selector: {e}", exc_info=True)
-    
-    def _on_region_selected(self, region: dict) -> None:
-        """
-        Handle the selected region from the selector tool.
-        
-        This method processes the selected region coordinates and captures the raw screenshot
-        without any color space conversion or processing.
-        
-        Args:
-            region: Dictionary containing the selected region coordinates (left, top, width, height)
-                   and DPI scaling information
-        """
-        logger.info(f"Selected region: {region}")
-        
-        try:
-            # Log all screens and their geometries
-            screens = QApplication.screens()
-            logger.info(f"Found {len(screens)} screens")
-            
-            for i, screen in enumerate(screens):
-                geom = screen.geometry()
-                dpi = screen.devicePixelRatio()
-                logger.info(f"Screen {i}: Geometry={geom}, DPI={dpi}")
-            
-            # The coordinates in region are already physical pixels adjusted for DPI scaling
-            # Save physical coordinates to config for MSS
-            config = ConfigManager()
-            config.update_scanner_settings({
-                'minimap_left': region['left'],
-                'minimap_top': region['top'],
-                'minimap_width': region['width'],
-                'minimap_height': region['height'],
-                'dpi_scale': region['dpi_scale'],
-                'logical_coords': region['logical_coords']
-            })
-            
-            # Capture and display debug image using physical coordinates
-            with mss.mss() as sct:
-                # MSS uses physical coordinates, so use them directly
-                monitor = {
-                    "left": region['left'],
-                    "top": region['top'],
-                    "width": region['width'],
-                    "height": region['height'],
-                    "mon": 0  # Use the virtual screen
-                }
-                
-                logger.info(f"Capturing with monitor settings: {monitor}")
-                screenshot = np.array(sct.grab(monitor))
-                
-                # Display raw debug image in window
-                self.debug_window.update_image(
-                    "Selected Region",
-                    screenshot,
-                    metadata={
-                        "physical_coords": f"({region['left']}, {region['top']}) {region['width']}x{region['height']}",
-                        "logical_coords": f"({region['logical_coords']['left']}, {region['logical_coords']['top']}) "
-                                        f"{region['logical_coords']['width']}x{region['logical_coords']['height']}",
-                        "dpi_scale": region['dpi_scale']
-                    },
-                    save=True
-                )
-                
-                # Update status with logical coordinates for display
-                logical = region['logical_coords']
-                self.scan_status.setText(
-                    f"Minimap region: ({logical['left']}, {logical['top']}) "
-                    f"[Physical: ({region['left']}, {region['top']})]"
-                )
-                
-        except Exception as e:
-            logger.error(f"Error saving region: {e}", exc_info=True)
-
-    def _on_region_cancelled(self) -> None:
-        """Handle region selection cancellation."""
-        logger.info("Region selection cancelled")
-        
-        try:
-            # Restore previous region status if it exists
-            scanner_settings = self.config_manager.get_scanner_settings()
-            if scanner_settings:
-                status_text = f"Minimap region: ({scanner_settings['minimap_left']}, {scanner_settings['minimap_top']})"
-                logger.debug(f"Restoring previous region status: {status_text}")
-                self.scan_status.setText(status_text)
-            else:
-                logger.debug("No previous region settings found")
-                self.scan_status.setText("Scanner: Inactive")
-        except Exception as e:
-            logger.error(f"Error handling region cancellation: {e}", exc_info=True)
-            self.scan_status.setText("Scanner: Inactive")
-
-    def _start_input_field_selection(self) -> None:
-        """Start the input field location selection."""
-        logger.info("Starting input field selection")
-        
-        msg = QMessageBox()
-        msg.setWindowTitle("Input Field Selection")
-        msg.setText("Click OK, then click on the coordinate input field in the game.")
-        msg.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
-        
-        if msg.exec() == QMessageBox.StandardButton.Ok:
-            # Hide window during selection
-            self.hide()
-            sleep(0.5)
-            
-            try:
-                # Wait for mouse click
-                x, y = self._get_click_position()
-                logger.info(f"Input field position selected: ({x}, {y})")
-                
-                # Save to config
-                self.config_manager.update_scanner_settings({
-                    'input_field_x': x,
-                    'input_field_y': y
-                })
-                
-                # Update status
-                self.scan_status.setText(f"Input field set: ({x}, {y})")
-                
-            except Exception as e:
-                logger.error(f"Error setting input field: {e}", exc_info=True)
-                self.scan_status.setText("Error setting input field!")
-            
-            finally:
-                self.show()
-                
-    def _get_click_position(self) -> Tuple[int, int]:
-        """Wait for and return the next mouse click position."""
-        while True:
-            if pyautogui.mouseDown():
-                x, y = pyautogui.position()
-                sleep(0.1)  # Wait to avoid multiple detections
-                return x, y
-            sleep(0.1)
-
-    def _toggle_pattern_matching(self) -> None:
-        """Toggle pattern matching on/off."""
-        try:
-            # Get current settings
-            settings = self.config_manager.get_pattern_matching_settings()
-            
-            # Toggle active state
-            settings["active"] = not settings["active"]
-            
-            # Update settings in config
-            self.config_manager.update_pattern_matching_settings(settings)
-            
-            # Update pattern matcher
-            if settings["active"]:
-                self.overlay.start_pattern_matching()
-                self._update_pattern_button_color(True)
-                logger.info("Pattern matching activated")
-            else:
-                self.overlay.stop_pattern_matching()
-                self._update_pattern_button_color(False)
-                logger.info("Pattern matching deactivated")
-                
-        except Exception as e:
-            logger.error(f"Error toggling pattern matching: {e}", exc_info=True)
-            self._update_pattern_button_color(False)
-
-    def _toggle_sound(self) -> None:
-        """Toggle sound alerts on/off."""
-        is_enabled = self.sound_btn.text().endswith("ON")
-        new_state = not is_enabled
-        
-        # Update button state
-        self.sound_btn.setText(f"Sound Alert: {'ON' if new_state else 'OFF'}")
-        self._update_sound_button_color(new_state)
-        
-        # Update pattern matcher sound state
-        if hasattr(self.pattern_matcher, 'sound_enabled'):
-            self.pattern_matcher.sound_enabled = new_state
-        
-        # Save the new state
-        self.save_settings()
-        
-        # Play test sound if enabled
-        if new_state and hasattr(self.pattern_matcher, 'sound_manager'):
-            self.pattern_matcher.sound_manager.play_if_ready()
-            
-        logger.info(f"Sound alerts {'enabled' if new_state else 'disabled'}")
+        # Stop sequence execution using the automation tab's sequence builder
+        if hasattr(self, 'controller') and hasattr(self.controller, 'automation_tab'):
+            self.controller.automation_tab.sequence_builder._on_stop_clicked()
 
     def _toggle_debug_mode(self) -> None:
         """
@@ -1543,4 +1295,52 @@ class OverlayController(QMainWindow):
             
         finally:
             # Call parent class closeEvent
-            super().closeEvent(event) 
+            super().closeEvent(event)
+
+    def _toggle_pattern_matching(self) -> None:
+        """Toggle pattern matching on/off."""
+        try:
+            # Get current settings
+            settings = self.config_manager.get_pattern_matching_settings()
+            
+            # Toggle active state
+            settings["active"] = not settings["active"]
+            
+            # Update settings in config
+            self.config_manager.update_pattern_matching_settings(settings)
+            
+            # Update pattern matcher
+            if settings["active"]:
+                self.overlay.start_pattern_matching()
+                self._update_pattern_button_color(True)
+                logger.info("Pattern matching activated")
+            else:
+                self.overlay.stop_pattern_matching()
+                self._update_pattern_button_color(False)
+                logger.info("Pattern matching deactivated")
+                
+        except Exception as e:
+            logger.error(f"Error toggling pattern matching: {e}", exc_info=True)
+            self._update_pattern_button_color(False)
+
+    def _toggle_sound(self) -> None:
+        """Toggle sound alerts on/off."""
+        is_enabled = self.sound_btn.text().endswith("ON")
+        new_state = not is_enabled
+        
+        # Update button state
+        self.sound_btn.setText(f"Sound Alert: {'ON' if new_state else 'OFF'}")
+        self._update_sound_button_color(new_state)
+        
+        # Update pattern matcher sound state
+        if hasattr(self.pattern_matcher, 'sound_enabled'):
+            self.pattern_matcher.sound_enabled = new_state
+        
+        # Save the new state
+        self.save_settings()
+        
+        # Play test sound if enabled
+        if new_state and hasattr(self.pattern_matcher, 'sound_manager'):
+            self.pattern_matcher.sound_manager.play_if_ready()
+            
+        logger.info(f"Sound alerts {'enabled' if new_state else 'disabled'}") 

@@ -14,7 +14,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QListWidget, QListWidgetItem, QLineEdit, QSpinBox,
     QDoubleSpinBox, QComboBox, QMessageBox, QFileDialog,
-    QGroupBox, QScrollArea, QFrame, QCheckBox
+    QGroupBox, QScrollArea, QFrame, QCheckBox, QSlider
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 import logging
@@ -25,6 +25,7 @@ from scout.automation.actions import ActionType, AutomationAction, ActionParamsC
 from scout.automation.gui.position_marker import PositionMarker
 from scout.automation.gui.action_params import create_params_widget, BaseParamsWidget
 from scout.automation.executor import SequenceExecutor, ExecutionContext
+from scout.config_manager import ConfigManager
 
 logger = logging.getLogger(__name__)
 
@@ -40,10 +41,12 @@ class PositionList(QWidget):
     """
     
     position_selected = pyqtSignal(str)  # Emits position name
+    positions_changed = pyqtSignal(dict)  # Emits updated positions dictionary
     
-    def __init__(self):
+    def __init__(self, sequence_builder=None):
         """Initialize the position list widget."""
         super().__init__()
+        self.sequence_builder = sequence_builder
         
         layout = QVBoxLayout()
         self.setLayout(layout)
@@ -103,19 +106,27 @@ class PositionList(QWidget):
         # Initialize state
         self.positions: Dict[str, AutomationPosition] = {}
         self._updating_details = False
+        self._current_item: Optional[QListWidgetItem] = None
+        
+    def set_sequence_builder(self, sequence_builder) -> None:
+        """Set the sequence builder reference."""
+        self.sequence_builder = sequence_builder
         
     def update_positions(self, positions: Dict[str, AutomationPosition]) -> None:
         """Update the position list with new positions."""
-        self.positions = positions
+        self._updating_details = True  # Prevent feedback loops
+        self.positions = positions.copy()  # Make a copy to prevent reference issues
         self.list_widget.clear()
-        for name in positions:
+        for name in sorted(positions.keys()):  # Sort names for consistent display
             self.list_widget.addItem(name)
-            
+        self._updating_details = False
+        
     def _on_position_selected(self, item: QListWidgetItem) -> None:
         """Handle position selection."""
         name = item.text()
         self.remove_button.setEnabled(True)
         self.position_selected.emit(name)
+        self._current_item = item
         
         # Update details
         if name in self.positions:
@@ -153,19 +164,60 @@ class PositionList(QWidget):
             return
             
         old_name = current.text()
-        new_name = self.name_edit.text()
+        new_name = self.name_edit.text().strip()  # Strip whitespace from name
         
+        if not new_name:  # Don't allow empty names
+            return
+            
         if old_name in self.positions:
             pos = self.positions[old_name]
+            # Update position details
             pos.x = self.x_spin.value()
             pos.y = self.y_spin.value()
             pos.description = self.description_edit.text()
             
+            needs_save = True
             if new_name != old_name:
+                # Check if new name already exists
+                if new_name in self.positions and new_name != old_name:
+                    logger.warning(f"Position name '{new_name}' already exists")
+                    # Revert name change
+                    self._updating_details = True
+                    self.name_edit.setText(old_name)
+                    self._updating_details = False
+                    return
+                    
                 # Rename position
                 self.positions[new_name] = pos
                 del self.positions[old_name]
-                self.update_positions(self.positions)
+                
+                # Update list item text without triggering a full refresh
+                self._updating_details = True
+                current.setText(new_name)
+                self._updating_details = False
+            
+            # Save positions to disk after any change
+            if needs_save:
+                try:
+                    positions_file = Path('config/actions/positions.json')
+                    positions_data = {
+                        name: pos.to_dict() for name, pos in self.positions.items()
+                    }
+                    positions_file.parent.mkdir(parents=True, exist_ok=True)
+                    with open(positions_file, 'w') as f:
+                        json.dump(positions_data, f, indent=4)
+                    logger.debug(f"Position details updated and saved for '{new_name}'")
+                    
+                    # Update sequence builder's position list
+                    if self.sequence_builder:
+                        self.sequence_builder.update_positions(self.positions.copy())
+                    
+                    # Emit positions changed signal
+                    self.positions_changed.emit(self.positions.copy())
+                    
+                except Exception as e:
+                    logger.error(f"Failed to save positions: {e}")
+                    QMessageBox.critical(None, "Error", f"Failed to save position changes: {str(e)}")
 
 class ActionListItem(QListWidgetItem):
     """List item representing an action in a sequence."""
@@ -214,7 +266,10 @@ class SequenceBuilder(QWidget):
         name_layout = QHBoxLayout()
         name_layout.addWidget(QLabel("Sequence Name:"))
         self.name_edit = QLineEdit()
-        self.name_edit.textChanged.connect(self._on_sequence_changed)
+        # Disconnect any existing connections first
+        self.name_edit.textChanged.disconnect() if self.name_edit.receivers(self.name_edit.textChanged) > 0 else None
+        # Connect with the full text, not just the changed part
+        self.name_edit.textChanged.connect(lambda: self._on_sequence_changed())
         name_layout.addWidget(self.name_edit)
         layout.addLayout(name_layout)
         
@@ -360,9 +415,15 @@ class SequenceBuilder(QWidget):
             actions=[],
             description=None
         )
+        # Update name edit with blocking signals
+        self.name_edit.blockSignals(True)
         self.name_edit.setText(self.sequence.name)
+        self.name_edit.blockSignals(False)
+        
         self.list_widget.clear()
         self._update_buttons()
+        self.sequence_changed.emit()
+        logger.debug("Created new empty sequence")
         
     def update_positions(self, positions: Dict[str, AutomationPosition]) -> None:
         """Update available positions."""
@@ -377,8 +438,12 @@ class SequenceBuilder(QWidget):
             return
             
         if self.sequence:
-            self.sequence.name = self.name_edit.text()
+            # Get the full new name from the line edit
+            new_name = self.name_edit.text()
+            # Update sequence name
+            self.sequence.name = new_name
             self.sequence_changed.emit()
+            logger.debug(f"Sequence name updated to: {new_name}")
             
     def _on_action_selected(self, current: ActionListItem, previous: ActionListItem) -> None:
         """Handle action selection."""
@@ -668,7 +733,11 @@ class SequenceBuilder(QWidget):
             
             # Update sequence
             self.sequence = sequence
+            
+            # Update name edit with blocking signals to prevent feedback loop
+            self.name_edit.blockSignals(True)
             self.name_edit.setText(sequence.name)
+            self.name_edit.blockSignals(False)
             
             # Clear and rebuild list
             self.list_widget.clear()
@@ -731,9 +800,12 @@ class AutomationTab(QWidget):
         self.position_marker = PositionMarker(window_manager)
         self.position_marker.position_marked.connect(self._on_position_marked)
         
-        # Create left side (positions)
-        self.position_list = PositionList()
-        self.position_list.add_button.clicked.connect(self._start_position_marking)  # Connect add button
+        # Create sequence builder first
+        self.sequence_builder = SequenceBuilder()
+        
+        # Create left side (positions) with sequence builder reference
+        self.position_list = PositionList(self.sequence_builder)
+        self.position_list.add_button.clicked.connect(self._start_position_marking)
         layout.addWidget(self.position_list, stretch=1)
         
         # Add separator
@@ -742,8 +814,7 @@ class AutomationTab(QWidget):
         separator.setFrameShadow(QFrame.Shadow.Sunken)
         layout.addWidget(separator)
         
-        # Create right side (sequences)
-        self.sequence_builder = SequenceBuilder()
+        # Add sequence builder to layout
         layout.addWidget(self.sequence_builder, stretch=2)
         
         # Create debug window
@@ -1010,3 +1081,120 @@ class AutomationTab(QWidget):
             self.position_list.add_button.setEnabled(True)
             self.position_marker.stop_marking()  # Ensure overlay is cleaned up
             QMessageBox.critical(self, "Error", f"Failed to start position marking: {str(e)}")
+
+    def create_scan_controls(self, layout: QVBoxLayout) -> None:
+        """
+        Create controls for automation and OCR functionality.
+        
+        This method sets up:
+        1. Automation controls (sequence execution)
+        2. OCR controls (toggle button, frequency slider, region selection)
+        
+        Args:
+            layout: Parent layout to add controls to
+        """
+        # Get OCR settings from config manager
+        config = ConfigManager()
+        ocr_settings = config.get_ocr_settings()
+        
+        # Create group box for automation
+        automation_group = QGroupBox("Automation")
+        automation_layout = QVBoxLayout()
+        
+        # Create sequence execution button
+        self.sequence_btn = QPushButton("Start Sequence")
+        self.sequence_btn.setCheckable(True)
+        self.sequence_btn.clicked.connect(self._toggle_sequence)
+        automation_layout.addWidget(self.sequence_btn)
+        
+        # Create sequence status label
+        self.sequence_status = QLabel("Sequence: Inactive")
+        automation_layout.addWidget(self.sequence_status)
+        
+        automation_group.setLayout(automation_layout)
+        layout.addWidget(automation_group)
+        
+        # Create group box for OCR
+        ocr_group = QGroupBox("Text OCR")
+        ocr_layout = QVBoxLayout()
+        
+        # Create OCR toggle button
+        self.ocr_btn = QPushButton("Start Text OCR")
+        self.ocr_btn.setCheckable(True)
+        self.ocr_btn.clicked.connect(self._toggle_ocr)
+        ocr_layout.addWidget(self.ocr_btn)
+        
+        # Create OCR frequency controls
+        freq_layout = QVBoxLayout()  # Changed to vertical layout
+        
+        # Create horizontal layout for slider and spinbox
+        freq_controls = QHBoxLayout()
+        freq_label = QLabel("OCR Frequency:")
+        freq_controls.addWidget(freq_label)
+        
+        # Add range label
+        range_label = QLabel("(0.1 - 2.0 updates/sec)")
+        range_label.setStyleSheet("QLabel { color: gray; }")
+        freq_controls.addWidget(range_label)
+        
+        # Slider for frequency
+        self.ocr_freq_slider = QSlider(Qt.Orientation.Horizontal)
+        self.ocr_freq_slider.setMinimum(1)  # 0.1 updates/sec
+        self.ocr_freq_slider.setMaximum(20)  # 2.0 updates/sec
+        self.ocr_freq_slider.setValue(int(ocr_settings['frequency'] * 10))
+        self.ocr_freq_slider.valueChanged.connect(self.on_ocr_slider_change)
+        freq_controls.addWidget(self.ocr_freq_slider)
+        
+        # Create spinbox for precise input
+        self.ocr_freq_input = QDoubleSpinBox()
+        self.ocr_freq_input.setMinimum(0.1)
+        self.ocr_freq_input.setMaximum(2.0)
+        self.ocr_freq_input.setSingleStep(0.1)
+        self.ocr_freq_input.setValue(ocr_settings['frequency'])
+        self.ocr_freq_input.valueChanged.connect(self.on_ocr_spinbox_change)
+        freq_controls.addWidget(self.ocr_freq_input)
+        
+        ocr_layout.addLayout(freq_layout)
+        
+        # Create OCR region selection button
+        self.select_ocr_region_btn = QPushButton("Select OCR Region")
+        self.select_ocr_region_btn.clicked.connect(self._start_ocr_region_selection)
+        ocr_layout.addWidget(self.select_ocr_region_btn)
+        
+        # Create OCR status label with coordinates
+        self.ocr_status = QLabel("Text OCR: Inactive")
+        self.ocr_coords_label = QLabel("Coordinates: None")
+        self.ocr_coords_label.setStyleSheet("font-family: monospace;")  # For better alignment
+        ocr_layout.addWidget(self.ocr_status)
+        ocr_layout.addWidget(self.ocr_coords_label)
+        
+        ocr_group.setLayout(ocr_layout)
+        layout.addWidget(ocr_group)
+
+    def _toggle_sequence(self) -> None:
+        """Toggle sequence execution."""
+        if self.sequence_btn.isChecked():
+            self.start_sequence()
+        else:
+            self.stop_sequence()
+            
+    def start_sequence(self) -> None:
+        """Start sequence execution."""
+        if not self.sequence_builder.sequence:
+            QMessageBox.warning(self, "Error", "No sequence loaded")
+            self.sequence_btn.setChecked(False)
+            return
+            
+        self.sequence_btn.setText("Stop Sequence")
+        self.sequence_status.setText("Sequence: Active")
+        
+        # Start sequence execution
+        self.sequence_builder._on_run_clicked()
+        
+    def stop_sequence(self) -> None:
+        """Stop sequence execution."""
+        self.sequence_btn.setText("Start Sequence")
+        self.sequence_status.setText("Sequence: Inactive")
+        
+        # Stop sequence execution
+        self.sequence_builder._on_stop_clicked()

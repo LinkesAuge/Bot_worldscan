@@ -4,7 +4,7 @@
         {
             "type": "CLICK",
             "params": {
-                "position_name": null,
+                "position_name": "Position_2",
                 "timeout": 30.0,
                 "description": null
             }
@@ -21,7 +21,7 @@
         {
             "type": "CLICK",
             "params": {
-                "position_name": null,
+                "position_name": "testblabla",
                 "timeout": 30.0,
                 "description": null
             }
@@ -34,15 +34,6 @@
                 "timeout": 30.0,
                 "description": null,
                 "min_confidence": 0.8
-            }
-        },
-        {
-            "type": "WAIT",
-            "params": {
-                "duration": 1.0,
-                "position_name": null,
-                "timeout": 30.0,
-                "description": null
             }
         },
         {
