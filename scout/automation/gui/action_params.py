@@ -93,6 +93,14 @@ class DragParamsWidget(BaseParamsWidget):
         desc_layout.addWidget(self.description_edit)
         layout.addLayout(desc_layout)
         
+        # End position field
+        end_pos_layout = QHBoxLayout()
+        end_pos_layout.addWidget(QLabel("End Position:"))
+        self.end_position_edit = QLineEdit()
+        self.end_position_edit.textChanged.connect(self.params_changed.emit)
+        end_pos_layout.addWidget(self.end_position_edit)
+        layout.addLayout(end_pos_layout)
+        
         # Duration field
         duration_layout = QHBoxLayout()
         duration_layout.addWidget(QLabel("Duration (s):"))
@@ -118,7 +126,8 @@ class DragParamsWidget(BaseParamsWidget):
         return DragParams(
             description=self.description_edit.text() or None,
             timeout=self.timeout_spin.value(),
-            duration=self.duration_spin.value()
+            duration=self.duration_spin.value(),
+            end_position_name=self.end_position_edit.text()
         )
         
     def set_params(self, params: DragParams) -> None:
@@ -127,6 +136,7 @@ class DragParamsWidget(BaseParamsWidget):
         self.description_edit.setText(params.description or "")
         self.timeout_spin.setValue(params.timeout)
         self.duration_spin.setValue(params.duration)
+        self.end_position_edit.setText(params.end_position_name)
         self._creating_widgets = False
 
 class TypeParamsWidget(BaseParamsWidget):

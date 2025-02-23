@@ -656,6 +656,52 @@ class SequenceBuilder(QWidget):
         self.progress_label.setText("Error: " + message)
         QMessageBox.critical(self, "Execution Error", message)
 
+    def load_sequence(self, sequence: AutomationSequence) -> None:
+        """
+        Load a sequence into the builder.
+        
+        Args:
+            sequence: Sequence to load
+        """
+        try:
+            self._updating_widgets = True
+            
+            # Update sequence
+            self.sequence = sequence
+            self.name_edit.setText(sequence.name)
+            
+            # Clear and rebuild list
+            self.list_widget.clear()
+            for action_data in sequence.actions:
+                action = AutomationAction.from_dict(action_data)
+                item = ActionListItem(action)
+                self.list_widget.addItem(item)
+                
+            self._updating_widgets = False
+            self.sequence_changed.emit()
+            logger.info(f"Loaded sequence: {sequence.name}")
+            
+        except Exception as e:
+            logger.error(f"Error loading sequence: {e}", exc_info=True)
+            self._updating_widgets = False
+
+    def update_frequency_display(self, target_freq: float, actual_freq: float) -> None:
+        """Update the frequency display label."""
+        logger.debug(f"Updating pattern frequency display - Target: {target_freq:.1f}, Actual: {actual_freq:.1f}")
+        
+        self.freq_display.setText(f"Target: {target_freq:.1f} updates/sec, Actual: {actual_freq:.1f} updates/sec")
+        
+        # Color code the display based on performance
+        if actual_freq >= target_freq * 0.9:  # Within 90% of target
+            self.freq_display.setStyleSheet("color: green;")
+            logger.debug("Performance good (>90%) - display green")
+        elif actual_freq >= target_freq * 0.7:  # Within 70% of target
+            self.freq_display.setStyleSheet("color: orange;")
+            logger.debug("Performance moderate (70-90%) - display orange")
+        else:  # Below 70% of target
+            self.freq_display.setStyleSheet("color: red;")
+            logger.debug("Performance poor (<70%) - display red")
+
 class AutomationTab(QWidget):
     """
     Main automation tab widget.
@@ -687,6 +733,7 @@ class AutomationTab(QWidget):
         
         # Create left side (positions)
         self.position_list = PositionList()
+        self.position_list.add_button.clicked.connect(self._start_position_marking)  # Connect add button
         layout.addWidget(self.position_list, stretch=1)
         
         # Add separator
@@ -713,11 +760,107 @@ class AutomationTab(QWidget):
         
         # Connect signals
         self.position_list.position_selected.connect(self._on_position_selected)
+        self.sequence_builder.sequence_changed.connect(self._on_sequence_changed)
         self.sequence_builder.sequence_execution.connect(self._on_sequence_execution)
         self.sequence_builder.execution_paused.connect(self._on_execution_paused)
         self.sequence_builder.execution_step.connect(self._on_execution_step)
         self.sequence_builder.execution_stopped.connect(self._on_execution_stopped)
         
+        # Load saved positions and sequences
+        self._load_saved_data()
+        
+    def _load_saved_data(self) -> None:
+        """Load saved positions and sequences from disk."""
+        try:
+            # Create actions directory if it doesn't exist
+            actions_dir = Path('config/actions')
+            actions_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Load positions
+            positions_file = actions_dir / 'positions.json'
+            if positions_file.exists():
+                with open(positions_file, 'r') as f:
+                    positions_data = json.load(f)
+                    positions = {
+                        name: AutomationPosition.from_dict(data)
+                        for name, data in positions_data.items()
+                    }
+                    self.position_list.update_positions(positions)
+                    self.sequence_builder.update_positions(positions)
+                    logger.info(f"Loaded {len(positions)} positions")
+            
+            # Load current sequence
+            current_sequence_file = actions_dir / 'current_sequence.json'
+            if current_sequence_file.exists():
+                with open(current_sequence_file, 'r') as f:
+                    sequence_data = json.load(f)
+                    sequence = AutomationSequence.from_dict(sequence_data)
+                    self.sequence_builder.load_sequence(sequence)
+                    logger.info(f"Loaded current sequence: {sequence.name}")
+                    
+        except Exception as e:
+            logger.error(f"Error loading saved data: {e}", exc_info=True)
+            
+    def _save_current_sequence(self) -> None:
+        """Save the current sequence to disk."""
+        try:
+            if not self.sequence_builder.sequence:
+                return
+                
+            # Ensure directory exists
+            actions_dir = Path('config/actions')
+            actions_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Save current sequence
+            current_sequence_file = actions_dir / 'current_sequence.json'
+            with open(current_sequence_file, 'w') as f:
+                json.dump(self.sequence_builder.sequence.to_dict(), f, indent=4)
+                
+            logger.info(f"Saved current sequence: {self.sequence_builder.sequence.name}")
+            
+        except Exception as e:
+            logger.error(f"Error saving current sequence: {e}", exc_info=True)
+            
+    def _on_sequence_changed(self) -> None:
+        """Handle sequence changes."""
+        self._save_current_sequence()
+        
+    def _on_position_marked(self, point) -> None:
+        """Handle new position being marked."""
+        try:
+            # Create new position with default name
+            name = f"Position_{len(self.position_list.positions) + 1}"
+            position = AutomationPosition(name, point.x(), point.y())
+            
+            # Add to list and update UI
+            self.position_list.positions[name] = position
+            self.position_list.update_positions(self.position_list.positions)
+            self.sequence_builder.update_positions(self.position_list.positions)
+            
+            # Stop marking and re-enable button
+            self.position_marker.stop_marking()
+            self.position_list.add_button.setEnabled(True)
+            
+            # Update debug window
+            self.debug_window.update_positions(self.position_list.positions)
+            
+            # Save positions
+            positions_file = Path('config/actions/positions.json')
+            positions_data = {
+                name: pos.to_dict() for name, pos in self.position_list.positions.items()
+            }
+            positions_file.parent.mkdir(parents=True, exist_ok=True)  # Ensure directory exists
+            with open(positions_file, 'w') as f:
+                json.dump(positions_data, f, indent=4)
+                
+            logger.info(f"Saved position {name} at ({point.x()}, {point.y()})")
+            
+        except Exception as e:
+            logger.error(f"Error saving position: {e}", exc_info=True)
+            self.position_list.add_button.setEnabled(True)
+            self.position_marker.stop_marking()  # Ensure overlay is cleaned up
+            QMessageBox.critical(self, "Error", f"Failed to save position: {str(e)}")
+
     def _on_debug_clicked(self) -> None:
         """Show or hide the debug window."""
         if self.debug_window.isVisible():
@@ -725,20 +868,6 @@ class AutomationTab(QWidget):
         else:
             self.debug_window.show()
             
-    def _on_position_marked(self, point) -> None:
-        """Handle new position being marked."""
-        # Create new position and add to list
-        name = f"Position_{len(self.position_list.positions) + 1}"
-        position = AutomationPosition(name, point.x(), point.y())
-        self.position_list.positions[name] = position
-        self.position_list.update_positions(self.position_list.positions)
-        self.sequence_builder.update_positions(self.position_list.positions)
-        self.position_marker.stop_marking()
-        self.position_list.add_button.setEnabled(True)
-        
-        # Update debug window
-        self.debug_window.update_positions(self.position_list.positions)
-        
     def _on_position_selected(self, name: str) -> None:
         """Handle position selection."""
         # Update sequence builder with selected position
@@ -837,4 +966,47 @@ class AutomationTab(QWidget):
             if hasattr(action.params, 'position_name'):
                 position = self.position_list.positions.get(action.params.position_name)
                 if position:
-                    self.debug_window.update_mouse_position(position.x, position.y) 
+                    self.debug_window.update_mouse_position(position.x, position.y)
+
+    def _start_position_marking(self) -> None:
+        """Start the position marking process."""
+        logger.info("Starting position marking")
+        try:
+            # First check if we can find the game window
+            if not self.window_manager.find_window():
+                logger.error("Could not find game window - aborting position marking")
+                self.position_list.add_button.setEnabled(True)
+                QMessageBox.warning(self, "Error", "Could not find game window")
+                return
+                
+            # Get window position to verify we can get coordinates
+            if not self.window_manager.get_window_position():
+                logger.error("Could not get window position - aborting position marking")
+                self.position_list.add_button.setEnabled(True)
+                QMessageBox.warning(self, "Error", "Could not get window position")
+                return
+                
+            # Show instructions before starting marking mode
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Mark Position")
+            msg.setText("Click anywhere on the game window to mark a position.\n"
+                       "The overlay will show with a slight tint to help you see it.\n\n"
+                       "Press ESC to cancel marking.")
+            msg.setIcon(QMessageBox.Icon.Information)
+            msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+            
+            # Show message box and wait for response
+            response = msg.exec()
+            
+            if response == QMessageBox.StandardButton.Ok:
+                # Start marking mode after user acknowledges instructions
+                self.position_marker.start_marking()
+            else:
+                # User closed the message box, cancel marking
+                self.position_list.add_button.setEnabled(True)
+            
+        except Exception as e:
+            logger.error(f"Error starting position marking: {e}", exc_info=True)
+            self.position_list.add_button.setEnabled(True)
+            self.position_marker.stop_marking()  # Ensure overlay is cleaned up
+            QMessageBox.critical(self, "Error", f"Failed to start position marking: {str(e)}")
