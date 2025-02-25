@@ -4,6 +4,13 @@
 
 This user guide provides comprehensive documentation for the Scout application, a powerful automation and computer vision tool designed to detect and interact with game elements, automate repetitive tasks, and analyze game state.
 
+## Version 1.0.0 Release
+
+Scout has reached version 1.0.0! This release includes numerous improvements and new features. For details, see:
+
+- [What's New in 1.0.0](whats_new.md) - User-focused overview of new features
+- [Release Notes](../RELEASE_NOTES.md) - Complete list of changes and improvements
+
 ## Table of Contents
 
 1. [Introduction](introduction.md)
@@ -57,12 +64,17 @@ This user guide provides comprehensive documentation for the Scout application, 
    - Available Languages
    - Language Persistence
 
-10. [Troubleshooting](troubleshooting.md)
+10. [Updates](updates.md)
+    - Checking for Updates
+    - Update Settings
+    - Installing Updates
+
+11. [Troubleshooting](troubleshooting.md)
     - Common Issues
     - Error Messages
     - Getting Support
 
-11. [FAQ](faq.md)
+12. [FAQ](faq.md)
     - Frequently Asked Questions
 
 ## Screenshots

@@ -1,6 +1,6 @@
 # Scout - Game Automation and Detection Tool
 
-Scout is a powerful automation and computer vision tool designed to detect and interact with game elements, automate repetitive tasks, and analyze game state.
+Scout is a powerful automation and computer vision tool designed to detect and interact with game elements, automate repetitive tasks, and analyze game state. Version 1.0.0 is now available with full multilingual support, error recovery, and cross-platform compatibility.
 
 ## Features
 
@@ -11,10 +11,23 @@ Scout is a powerful automation and computer vision tool designed to detect and i
 - **Real-time Visualization**: Overlay detection results on the game window
 - **Extensible Architecture**: Modular design with clean interfaces
 - **Multi-language Support**: Available in English and German with easy switching
+- **Automatic Updates**: Built-in update system for seamless version upgrades
+- **Error Recovery**: Robust error handling with automatic recovery strategies
+- **Cross-platform**: Fully tested on Windows, macOS, and Linux
 
 ## Installation
 
-### Prerequisites
+### Pre-built Installers
+
+Download the latest installers from the [Releases page](https://github.com/yourusername/scout/releases/tag/v1.0.0):
+
+- **Windows**: Scout_Setup_1.0.0.exe
+- **macOS**: Scout-1.0.0.dmg
+- **Linux**: scout-1.0.0.AppImage or scout_1.0.0_amd64.deb
+
+The installers include all required dependencies, including Python and required libraries.
+
+### Prerequisites (for installing from source)
 
 - Python 3.9, 3.10, or 3.11
 - Qt libraries (automatically installed with PyQt6)
@@ -44,6 +57,20 @@ pip install -r requirements.txt
 ```bash
 python main.py
 ```
+
+## What's New in 1.0.0
+
+The 1.0.0 release includes numerous improvements and new features:
+
+- **Multi-language Support**: Complete English and German translations
+- **Theme System**: Light, dark, and system theme options
+- **Keyboard Shortcuts**: Customizable shortcuts for efficient operation
+- **Error Reporting and Recovery**: Robust error handling with recovery strategies
+- **Cross-platform Compatibility**: Fully tested on Windows, macOS, and Linux
+- **Performance Optimizations**: Faster detection and improved memory usage
+- **Comprehensive Documentation**: Complete user and developer guides
+
+For a complete list of changes, see the [Release Notes](docs/RELEASE_NOTES.md) and [What's New](docs/user_guide/whats_new.md) guide.
 
 ## Usage
 

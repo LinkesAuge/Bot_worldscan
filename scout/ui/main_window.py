@@ -947,8 +947,8 @@ class MainWindow(QMainWindow):
             self,
             tr("About Scout"),
             tr("Scout - Game Automation and Detection Tool\n\n"
-               "Version: 0.1.0\n"
-               "Copyright © 2023")
+               "Version: 1.0.0\n"
+               "Copyright © 2025")
         )
     
     def _on_run(self):
