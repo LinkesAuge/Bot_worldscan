@@ -65,9 +65,9 @@ class SettingsTab(QWidget):
         
         # Store services
         self.service_locator = service_locator
-        self.detection_service = service_locator.get_service(DetectionServiceInterface)
-        self.window_service = service_locator.get_service(WindowServiceInterface)
-        self.automation_service = service_locator.get_service(AutomationServiceInterface)
+        self.detection_service = service_locator.get(DetectionServiceInterface)
+        self.window_service = service_locator.get(WindowServiceInterface)
+        self.automation_service = service_locator.get(AutomationServiceInterface)
         
         # Create settings model
         self.settings_model = SettingsModel()
@@ -833,266 +833,217 @@ class SettingsTab(QWidget):
             )
     
     def _connect_signals(self) -> None:
-        """Connect UI signals to slots."""
-        # Connect buttons
-        self.save_button.clicked.connect(self._on_save_clicked)
-        self.reset_button.clicked.connect(self._on_reset_clicked)
-        self.import_button.clicked.connect(self._on_import_clicked)
-        self.export_button.clicked.connect(self._on_export_clicked)
-        
-        # Connect color buttons
-        self.highlight_color.clicked.connect(lambda: self._on_color_button_clicked(self.highlight_color, "highlight_color"))
-        
-        # Connect sliders to labels
-        self.template_confidence_spin.valueChanged.connect(
-            lambda value: self.template_confidence_label.setText(f"{value:.2f}")
-        )
-        
-        self.ocr_confidence_spin.valueChanged.connect(
-            lambda value: self.ocr_confidence_label.setText(f"{value:.2f}")
-        )
-        
-        self.yolo_confidence_spin.valueChanged.connect(
-            lambda value: self.yolo_confidence_label.setText(f"{value:.2f}")
-        )
-        
-        self.overlay_opacity.valueChanged.connect(
-            lambda value: self.opacity_label.setText(f"{value}%")
-        )
-        
-        self.sound_volume.valueChanged.connect(
-            lambda value: self.volume_label.setText(f"{value}%")
-        )
-        
-        # Connect sequence directory to update sequence list
-        self.sequence_dir.textChanged.connect(self._update_sequence_list)
-        
-        # Connect theme selection to enable/disable custom theme file
-        self.theme_combo.currentTextChanged.connect(self._update_theme_file_state)
-        
-        # Connect settings changes to auto-save
-        for widget in self.findChildren((QComboBox, QLineEdit, QSpinBox, QCheckBox, QSlider)):
-            if isinstance(widget, QComboBox):
-                widget.currentIndexChanged.connect(self._mark_settings_changed)
-            elif isinstance(widget, QLineEdit):
-                widget.textChanged.connect(self._mark_settings_changed)
-            elif isinstance(widget, QSpinBox) or isinstance(widget, QSlider):
-                widget.valueChanged.connect(self._mark_settings_changed)
-            elif isinstance(widget, QCheckBox):
-                widget.stateChanged.connect(self._mark_settings_changed)
+        """Connect signals between UI components."""
+        try:
+            # Connect detection tab signals
+            if hasattr(self, 'template_method'):
+                self.template_method.currentIndexChanged.connect(self._mark_settings_changed)
+                
+            if hasattr(self, 'template_confidence_spin'):
+                self.template_confidence_spin.valueChanged.connect(lambda value: 
+                    self.template_confidence_label.setText(f"{value:.2f}") if hasattr(self, 'template_confidence_label') else None)
+                self.template_confidence_spin.valueChanged.connect(self._mark_settings_changed)
+                
+            if hasattr(self, 'max_matches'):
+                self.max_matches.valueChanged.connect(self._mark_settings_changed)
+                
+            if hasattr(self, 'yolo_model'):
+                self.yolo_model.currentIndexChanged.connect(self._mark_settings_changed)
+                
+            if hasattr(self, 'yolo_confidence_spin'):
+                self.yolo_confidence_spin.valueChanged.connect(lambda value: 
+                    self.yolo_confidence_label.setText(f"{value:.2f}") if hasattr(self, 'yolo_confidence_label') else None)
+                self.yolo_confidence_spin.valueChanged.connect(self._mark_settings_changed)
+                
+            if hasattr(self, 'yolo_iou_spin'):
+                self.yolo_iou_spin.valueChanged.connect(lambda value: 
+                    self.yolo_iou_label.setText(f"{value:.2f}") if hasattr(self, 'yolo_iou_label') else None)
+                self.yolo_iou_spin.valueChanged.connect(self._mark_settings_changed)
+            
+            # Connect OCR tab signals
+            if hasattr(self, 'ocr_confidence_spin'):
+                self.ocr_confidence_spin.valueChanged.connect(
+                    lambda value: self.ocr_confidence_label.setText(f"{value:.2f}") if hasattr(self, 'ocr_confidence_label') else None)
+                self.ocr_confidence_spin.valueChanged.connect(self._mark_settings_changed)
+                
+            if hasattr(self, 'ocr_engine'):
+                self.ocr_engine.currentIndexChanged.connect(self._mark_settings_changed)
+                
+            # Connect UI tab signals
+            if hasattr(self, 'language_combo'):
+                self.language_combo.currentIndexChanged.connect(self._on_language_changed)
+                
+            if hasattr(self, 'theme_combo'):
+                self.theme_combo.currentIndexChanged.connect(self._on_theme_changed)
+                
+            if hasattr(self, 'font_size_spin'):
+                self.font_size_spin.valueChanged.connect(self._mark_settings_changed)
+                
+            # Connect paths tab signals
+            if hasattr(self, 'templates_path_browse'):
+                self.templates_path_browse.clicked.connect(
+                    lambda: self._browse_directory(self.templates_path, "templates") if hasattr(self, 'templates_path') else None)
+                
+            if hasattr(self, 'sequences_path_browse'):
+                self.sequences_path_browse.clicked.connect(
+                    lambda: self._browse_directory(self.sequences_path, "sequences") if hasattr(self, 'sequences_path') else None)
+                
+            if hasattr(self, 'reset_paths_button'):
+                self.reset_paths_button.clicked.connect(self._on_reset_paths_clicked)
+            
+            # Connect advanced tab signals
+            if hasattr(self, 'use_cache'):
+                self.use_cache.toggled.connect(self._mark_settings_changed)
+                
+            if hasattr(self, 'debug_mode'):
+                self.debug_mode.toggled.connect(self._mark_settings_changed)
+                
+            if hasattr(self, 'log_level'):
+                self.log_level.currentIndexChanged.connect(self._mark_settings_changed)
+                
+            # Connect notification tab signals
+            if hasattr(self, 'enable_notifications'):
+                self.enable_notifications.toggled.connect(self._on_notifications_toggled)
+                
+            if hasattr(self, 'notification_level'):
+                self.notification_level.currentIndexChanged.connect(self._mark_settings_changed)
+            
+            # Connect button signals
+            if hasattr(self, 'save_button'):
+                self.save_button.clicked.connect(lambda: self._on_save_clicked(True))
+                
+            if hasattr(self, 'reset_button'):
+                self.reset_button.clicked.connect(self._on_reset_clicked)
+                
+            if hasattr(self, 'import_button'):
+                self.import_button.clicked.connect(self._on_import_clicked)
+                
+            if hasattr(self, 'export_button'):
+                self.export_button.clicked.connect(self._on_export_clicked)
+        except Exception as e:
+            logger.error(f"Error connecting settings signals: {str(e)}")
     
     def _load_settings_to_ui(self) -> None:
-        """Load settings from model into UI widgets."""
+        """Load settings from model into UI."""
         try:
-            # Set updating flag to prevent signal triggers
+            # Block signals during UI update
             self._updating_ui = True
             
-            # Detection - General
-            self.use_cache.setChecked(self.settings_model.get("use_caching", True))
-            self.cache_timeout.setValue(self.settings_model.get("cache_timeout", 5000))
-            self.cache_size.setValue(self.settings_model.get("cache_size", 100))
-            
-            result_sorting = self.settings_model.get("result_sorting", "confidence")
-            index = self.result_sorting.findText(result_sorting)
-            if index >= 0:
-                self.result_sorting.setCurrentIndex(index)
-                
-            self.grouping_radius.setValue(self.settings_model.get("grouping_radius", 5))
-            self.max_results.setValue(self.settings_model.get("max_results", 20))
-            
-            # Detection - Template Matching
-            template_method = self.settings_model.get("template_method", "cv2.TM_CCOEFF_NORMED")
-            index = self.template_method.findText(template_method)
-            if index >= 0:
-                self.template_method.setCurrentIndex(index)
-            
-            confidence = self.settings_model.get("template_confidence", 0.8)
-            self.template_confidence_spin.setValue(confidence)
-            self.template_confidence_label.setText(f"{confidence:.2f}")
-            
-            self.template_max_results.setValue(self.settings_model.get("template_max_results", 5))
-            self.multi_scale_check.setChecked(self.settings_model.get("template_scaling", True))
-            self.min_scale_spin.setValue(self.settings_model.get("scale_min", 0.8))
-            self.max_scale_spin.setValue(self.settings_model.get("scale_max", 1.2))
-            self.scale_step_spin.setValue(self.settings_model.get("scale_steps", 0.05))
-            
-            # Detection - OCR
-            engine = self.settings_model.get("ocr_engine", "tesseract")
-            index = self.ocr_engine_combo.findText(engine)
-            if index >= 0:
-                self.ocr_engine_combo.setCurrentIndex(index)
-            
-            language = self.settings_model.get("ocr_language", "eng")
-            index = self.ocr_language_combo.findText(language)
-            if index >= 0:
-                self.ocr_language_combo.setCurrentIndex(index)
-            
-            confidence = self.settings_model.get("ocr_confidence", 0.6)
-            self.ocr_confidence_spin.setValue(confidence)
-            self.ocr_confidence_label.setText(f"{confidence:.2f}")
-            
-            self.ocr_preprocess_combo.setCurrentText(self.settings_model.get("ocr_preprocessing", "threshold"))
-            
-            self.ocr_custom_params.setText(self.settings_model.get("ocr_custom_params", "--psm 6 --oem 3"))
-            self.ocr_whitelist.setText(self.settings_model.get("ocr_whitelist", "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"))
-            
-            # Detection - YOLO
-            model = self.settings_model.get("yolo_model", "yolov8n.pt")
-            index = self.yolo_model_combo.findText(model)
-            if index >= 0:
-                self.yolo_model_combo.setCurrentIndex(index)
-                
-            self.yolo_model_file.setText(self.settings_model.get("yolo_model_file", ""))
-            
-            confidence = self.settings_model.get("yolo_confidence", 0.5)
-            self.yolo_confidence_spin.setValue(confidence)
-            self.yolo_confidence_label.setText(f"{confidence:.2f}")
-            
-            overlap = self.settings_model.get("yolo_iou", 0.45)
-            self.yolo_iou_spin.setValue(overlap)
-            self.yolo_iou_label.setText(f"{overlap:.2f}")
-            
-            self.yolo_size_combo.setCurrentText(self.settings_model.get("yolo_size", "320x320"))
-            self.yolo_cuda_check.setChecked(self.settings_model.get("yolo_cuda", True))
-            
-            # Automation
-            self.click_delay.setValue(self.settings_model.get("click_delay", 100))
-            self.double_click_delay.setValue(self.settings_model.get("double_click_delay", 50))
-            
-            typing_speed = self.settings_model.get("typing_speed", "normal")
-            index = self.typing_speed.findText(typing_speed)
-            if index >= 0:
-                self.typing_speed.setCurrentIndex(index)
-            
-            self.default_wait.setValue(self.settings_model.get("default_wait_time", 500))
-            self.mouse_speed.setValue(self.settings_model.get("mouse_speed", 5))
-            self.randomize_movements.setChecked(self.settings_model.get("randomize_movements", True))
-            
-            error_handling = self.settings_model.get("error_handling", "pause")
-            index = self.error_handling.findText(error_handling)
-            if index >= 0:
-                self.error_handling.setCurrentIndex(index)
-            
-            self.max_retries.setValue(self.settings_model.get("max_retries", 3))
-            self.retry_delay.setValue(self.settings_model.get("retry_delay", 1000))
-            self.jitter_min.setValue(self.settings_model.get("jitter_min", 5))
-            self.jitter_max.setValue(self.settings_model.get("jitter_max", 15))
-            self.detection_interval.setValue(self.settings_model.get("detection_interval", 500))
-            
-            self.sequence_dir.setText(self.settings_model.get("sequences_dir", "./scout/resources/sequences"))
-            
-            default_sequence = self.settings_model.get("default_sequence", "")
-            if default_sequence:
-                index = self.default_sequence.findText(default_sequence)
-                if index >= 0:
-                    self.default_sequence.setCurrentIndex(index)
-                else:
-                    self.default_sequence.setCurrentText(default_sequence)
+            # Load detection settings
+            if hasattr(self, 'template_method'):
+                method_index = self.template_method.findText(
+                    self.settings_model.get("detection.template_method", "TM_CCOEFF_NORMED")
+                )
+                if method_index >= 0:
+                    self.template_method.setCurrentIndex(method_index)
                     
-            self.autostart_sequence.setChecked(self.settings_model.get("autostart_sequence", False))
-            self.loop_sequence.setChecked(self.settings_model.get("loop_sequence", False))
-            
-            # Window
-            capture_method = self.settings_model.get("capture_method", "win32")
-            index = self.capture_method.findText(capture_method)
-            if index >= 0:
-                self.capture_method.setCurrentIndex(index)
+            if hasattr(self, 'template_confidence_spin'):
+                self.template_confidence_spin.setValue(
+                    self.settings_model.get("detection.template_confidence", 0.8)
+                )
                 
-            self.window_title.setText(self.settings_model.get("window_title", "Total Battle"))
-            self.auto_find.setChecked(self.settings_model.get("auto_find_window", True))
-            self.region_padding.setValue(self.settings_model.get("region_padding", 5))
-            self.capture_interval.setValue(self.settings_model.get("capture_interval", 200))
-            
-            self.overlay_enabled.setChecked(self.settings_model.get("overlay_enabled", True))
-            
-            self.highlight_color = self.settings_model.get("highlight_color", "#00FF00")
-            self._update_color_button(self.highlight_color, self.highlight_color)
-            
-            self.text_color = self.settings_model.get("text_color", "#FFFF00")
-            self._update_color_button(self.highlight_color, self.highlight_color)
-            
-            self.show_confidence.setChecked(self.settings_model.get("show_confidence", True))
-            self.overlay_refresh.setValue(self.settings_model.get("overlay_refresh_rate", 100))
-            self.overlay_opacity.setValue(self.settings_model.get("overlay_opacity", 80))
-            self.opacity_label.setText(f"{self.overlay_opacity.value()}%")
-            
-            self.auto_focus.setChecked(self.settings_model.get("auto_focus", True))
-            
-            # UI
-            theme = self.settings_model.get("theme", "system")
-            index = self.theme_combo.findData(theme)
-            if index >= 0:
-                self.theme_combo.setCurrentIndex(index)
+            if hasattr(self, 'max_matches'):
+                self.max_matches.setValue(
+                    self.settings_model.get("detection.max_matches", 5)
+                )
                 
-            self.custom_theme_path.setText(self.settings_model.get("theme_file", ""))
-            self._update_theme_file_state()
-            
-            self.font_size_spinner.setValue(self.settings_model.get("font_size", 10))
-            
-            font_family = self.settings_model.get("font_family", "System Default")
-            index = self.font_family.findText(font_family)
-            if index >= 0:
-                self.font_family.setCurrentIndex(index)
+            if hasattr(self, 'yolo_model'):
+                model_index = self.yolo_model.findText(
+                    self.settings_model.get("detection.yolo_model", "YOLOv8n")
+                )
+                if model_index >= 0:
+                    self.yolo_model.setCurrentIndex(model_index)
+                    
+            if hasattr(self, 'yolo_confidence_spin'):
+                self.yolo_confidence_spin.setValue(
+                    self.settings_model.get("detection.yolo_confidence", 0.25)
+                )
                 
-            self.show_tooltips.setChecked(self.settings_model.get("show_tooltips", True))
-            self.confirm_actions.setChecked(self.settings_model.get("confirm_actions", True))
-            self.show_debug.setChecked(self.settings_model.get("show_debug_info", False))
+            if hasattr(self, 'yolo_iou_spin'):
+                self.yolo_iou_spin.setValue(
+                    self.settings_model.get("detection.yolo_iou", 0.45)
+                )
             
-            sidebar_position = self.settings_model.get("sidebar_position", "left")
-            index = self.sidebar_position.findText(sidebar_position)
-            if index >= 0:
-                self.sidebar_position.setCurrentIndex(index)
+            # Load OCR settings
+            if hasattr(self, 'ocr_confidence_spin'):
+                self.ocr_confidence_spin.setValue(
+                    self.settings_model.get("ocr.confidence", 0.65)
+                )
                 
-            tab_position = self.settings_model.get("tab_position", "top")
-            index = self.tab_position.findText(tab_position)
-            if index >= 0:
-                self.tab_position.setCurrentIndex(index)
+            if hasattr(self, 'ocr_engine'):
+                engine_index = self.ocr_engine.findText(
+                    self.settings_model.get("ocr.engine", "Tesseract")
+                )
+                if engine_index >= 0:
+                    self.ocr_engine.setCurrentIndex(engine_index)
+            
+            # Load UI settings
+            if hasattr(self, 'language_combo'):
+                language = self.settings_model.get("ui.language", "en")
+                language_index = self.language_combo.findData(language)
+                if language_index >= 0:
+                    self.language_combo.setCurrentIndex(language_index)
+                    
+            if hasattr(self, 'theme_combo'):
+                theme = self.settings_model.get("ui.theme", "System")
+                theme_index = self.theme_combo.findText(theme)
+                if theme_index >= 0:
+                    self.theme_combo.setCurrentIndex(theme_index)
+                    
+            if hasattr(self, 'font_size_spin'):
+                self.font_size_spin.setValue(
+                    self.settings_model.get("ui.font_size", 10)
+                )
+            
+            # Load path settings
+            if hasattr(self, 'templates_path'):
+                self.templates_path.setText(
+                    self.settings_model.get("paths.templates", "resources/templates")
+                )
                 
-            self.recent_files_count.setValue(self.settings_model.get("recent_files_count", 10))
+            if hasattr(self, 'sequences_path'):
+                self.sequences_path.setText(
+                    self.settings_model.get("paths.sequences", "resources/sequences")
+                )
             
-            self.enable_sound.setChecked(self.settings_model.get("enable_sound", True))
-            self.sound_volume.setValue(self.settings_model.get("sound_volume", 80))
-            self.volume_label.setText(f"{self.sound_volume.value()}%")
-            
-            self.desktop_notifications.setChecked(self.settings_model.get("desktop_notifications", True))
-            self.status_updates.setChecked(self.settings_model.get("status_updates", True))
-            
-            # Paths
-            self.templates_dir.setText(self.settings_model.get("templates_dir", "./scout/resources/templates"))
-            self.models_dir.setText(self.settings_model.get("models_dir", "./scout/resources/models"))
-            self.states_dir.setText(self.settings_model.get("state_dir", "./scout/resources/states"))
-            self.logs_dir.setText(self.settings_model.get("logs_dir", "./scout/resources/logs"))
-            self.sequences_dir.setText(self.settings_model.get("sequences_dir", "./scout/resources/sequences"))
-            self.screenshots_dir.setText(self.settings_model.get("screenshots_dir", "./scout/resources/screenshots"))
-            
-            # Advanced
-            self.thread_count.setValue(self.settings_model.get("thread_count", 4))
-            
-            priority = self.settings_model.get("process_priority", "normal")
-            index = self.process_priority.findText(priority)
-            if index >= 0:
-                self.process_priority.setCurrentIndex(index)
+            # Load advanced settings
+            if hasattr(self, 'use_cache'):
+                self.use_cache.setChecked(
+                    self.settings_model.get("advanced.use_caching", True)
+                )
                 
-            self.image_cache_size.setValue(self.settings_model.get("image_cache_size", 100))
-            self.parallel_processing.setChecked(self.settings_model.get("parallel_processing", True))
-            
-            log_level = self.settings_model.get("log_level", "INFO")
-            index = self.log_level.findText(log_level)
-            if index >= 0:
-                self.log_level.setCurrentIndex(index)
+            if hasattr(self, 'debug_mode'):
+                self.debug_mode.setChecked(
+                    self.settings_model.get("advanced.debug_mode", False)
+                )
                 
-            self.log_to_file.setChecked(self.settings_model.get("log_to_file", True))
-            self.log_format.setText(self.settings_model.get("log_format", "%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
-            self.debug_window.setChecked(self.settings_model.get("debug_window", False))
-            self.performance_monitoring.setChecked(self.settings_model.get("performance_monitoring", False))
+            if hasattr(self, 'log_level'):
+                log_level = self.settings_model.get("advanced.log_level", "INFO")
+                log_level_index = self.log_level.findText(log_level)
+                if log_level_index >= 0:
+                    self.log_level.setCurrentIndex(log_level_index)
             
-            self.development_mode.setChecked(self.settings_model.get("development_mode", False))
-            self.remote_debugging.setChecked(self.settings_model.get("remote_debugging", False))
-            self.remote_debugging_port.setValue(self.settings_model.get("remote_debugging_port", 5678))
+            # Load notification settings
+            if hasattr(self, 'enable_notifications'):
+                self.enable_notifications.setChecked(
+                    self.settings_model.get("notifications.enabled", True)
+                )
+                
+            if hasattr(self, 'notification_level'):
+                level = self.settings_model.get("notifications.level", "INFO")
+                level_index = self.notification_level.findText(level)
+                if level_index >= 0:
+                    self.notification_level.setCurrentIndex(level_index)
             
+            # Mark settings as not modified (since we just loaded them)
+            self._modified = False
+            if hasattr(self, 'save_button'):
+                self.save_button.setEnabled(False)
+                
         except Exception as e:
-            logger.error(f"Error loading settings: {e}", exc_info=True)
+            logger.error(f"Error loading settings: {str(e)}")
         finally:
+            # Unblock signals after UI update
             self._updating_ui = False
     
     def _collect_settings_from_ui(self) -> None:
@@ -1205,12 +1156,19 @@ class SettingsTab(QWidget):
             logger.error(f"Error collecting settings: {e}", exc_info=True)
     
     def _mark_settings_changed(self) -> None:
-        """Mark settings as changed in the UI."""
+        """Mark settings as modified."""
         if self._updating_ui:
             return
-            
-        self.status_label.setText("Settings have been modified (not saved)")
-        self.status_label.setStyleSheet("color: blue;")
+        
+        self._modified = True
+        
+        # Update save button if it exists
+        if hasattr(self, 'save_button') and self.save_button is not None:
+            self.save_button.setEnabled(True)
+        
+        # Update status label if it exists
+        if hasattr(self, 'status_label') and self.status_label is not None:
+            self.status_label.setText("Settings have been modified (not saved)")
     
     def _auto_save_settings(self) -> None:
         """Auto-save settings if they have been changed."""

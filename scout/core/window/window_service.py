@@ -5,7 +5,7 @@ This module provides the WindowService class which implements the WindowServiceI
 It handles window detection, tracking, and screenshot capture functionality.
 """
 
-from typing import Optional, Tuple, Dict, Any
+from typing import Optional, Tuple, Dict, Any, Protocol
 import win32gui
 import win32con
 import win32api
@@ -24,7 +24,43 @@ from .window_capture import WindowCapture
 
 logger = logging.getLogger(__name__)
 
-class WindowService(QObject, WindowServiceInterface):
+# Create a mixin class that implements the WindowServiceInterface methods
+class WindowServiceMixin:
+    """Mixin that implements WindowServiceInterface without inheritance."""
+    
+    def find_window(self) -> bool:
+        """Must be implemented by the actual class."""
+        raise NotImplementedError()
+    
+    def get_window_position(self) -> Optional[Tuple[int, int, int, int]]:
+        """Must be implemented by the actual class."""
+        raise NotImplementedError()
+    
+    def capture_screenshot(self, use_strategy: Optional[str] = None) -> Optional[np.ndarray]:
+        """Must be implemented by the actual class."""
+        raise NotImplementedError()
+    
+    def capture_client_area(self, use_strategy: Optional[str] = None) -> Optional[np.ndarray]:
+        """Must be implemented by the actual class."""
+        raise NotImplementedError()
+    
+    def client_to_screen(self, x: int, y: int) -> Tuple[int, int]:
+        """Must be implemented by the actual class."""
+        raise NotImplementedError()
+    
+    def screen_to_client(self, screen_x: int, screen_y: int) -> Tuple[int, int]:
+        """Must be implemented by the actual class."""
+        raise NotImplementedError()
+    
+    def get_client_rect(self) -> Optional[Tuple[int, int, int, int]]:
+        """Must be implemented by the actual class."""
+        raise NotImplementedError()
+    
+    def get_window_state(self) -> str:
+        """Must be implemented by the actual class."""
+        raise NotImplementedError()
+
+class WindowService(QObject, WindowServiceMixin):
     """
     Service for handling window-related operations.
     
@@ -43,34 +79,44 @@ class WindowService(QObject, WindowServiceInterface):
     window_state_changed = pyqtSignal(str)  # state name (e.g., 'minimized', 'maximized')
     screenshot_captured = pyqtSignal(object)  # numpy array image
     
+    # Singleton instance
+    _instance = None
+    
+    # Override __new__ to implement the singleton pattern
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super(WindowService, cls).__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+    
     def __init__(self, window_title: str, event_bus: Optional[EventBus] = None):
         """
         Initialize the window service.
         
         Args:
-            window_title: Title or partial title of the game window to track
-            event_bus: Optional event bus for publishing events
+            window_title: Title of the window to find and track
+            event_bus: Event bus for publishing window events (optional)
         """
+        # Only initialize once due to singleton pattern
+        if getattr(self, '_initialized', False):
+            return
+            
+        # Initialize QObject
         super().__init__()
         
-        self.window_title = window_title
-        self.event_bus = event_bus
-        self.hwnd = None  # Window handle
-        self._last_position = None  # Last known window position
-        self._dpi_scale = 1.0  # DPI scaling factor
-        self._client_offset_x = 0  # Offset from window to client area
-        self._client_offset_y = 0  # Offset from window to client area
+        self._initialized = True
+        self._window_title = window_title
+        self._hwnd = None  # Window handle
+        self._event_bus = event_bus
+        self._window_rect = None  # (x, y, width, height)
+        self._client_rect = None  # (x, y, width, height) - client area
+        self._window_state = "unknown"
+        self._window_capture = WindowCapture()
         
-        # Create window capture instance
-        self.window_capture = WindowCapture()
+        # Try to find the window
+        self.find_window()
         
-        # Set DPI awareness to prevent scaling issues
-        try:
-            ctypes.windll.user32.SetProcessDPIAware()
-        except Exception as e:
-            logger.warning(f"Failed to set DPI awareness: {e}")
-            
-        logger.debug(f"WindowService initialized for window title: '{window_title}'")
+        logger.info(f"Window service initialized for window: '{window_title}'")
     
     def find_window(self) -> bool:
         """
@@ -79,14 +125,14 @@ class WindowService(QObject, WindowServiceInterface):
         Returns:
             bool: True if window found, False otherwise
         """
-        if self.hwnd and win32gui.IsWindow(self.hwnd):
+        if self._hwnd and win32gui.IsWindow(self._hwnd):
             # Window already found, check if it's still valid
             try:
-                if self.window_title in win32gui.GetWindowText(self.hwnd):
+                if self._window_title in win32gui.GetWindowText(self._hwnd):
                     return True
             except Exception as e:
                 logger.debug(f"Error checking existing window: {e}")
-                self.hwnd = None  # Reset handle if error
+                self._hwnd = None  # Reset handle if error
                 
         # Need to find the window
         matching_windows = []
@@ -104,11 +150,11 @@ class WindowService(QObject, WindowServiceInterface):
                 return
                 
             # Found a potential match
-            if self.window_title.lower() in window_title.lower():
+            if self._window_title.lower() in window_title.lower():
                 matching_windows.append((hwnd, window_title))
                 
         try:
-            logger.debug(f"Searching for window with title containing: '{self.window_title}'")
+            logger.debug(f"Searching for window with title containing: '{self._window_title}'")
             win32gui.EnumWindows(enum_windows_callback, None)
             
             if not matching_windows:
@@ -116,8 +162,8 @@ class WindowService(QObject, WindowServiceInterface):
                 return False
                 
             # Use the first match
-            self.hwnd = matching_windows[0][0]
-            logger.info(f"Found window: '{matching_windows[0][1]}' (hwnd: {self.hwnd})")
+            self._hwnd = matching_windows[0][0]
+            logger.info(f"Found window: '{matching_windows[0][1]}' (hwnd: {self._hwnd})")
             
             # Update window metrics
             self._update_window_metrics()
@@ -133,27 +179,27 @@ class WindowService(QObject, WindowServiceInterface):
     
     def _update_window_metrics(self) -> None:
         """Update window position, client area, and DPI scaling information."""
-        if not self.hwnd:
+        if not self._hwnd:
             return
             
         try:
             # Get DPI scale
-            dc = win32gui.GetDC(self.hwnd)
+            dc = win32gui.GetDC(self._hwnd)
             try:
                 self._dpi_scale = ctypes.windll.gdi32.GetDeviceCaps(dc, 88) / 96.0  # LOGPIXELSX = 88
             finally:
-                win32gui.ReleaseDC(self.hwnd, dc)
+                win32gui.ReleaseDC(self._hwnd, dc)
                 
             # Get window rect
-            window_rect = win32gui.GetWindowRect(self.hwnd)
+            window_rect = win32gui.GetWindowRect(self._hwnd)
             
             # Get client rect
             client_rect = RECT()
-            ctypes.windll.user32.GetClientRect(self.hwnd, ctypes.byref(client_rect))
+            ctypes.windll.user32.GetClientRect(self._hwnd, ctypes.byref(client_rect))
             
             # Get client position
             client_point = POINT(0, 0)
-            ctypes.windll.user32.ClientToScreen(self.hwnd, ctypes.byref(client_point))
+            ctypes.windll.user32.ClientToScreen(self._hwnd, ctypes.byref(client_point))
             
             # Calculate client offset
             self._client_offset_x = client_point.x - window_rect[0]
@@ -176,7 +222,7 @@ class WindowService(QObject, WindowServiceInterface):
             return None
             
         try:
-            rect = win32gui.GetWindowRect(self.hwnd)
+            rect = win32gui.GetWindowRect(self._hwnd)
             x, y, right, bottom = rect
             width = right - x
             height = bottom - y
@@ -184,8 +230,8 @@ class WindowService(QObject, WindowServiceInterface):
             position = (x, y, width, height)
             
             # Check if position changed
-            if position != self._last_position:
-                self._last_position = position
+            if position != self._window_rect:
+                self._window_rect = position
                 self._publish_window_changed_event()
                 
             return position
@@ -216,8 +262,8 @@ class WindowService(QObject, WindowServiceInterface):
             x, y, width, height = position
             
             # Use WindowCapture to capture the window
-            screenshot = self.window_capture.capture(
-                self.hwnd, 
+            screenshot = self._window_capture.capture(
+                self._hwnd, 
                 (x, y, width, height), 
                 use_strategy
             )
@@ -230,8 +276,8 @@ class WindowService(QObject, WindowServiceInterface):
             self.screenshot_captured.emit(screenshot)
             
             # Publish event if event bus is available
-            if self.event_bus:
-                self.event_bus.publish(
+            if self._event_bus:
+                self._event_bus.publish(
                     'screenshot_captured',
                     {'image': screenshot, 'window_position': position}
                 )
@@ -262,8 +308,8 @@ class WindowService(QObject, WindowServiceInterface):
                 return None
                 
             # Use WindowCapture to capture the client area
-            screenshot = self.window_capture.capture_client_area(
-                self.hwnd,
+            screenshot = self._window_capture.capture_client_area(
+                self._hwnd,
                 client_rect,
                 use_strategy
             )
@@ -276,8 +322,8 @@ class WindowService(QObject, WindowServiceInterface):
             self.screenshot_captured.emit(screenshot)
             
             # Publish event if event bus is available
-            if self.event_bus:
-                self.event_bus.publish(
+            if self._event_bus:
+                self._event_bus.publish(
                     'screenshot_captured',
                     {'image': screenshot, 'client_rect': client_rect}
                 )
@@ -371,7 +417,7 @@ class WindowService(QObject, WindowServiceInterface):
             
             # Get client rect
             client_rect = RECT()
-            ctypes.windll.user32.GetClientRect(self.hwnd, ctypes.byref(client_rect))
+            ctypes.windll.user32.GetClientRect(self._hwnd, ctypes.byref(client_rect))
             
             # Calculate client area in screen coordinates
             client_left = window_x + self._client_offset_x
@@ -396,7 +442,7 @@ class WindowService(QObject, WindowServiceInterface):
             return 'unknown'
             
         try:
-            placement = win32gui.GetWindowPlacement(self.hwnd)
+            placement = win32gui.GetWindowPlacement(self._hwnd)
             show_cmd = placement[1]
             
             if show_cmd == win32con.SW_SHOWMINIMIZED:
@@ -412,7 +458,7 @@ class WindowService(QObject, WindowServiceInterface):
     
     def _publish_window_changed_event(self) -> None:
         """Publish a window changed event to the event bus."""
-        position = self._last_position
+        position = self._window_rect
         if not position:
             return
             
@@ -420,10 +466,10 @@ class WindowService(QObject, WindowServiceInterface):
         self.window_moved.emit(*position)
         
         # Publish event to event bus if available
-        if self.event_bus:
+        if self._event_bus:
             window_state = self.get_window_state()
             
-            self.event_bus.publish(
+            self._event_bus.publish(
                 'window_change',
                 {
                     'position': position,

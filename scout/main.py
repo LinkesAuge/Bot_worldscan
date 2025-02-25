@@ -153,8 +153,20 @@ def setup_application_style(app: QApplication) -> None:
     # app.setWindowIcon(QIcon("path/to/icon.png"))
     
     # Configure high-DPI scaling
-    app.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling, True)
-    app.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps, True)
+    # Note: AA_EnableHighDpiScaling is deprecated in newer PyQt6 versions and enabled by default
+    # Use try-except to handle different PyQt6 versions
+    try:
+        # For older PyQt6 versions
+        app.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling, True)
+    except AttributeError:
+        # In newer PyQt6 versions, high DPI scaling is enabled by default
+        logging.info("High DPI scaling is enabled by default in this PyQt6 version")
+    
+    # AA_UseHighDpiPixmaps should still be available in newer versions
+    try:
+        app.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps, True)
+    except AttributeError:
+        logging.info("High DPI pixmaps are enabled by default in this PyQt6 version")
 
 
 def main() -> int:

@@ -229,10 +229,7 @@ class DetectionTab(QWidget):
         layout = QVBoxLayout(tab_widget)
         
         # Create detection history widget
-        self._history_widget = DetectionHistoryWidget(
-            self.window_service, 
-            self.detection_service
-        )
+        self._history_widget = DetectionHistoryWidget(parent=tab_widget)
         
         # Add to layout
         layout.addWidget(self._history_widget)

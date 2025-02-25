@@ -1,19 +1,49 @@
 # Scout - Game Automation and Detection Tool
 
-Scout is a powerful automation and computer vision tool designed to detect and interact with game elements, automate repetitive tasks, and analyze game state. Version 1.0.0 is now available with full multilingual support, error recovery, and cross-platform compatibility.
+[![Release Version](https://img.shields.io/badge/release-v1.0.0-blue.svg)](https://github.com/yourusername/scout/releases/tag/v1.0.0)
+[![Python Version](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11-blue)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
+Scout is a powerful automation and computer vision tool designed for the Total Battle game. It detects and interacts with game elements, automates repetitive tasks, and analyzes game state. Version 1.0.0 is now available with full multilingual support, error recovery, and cross-platform compatibility.
+
+<p align="center">
+  <img src="resources/icons/scout.ico" alt="Scout Logo" width="128">
+</p>
 
 ## Features
 
-- **Game Window Detection**: Automatically finds and tracks the game window
-- **Computer Vision**: Supports template matching, OCR, and YOLO object detection
-- **Automation**: Create and run sequences of actions (click, type, wait, etc.)
-- **Game State Tracking**: Monitor and record game state changes over time
-- **Real-time Visualization**: Overlay detection results on the game window
-- **Extensible Architecture**: Modular design with clean interfaces
-- **Multi-language Support**: Available in English and German with easy switching
-- **Automatic Updates**: Built-in update system for seamless version upgrades
+### 🔍 Game Detection
+- **Window Detection**: Automatically finds and tracks the game window in both standalone and browser versions
+- **Computer Vision**: Multiple detection strategies for identifying game elements:
+  - Template Matching for visual pattern recognition
+  - OCR (Optical Character Recognition) for text extraction
+  - YOLO object detection for complex elements (optional)
+- **Real-time Visualization**: Overlay detection results directly on the game window
+
+### 🤖 Automation
+- **Action Sequences**: Create and run sequences of actions:
+  - Mouse clicks and movements
+  - Keyboard input
+  - Conditional logic and loops
+  - Wait conditions
+- **Task Scheduler**: Run sequences at specific times or intervals
 - **Error Recovery**: Robust error handling with automatic recovery strategies
-- **Cross-platform**: Fully tested on Windows, macOS, and Linux
+
+### 📊 Game State Tracking
+- **Resource Monitoring**: Track game resources like gold, wood, and more
+- **Map Analysis**: Visualize the game map and important elements
+- **State History**: Record and analyze game state changes over time
+
+### 🌐 Localization
+- **Multi-language Interface**: Available in English and German with easy switching
+- **Runtime Language Switching**: Change languages without restarting the application
+- **Layout Adaptability**: UI automatically adjusts to accommodate different text lengths
+
+### 🎨 User Experience
+- **Modern Interface**: Clean, intuitive UI with tabbed organization
+- **Theme System**: Light, dark, and system theme options
+- **Keyboard Shortcuts**: Customizable shortcuts for efficient operation
+- **Automatic Updates**: Built-in update system for seamless version upgrades
 
 ## Installation
 
@@ -21,20 +51,33 @@ Scout is a powerful automation and computer vision tool designed to detect and i
 
 Download the latest installers from the [Releases page](https://github.com/yourusername/scout/releases/tag/v1.0.0):
 
-- **Windows**: Scout_Setup_1.0.0.exe
-- **macOS**: Scout-1.0.0.dmg
-- **Linux**: scout-1.0.0.AppImage or scout_1.0.0_amd64.deb
+| Platform | File | Size | SHA-256 |
+|----------|------|------|---------|
+| Windows | [Scout_Setup_1.0.0.exe](https://github.com/yourusername/scout/releases/download/v1.0.0/Scout_Setup_1.0.0.exe) | 61.7 MB | 4ABD95D617FEDFA173990CDFF77101318AF781A4791E13E1A75530F0C0FD63D0 |
+| Windows (Portable) | [Scout_1.0.0_Portable.zip](https://github.com/yourusername/scout/releases/download/v1.0.0/Scout_1.0.0_Portable.zip) | 89.0 MB | 93798EAF1D6079A85A17553D1A360FA32978EA843ECEA68395E4DFE17F4F5F34 |
+| macOS | [Scout-1.0.0.dmg](https://github.com/yourusername/scout/releases/download/v1.0.0/Scout-1.0.0.dmg) | - | - |
+| Linux | [scout-1.0.0.AppImage](https://github.com/yourusername/scout/releases/download/v1.0.0/scout-1.0.0.AppImage) | - | - |
+| Linux (Debian) | [scout_1.0.0_amd64.deb](https://github.com/yourusername/scout/releases/download/v1.0.0/scout_1.0.0_amd64.deb) | - | - |
 
-The installers include all required dependencies, including Python and required libraries.
+### System Requirements
 
-### Prerequisites (for installing from source)
+- **Operating System**: Windows 10/11, macOS 11+, or Ubuntu 20.04+
+- **Processor**: Dual-core CPU @ 2.0 GHz or better
+- **Memory**: 4 GB RAM minimum, 8 GB recommended
+- **Graphics**: DirectX 11 compatible graphics card
+- **Display**: 1366x768 resolution minimum
+- **Storage**: 500 MB available space
+- **Internet**: Broadband internet connection for updates
 
+### Installing from Source
+
+#### Prerequisites
 - Python 3.9, 3.10, or 3.11
 - Qt libraries (automatically installed with PyQt6)
 - For OCR: Tesseract OCR engine
 - For YOLO detection: CUDA-compatible GPU (optional but recommended)
 
-### Installing from Source
+#### Installation Steps
 
 1. Clone the repository:
 ```bash
@@ -58,104 +101,90 @@ pip install -r requirements.txt
 python main.py
 ```
 
-## What's New in 1.0.0
+## Quick Start Guide
 
-The 1.0.0 release includes numerous improvements and new features:
+### 1. Initial Setup
+- Launch Scout
+- Select your game window from the detection window
+- Configure basic settings in the Settings tab
 
-- **Multi-language Support**: Complete English and German translations
-- **Theme System**: Light, dark, and system theme options
-- **Keyboard Shortcuts**: Customizable shortcuts for efficient operation
-- **Error Reporting and Recovery**: Robust error handling with recovery strategies
-- **Cross-platform Compatibility**: Fully tested on Windows, macOS, and Linux
-- **Performance Optimizations**: Faster detection and improved memory usage
-- **Comprehensive Documentation**: Complete user and developer guides
+### 2. Creating Detection Templates
+- Go to the Detection tab
+- Click "Capture Screenshot"
+- Use the Template Creator to select game elements
+- Save templates for future use
 
-For a complete list of changes, see the [Release Notes](docs/RELEASE_NOTES.md) and [What's New](docs/user_guide/whats_new.md) guide.
+### 3. Creating Automation Sequences
+- Go to the Automation tab
+- Click "New Sequence"
+- Add actions using the action editor (click, type, wait, etc.)
+- Save and run your sequence
 
-## Usage
+### 4. Monitoring Game State
+- Go to the Game State tab to view resources and game information
+- Track changes over time in the history view
+- Export data for external analysis
 
-### Basic Operation
+## Documentation
 
-1. Start the application
-2. Select your game window from the window selection dialog
-3. Use the Detection tab to find game elements
-4. Use the Automation tab to create and run sequences
-5. Use the Game State tab to monitor game variables
+Comprehensive documentation is available:
 
-### Creating Detection Templates
-
-1. Capture a screenshot of the game
-2. Open the Template Creator
-3. Select the elements you want to detect
-4. Save the templates
-
-### Creating Automation Sequences
-
-1. Go to the Automation tab
-2. Click "New Sequence"
-3. Add actions to the sequence (click, type, wait, etc.)
-4. Configure each action's properties
-5. Save the sequence
-6. Click "Run" to execute the sequence
-
-### Monitoring Game State
-
-1. Go to the Game State tab
-2. Add state variables to track
-3. Set up state transitions based on detection results
-4. View the state history to track changes over time
-
-### Changing Language Settings
-
-1. Go to the Settings tab
-2. Select the "UI" section
-3. Choose your preferred language from the dropdown (English or German)
-4. The application will immediately switch to the selected language
-5. Some components may require an application restart to fully update
+- [User Guide](docs/user_guide/README.md) - Complete guide for end users
+- [Developer Documentation](docs/developer/README.md) - For developers extending Scout
+- [API Reference](docs/api/README.md) - Detailed API documentation
+- [Release Notes](docs/RELEASE_NOTES.md) - What's new in this version
 
 ## Architecture
 
-Scout is built with a modular architecture following the MVC pattern:
+Scout is built with a modular architecture following the SOLID principles:
 
-- **Core**: Contains core services and business logic
+- **Core**: Core services and business logic
   - **Window**: Window management and screen capture
   - **Detection**: Image analysis and object detection
   - **Game**: Game state tracking and analysis
   - **Automation**: Task scheduling and execution
+  - **Events**: Event-based communication
+  - **Design**: Design pattern implementations
+  
 - **UI**: User interface components
-  - **Controllers**: Application logic
-  - **Models**: Data models
-  - **Views**: UI views
+  - **Views**: Main application views
   - **Widgets**: Reusable UI components
-- **Localization**: Internationalization components
-  - **LanguageManager**: Manages language switching and persistence
-  - **Translations**: Language resource files
+  - **Dialogs**: Application dialogs
+  - **Models**: Data models and storage
+  - **Utils**: UI utility functions
+  
+- **Tools**: Development and utility tools
+  - Build scripts
+  - Testing utilities
+  - Development tools
 
 ## Development
 
-### Project Structure
+### Code Style
 
-```
-scout/
-├── core/          # Core functionality
-├── ui/            # User interface
-│   ├── utils/
-│   │   ├── language_manager.py  # Language management system
-├── resources/     # Application resources
-├── translations/  # Language files
-│   ├── scout_en.ts  # English translation source
-│   ├── scout_en.qm  # Compiled English translation
-│   ├── scout_de.ts  # German translation source
-│   └── scout_de.qm  # Compiled German translation
-├── tests/         # Test suite
-├── main.py        # Application entry point
-└── requirements.txt  # Dependencies
+This project uses:
+- Ruff for linting
+- MyPy for type checking
+- Pre-commit hooks for quality checks
+
+```bash
+# Run linting
+ruff check .
+
+# Run type checking
+mypy scout
 ```
 
 ### Running Tests
 
 ```bash
+# Run all tests
 pytest
+
+# Run specific test categories
+pytest scout/tests/core
+pytest scout/tests/ui
+pytest scout/tests/integration
 ```
 
 ### Translation Workflow
@@ -181,24 +210,19 @@ pylupdate6 scout/**/*.py -ts scout/translations/scout_en.ts scout/translations/s
 lrelease scout/translations/scout_en.ts scout/translations/scout_de.ts
 ```
 
-### Code Style
+## Contributing
 
-This project uses:
-- Ruff for linting
-- MyPy for type checking
-- Pre-commit hooks for quality checks
+Contributions are welcome! Please see our [Contributing Guide](CONTRIBUTING.md) for more information.
 
-```bash
-# Run linting
-ruff check .
-
-# Run type checking
-mypy scout
-```
+1. Fork the repository
+2. Create a feature branch 
+3. Make your changes
+4. Run tests and ensure all checks pass
+5. Submit a pull request
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgments
 

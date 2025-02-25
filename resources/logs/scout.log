@@ -1,0 +1,352 @@
+2025-02-25 11:40:42,809 - root - INFO - Logging to file: resources/logs/scout.log
+2025-02-25 11:40:42,809 - root - INFO - Logging initialized with level: info
+2025-02-25 11:40:42,809 - __main__ - INFO - Starting Scout application
+2025-02-25 11:40:42,809 - __main__ - INFO - Test-only mode: application initialized successfully, exiting
+2025-02-25 11:47:35,669 - root - INFO - Logging to file: resources/logs/scout.log
+2025-02-25 11:47:35,669 - root - INFO - Logging initialized with level: info
+2025-02-25 11:47:35,669 - __main__ - INFO - Starting Scout application
+2025-02-25 11:47:35,669 - __main__ - INFO - Default directories created successfully
+2025-02-25 11:47:35,669 - __main__ - INFO - Starting GUI application
+2025-02-25 11:47:35,743 - scout.ui.utils.language_manager - INFO - Using translations directory: D:\OneDrive\AI\Projekte\Bot_worldscan\scout\translations
+2025-02-25 11:47:35,757 - scout.ui.utils.language_manager - INFO - Applied language: en_US
+2025-02-25 11:47:35,757 - scout.ui.utils.language_manager - INFO - LanguageManager initialized with language: en
+2025-02-25 11:49:44,456 - root - INFO - Logging to file: resources/logs/scout.log
+2025-02-25 11:49:44,457 - root - INFO - Logging initialized with level: info
+2025-02-25 11:49:44,457 - __main__ - INFO - Starting Scout application
+2025-02-25 11:49:44,457 - __main__ - INFO - Default directories created successfully
+2025-02-25 11:49:44,457 - __main__ - INFO - Starting GUI application
+2025-02-25 11:49:44,472 - scout.ui.utils.language_manager - INFO - Using translations directory: D:\OneDrive\AI\Projekte\Bot_worldscan\scout\translations
+2025-02-25 11:49:44,483 - scout.ui.utils.language_manager - INFO - Applied language: en_US
+2025-02-25 11:49:44,483 - scout.ui.utils.language_manager - INFO - LanguageManager initialized with language: en
+2025-02-25 11:49:44,515 - scout.core.window.window_service - INFO - Found window: '#general | Total Battle Guide - Discord' (hwnd: 132134)
+2025-02-25 11:49:44,516 - scout.core.window.window_service - INFO - Window service initialized for window: 'Total Battle'
+2025-02-25 11:49:44,516 - scout.core.automation.automation_service - INFO - Automation service initialized
+2025-02-25 11:50:16,587 - root - INFO - Logging to file: resources/logs/scout.log
+2025-02-25 11:50:16,587 - root - INFO - Logging initialized with level: info
+2025-02-25 11:50:16,588 - __main__ - INFO - Starting Scout application
+2025-02-25 11:50:16,588 - __main__ - INFO - Default directories created successfully
+2025-02-25 11:50:16,588 - __main__ - INFO - Starting GUI application
+2025-02-25 11:50:16,602 - scout.ui.utils.language_manager - INFO - Using translations directory: D:\OneDrive\AI\Projekte\Bot_worldscan\scout\translations
+2025-02-25 11:50:16,612 - scout.ui.utils.language_manager - INFO - Applied language: en_US
+2025-02-25 11:50:16,612 - scout.ui.utils.language_manager - INFO - LanguageManager initialized with language: en
+2025-02-25 11:50:16,645 - scout.core.window.window_service - INFO - Found window: '#general | Total Battle Guide - Discord' (hwnd: 132134)
+2025-02-25 11:50:16,645 - scout.core.window.window_service - INFO - Window service initialized for window: 'Total Battle'
+2025-02-25 11:50:16,645 - scout.core.automation.automation_service - INFO - Automation service initialized
+2025-02-25 11:50:16,645 - scout.core.game.game_service - INFO - Game service initialized
+2025-02-25 11:50:16,646 - scout.ui.main_window - INFO - Services initialized and registered
+2025-02-25 11:50:16,765 - scout.ui.widgets.template_list_widget - INFO - Template list widget initialized with directory: scout\resources\templates
+2025-02-25 11:50:16,776 - scout.ui.widgets.detection_result_widget - INFO - Detection result widget initialized
+2025-02-25 11:50:50,839 - root - INFO - Logging to file: resources/logs/scout.log
+2025-02-25 11:50:50,839 - root - INFO - Logging initialized with level: info
+2025-02-25 11:50:50,839 - __main__ - INFO - Starting Scout application
+2025-02-25 11:50:50,840 - __main__ - INFO - Default directories created successfully
+2025-02-25 11:50:50,840 - __main__ - INFO - Starting GUI application
+2025-02-25 11:50:50,853 - scout.ui.utils.language_manager - INFO - Using translations directory: D:\OneDrive\AI\Projekte\Bot_worldscan\scout\translations
+2025-02-25 11:50:50,868 - scout.ui.utils.language_manager - INFO - Applied language: en_US
+2025-02-25 11:50:50,868 - scout.ui.utils.language_manager - INFO - LanguageManager initialized with language: en
+2025-02-25 11:50:50,919 - scout.core.window.window_service - INFO - Found window: '#general | Total Battle Guide - Discord' (hwnd: 132134)
+2025-02-25 11:50:50,920 - scout.core.window.window_service - INFO - Window service initialized for window: 'Total Battle'
+2025-02-25 11:50:50,921 - scout.core.automation.automation_service - INFO - Automation service initialized
+2025-02-25 11:50:50,921 - scout.core.game.game_service - INFO - Game service initialized
+2025-02-25 11:50:50,922 - scout.ui.main_window - INFO - Services initialized and registered
+2025-02-25 11:50:50,965 - scout.ui.widgets.template_list_widget - INFO - Template list widget initialized with directory: scout\resources\templates
+2025-02-25 11:50:50,969 - scout.ui.widgets.detection_result_widget - INFO - Detection result widget initialized
+2025-02-25 11:58:24,649 - root - INFO - Logging to file: resources/logs/scout.log
+2025-02-25 11:58:24,649 - root - INFO - Logging initialized with level: info
+2025-02-25 11:58:24,649 - __main__ - INFO - Starting Scout application
+2025-02-25 11:58:24,650 - __main__ - INFO - Default directories created successfully
+2025-02-25 11:58:24,650 - __main__ - INFO - Starting GUI application
+2025-02-25 11:58:24,664 - scout.ui.utils.language_manager - INFO - Using translations directory: D:\OneDrive\AI\Projekte\Bot_worldscan\scout\translations
+2025-02-25 11:58:24,673 - scout.ui.utils.language_manager - INFO - Applied language: en_US
+2025-02-25 11:58:24,673 - scout.ui.utils.language_manager - INFO - LanguageManager initialized with language: en
+2025-02-25 11:58:24,696 - scout.core.window.window_service - INFO - Found window: '#general | Total Battle Guide - Discord' (hwnd: 132134)
+2025-02-25 11:58:24,697 - scout.core.window.window_service - INFO - Window service initialized for window: 'Total Battle'
+2025-02-25 11:58:24,697 - scout.core.automation.automation_service - INFO - Automation service initialized
+2025-02-25 11:58:24,697 - scout.core.game.game_service - INFO - Game service initialized
+2025-02-25 11:58:24,697 - scout.ui.main_window - INFO - Services initialized and registered
+2025-02-25 11:58:24,725 - scout.ui.widgets.template_list_widget - INFO - Template list widget initialized with directory: scout\resources\templates
+2025-02-25 11:58:24,728 - scout.ui.widgets.detection_result_widget - INFO - Detection result widget initialized
+2025-02-25 11:58:24,748 - scout.ui.widgets.template_list_widget - INFO - Loaded 0 templates from scout\resources\templates
+2025-02-25 11:58:24,748 - scout.ui.views.detection_tab - INFO - Loaded 0 templates from scout\resources\templates
+2025-02-25 11:58:24,748 - scout.ui.views.detection_tab - INFO - Detection tab initialized
+2025-02-25 11:59:31,062 - root - INFO - Logging to file: resources/logs/scout.log
+2025-02-25 11:59:31,062 - root - INFO - Logging initialized with level: info
+2025-02-25 11:59:31,062 - __main__ - INFO - Starting Scout application
+2025-02-25 11:59:31,062 - __main__ - INFO - Default directories created successfully
+2025-02-25 11:59:31,062 - __main__ - INFO - Starting GUI application
+2025-02-25 11:59:31,078 - scout.ui.utils.language_manager - INFO - Using translations directory: D:\OneDrive\AI\Projekte\Bot_worldscan\scout\translations
+2025-02-25 11:59:31,092 - scout.ui.utils.language_manager - INFO - Applied language: en_US
+2025-02-25 11:59:31,092 - scout.ui.utils.language_manager - INFO - LanguageManager initialized with language: en
+2025-02-25 11:59:31,126 - scout.core.window.window_service - INFO - Found window: '#general | Total Battle Guide - Discord' (hwnd: 132134)
+2025-02-25 11:59:31,126 - scout.core.window.window_service - INFO - Window service initialized for window: 'Total Battle'
+2025-02-25 11:59:31,127 - scout.core.automation.automation_service - INFO - Automation service initialized
+2025-02-25 11:59:31,127 - scout.core.game.game_service - INFO - Game service initialized
+2025-02-25 11:59:31,127 - scout.ui.main_window - INFO - Services initialized and registered
+2025-02-25 11:59:31,159 - scout.ui.widgets.template_list_widget - INFO - Template list widget initialized with directory: scout\resources\templates
+2025-02-25 11:59:31,161 - scout.ui.widgets.detection_result_widget - INFO - Detection result widget initialized
+2025-02-25 11:59:31,165 - scout.ui.widgets.template_list_widget - INFO - Loaded 0 templates from scout\resources\templates
+2025-02-25 11:59:31,165 - scout.ui.views.detection_tab - INFO - Loaded 0 templates from scout\resources\templates
+2025-02-25 11:59:31,166 - scout.ui.views.detection_tab - INFO - Detection tab initialized
+2025-02-25 12:00:46,994 - root - INFO - Logging to file: resources/logs/scout.log
+2025-02-25 12:00:46,994 - root - INFO - Logging initialized with level: info
+2025-02-25 12:00:46,994 - __main__ - INFO - Starting Scout application
+2025-02-25 12:00:46,994 - __main__ - INFO - Default directories created successfully
+2025-02-25 12:00:46,994 - __main__ - INFO - Starting GUI application
+2025-02-25 12:00:47,007 - scout.ui.utils.language_manager - INFO - Using translations directory: D:\OneDrive\AI\Projekte\Bot_worldscan\scout\translations
+2025-02-25 12:00:47,016 - scout.ui.utils.language_manager - INFO - Applied language: en_US
+2025-02-25 12:00:47,016 - scout.ui.utils.language_manager - INFO - LanguageManager initialized with language: en
+2025-02-25 12:00:47,040 - scout.core.window.window_service - INFO - Found window: '#general | Total Battle Guide - Discord' (hwnd: 132134)
+2025-02-25 12:00:47,040 - scout.core.window.window_service - INFO - Window service initialized for window: 'Total Battle'
+2025-02-25 12:00:47,040 - scout.core.automation.automation_service - INFO - Automation service initialized
+2025-02-25 12:00:47,040 - scout.core.game.game_service - INFO - Game service initialized
+2025-02-25 12:00:47,041 - scout.ui.main_window - INFO - Services initialized and registered
+2025-02-25 12:00:47,073 - scout.ui.widgets.template_list_widget - INFO - Template list widget initialized with directory: scout\resources\templates
+2025-02-25 12:00:47,075 - scout.ui.widgets.detection_result_widget - INFO - Detection result widget initialized
+2025-02-25 12:00:47,081 - scout.ui.widgets.template_list_widget - INFO - Loaded 0 templates from scout\resources\templates
+2025-02-25 12:00:47,081 - scout.ui.views.detection_tab - INFO - Loaded 0 templates from scout\resources\templates
+2025-02-25 12:00:47,081 - scout.ui.views.detection_tab - INFO - Detection tab initialized
+2025-02-25 12:01:08,393 - root - INFO - Logging to file: resources/logs/scout.log
+2025-02-25 12:01:08,393 - root - INFO - Logging initialized with level: info
+2025-02-25 12:01:08,394 - __main__ - INFO - Starting Scout application
+2025-02-25 12:01:08,394 - __main__ - INFO - Default directories created successfully
+2025-02-25 12:01:08,394 - __main__ - INFO - Starting GUI application
+2025-02-25 12:01:08,407 - scout.ui.utils.language_manager - INFO - Using translations directory: D:\OneDrive\AI\Projekte\Bot_worldscan\scout\translations
+2025-02-25 12:01:08,415 - scout.ui.utils.language_manager - INFO - Applied language: en_US
+2025-02-25 12:01:08,416 - scout.ui.utils.language_manager - INFO - LanguageManager initialized with language: en
+2025-02-25 12:01:08,444 - scout.core.window.window_service - INFO - Found window: '#general | Total Battle Guide - Discord' (hwnd: 132134)
+2025-02-25 12:01:08,444 - scout.core.window.window_service - INFO - Window service initialized for window: 'Total Battle'
+2025-02-25 12:01:08,446 - scout.core.automation.automation_service - INFO - Automation service initialized
+2025-02-25 12:01:08,446 - scout.core.game.game_service - INFO - Game service initialized
+2025-02-25 12:01:08,446 - scout.ui.main_window - INFO - Services initialized and registered
+2025-02-25 12:01:08,481 - scout.ui.widgets.template_list_widget - INFO - Template list widget initialized with directory: scout\resources\templates
+2025-02-25 12:01:08,486 - scout.ui.widgets.detection_result_widget - INFO - Detection result widget initialized
+2025-02-25 12:01:08,493 - scout.ui.widgets.template_list_widget - INFO - Loaded 0 templates from scout\resources\templates
+2025-02-25 12:01:08,493 - scout.ui.views.detection_tab - INFO - Loaded 0 templates from scout\resources\templates
+2025-02-25 12:01:08,493 - scout.ui.views.detection_tab - INFO - Detection tab initialized
+2025-02-25 12:01:30,289 - root - INFO - Logging to file: resources/logs/scout.log
+2025-02-25 12:01:30,289 - root - INFO - Logging initialized with level: info
+2025-02-25 12:01:30,291 - __main__ - INFO - Starting Scout application
+2025-02-25 12:01:30,291 - __main__ - INFO - Default directories created successfully
+2025-02-25 12:01:30,291 - __main__ - INFO - Starting GUI application
+2025-02-25 12:01:30,306 - scout.ui.utils.language_manager - INFO - Using translations directory: D:\OneDrive\AI\Projekte\Bot_worldscan\scout\translations
+2025-02-25 12:01:30,318 - scout.ui.utils.language_manager - INFO - Applied language: en_US
+2025-02-25 12:01:30,318 - scout.ui.utils.language_manager - INFO - LanguageManager initialized with language: en
+2025-02-25 12:01:30,343 - scout.core.window.window_service - INFO - Found window: '#general | Total Battle Guide - Discord' (hwnd: 132134)
+2025-02-25 12:01:30,344 - scout.core.window.window_service - INFO - Window service initialized for window: 'Total Battle'
+2025-02-25 12:01:30,344 - scout.core.automation.automation_service - INFO - Automation service initialized
+2025-02-25 12:01:30,344 - scout.core.game.game_service - INFO - Game service initialized
+2025-02-25 12:01:30,344 - scout.ui.main_window - INFO - Services initialized and registered
+2025-02-25 12:01:30,380 - scout.ui.widgets.template_list_widget - INFO - Template list widget initialized with directory: scout\resources\templates
+2025-02-25 12:01:30,383 - scout.ui.widgets.detection_result_widget - INFO - Detection result widget initialized
+2025-02-25 12:01:30,391 - scout.ui.widgets.template_list_widget - INFO - Loaded 0 templates from scout\resources\templates
+2025-02-25 12:01:30,391 - scout.ui.views.detection_tab - INFO - Loaded 0 templates from scout\resources\templates
+2025-02-25 12:01:30,392 - scout.ui.views.detection_tab - INFO - Detection tab initialized
+2025-02-25 12:02:19,152 - root - INFO - Logging to file: resources/logs/scout.log
+2025-02-25 12:02:19,152 - root - INFO - Logging initialized with level: info
+2025-02-25 12:02:19,152 - __main__ - INFO - Starting Scout application
+2025-02-25 12:02:19,152 - __main__ - INFO - Default directories created successfully
+2025-02-25 12:02:19,152 - __main__ - INFO - Starting GUI application
+2025-02-25 12:02:19,166 - scout.ui.utils.language_manager - INFO - Using translations directory: D:\OneDrive\AI\Projekte\Bot_worldscan\scout\translations
+2025-02-25 12:02:19,179 - scout.ui.utils.language_manager - INFO - Applied language: en_US
+2025-02-25 12:02:19,180 - scout.ui.utils.language_manager - INFO - LanguageManager initialized with language: en
+2025-02-25 12:02:19,204 - scout.core.window.window_service - INFO - Found window: '#general | Total Battle Guide - Discord' (hwnd: 132134)
+2025-02-25 12:02:19,204 - scout.core.window.window_service - INFO - Window service initialized for window: 'Total Battle'
+2025-02-25 12:02:19,205 - scout.core.automation.automation_service - INFO - Automation service initialized
+2025-02-25 12:02:19,205 - scout.core.game.game_service - INFO - Game service initialized
+2025-02-25 12:02:19,205 - scout.ui.main_window - INFO - Services initialized and registered
+2025-02-25 12:02:19,243 - scout.ui.widgets.template_list_widget - INFO - Template list widget initialized with directory: scout\resources\templates
+2025-02-25 12:02:19,247 - scout.ui.widgets.detection_result_widget - INFO - Detection result widget initialized
+2025-02-25 12:02:19,253 - scout.ui.widgets.template_list_widget - INFO - Loaded 0 templates from scout\resources\templates
+2025-02-25 12:02:19,253 - scout.ui.views.detection_tab - INFO - Loaded 0 templates from scout\resources\templates
+2025-02-25 12:02:19,253 - scout.ui.views.detection_tab - INFO - Detection tab initialized
+2025-02-25 12:02:19,259 - scout.ui.views.automation_tab - INFO - Automation tab initialized
+2025-02-25 12:02:19,263 - scout.ui.views.game_tab - INFO - Game state tab initialized
+2025-02-25 12:02:50,470 - root - INFO - Logging to file: resources/logs/scout.log
+2025-02-25 12:02:50,470 - root - INFO - Logging initialized with level: info
+2025-02-25 12:02:50,470 - __main__ - INFO - Starting Scout application
+2025-02-25 12:02:50,470 - __main__ - INFO - Default directories created successfully
+2025-02-25 12:02:50,470 - __main__ - INFO - Starting GUI application
+2025-02-25 12:02:50,483 - scout.ui.utils.language_manager - INFO - Using translations directory: D:\OneDrive\AI\Projekte\Bot_worldscan\scout\translations
+2025-02-25 12:02:50,492 - scout.ui.utils.language_manager - INFO - Applied language: en_US
+2025-02-25 12:02:50,493 - scout.ui.utils.language_manager - INFO - LanguageManager initialized with language: en
+2025-02-25 12:02:50,516 - scout.core.window.window_service - INFO - Found window: '#general | Total Battle Guide - Discord' (hwnd: 132134)
+2025-02-25 12:02:50,517 - scout.core.window.window_service - INFO - Window service initialized for window: 'Total Battle'
+2025-02-25 12:02:50,517 - scout.core.automation.automation_service - INFO - Automation service initialized
+2025-02-25 12:02:50,517 - scout.core.game.game_service - INFO - Game service initialized
+2025-02-25 12:02:50,517 - scout.ui.main_window - INFO - Services initialized and registered
+2025-02-25 12:02:50,547 - scout.ui.widgets.template_list_widget - INFO - Template list widget initialized with directory: scout\resources\templates
+2025-02-25 12:02:50,550 - scout.ui.widgets.detection_result_widget - INFO - Detection result widget initialized
+2025-02-25 12:02:50,555 - scout.ui.widgets.template_list_widget - INFO - Loaded 0 templates from scout\resources\templates
+2025-02-25 12:02:50,555 - scout.ui.views.detection_tab - INFO - Loaded 0 templates from scout\resources\templates
+2025-02-25 12:02:50,556 - scout.ui.views.detection_tab - INFO - Detection tab initialized
+2025-02-25 12:02:50,561 - scout.ui.views.automation_tab - INFO - Automation tab initialized
+2025-02-25 12:02:50,564 - scout.ui.views.game_tab - INFO - Game state tab initialized
+2025-02-25 12:08:53,719 - root - INFO - Logging to file: resources/logs/scout.log
+2025-02-25 12:08:53,719 - root - INFO - Logging initialized with level: info
+2025-02-25 12:08:53,719 - __main__ - INFO - Starting Scout application
+2025-02-25 12:08:53,720 - __main__ - INFO - Default directories created successfully
+2025-02-25 12:08:53,720 - __main__ - INFO - Starting GUI application
+2025-02-25 12:08:53,733 - scout.ui.utils.language_manager - INFO - Using translations directory: D:\OneDrive\AI\Projekte\Bot_worldscan\scout\translations
+2025-02-25 12:08:53,743 - scout.ui.utils.language_manager - INFO - Applied language: en_US
+2025-02-25 12:08:53,743 - scout.ui.utils.language_manager - INFO - LanguageManager initialized with language: en
+2025-02-25 12:08:53,770 - scout.core.window.window_service - INFO - Found window: '#general | Total Battle Guide - Discord' (hwnd: 132134)
+2025-02-25 12:08:53,770 - scout.core.window.window_service - INFO - Window service initialized for window: 'Total Battle'
+2025-02-25 12:08:53,770 - scout.core.automation.automation_service - INFO - Automation service initialized
+2025-02-25 12:08:53,771 - scout.core.game.game_service - INFO - Game service initialized
+2025-02-25 12:08:53,771 - scout.ui.main_window - INFO - Services initialized and registered
+2025-02-25 12:08:53,808 - scout.ui.widgets.template_list_widget - INFO - Template list widget initialized with directory: scout\resources\templates
+2025-02-25 12:08:53,811 - scout.ui.widgets.detection_result_widget - INFO - Detection result widget initialized
+2025-02-25 12:08:53,817 - scout.ui.widgets.template_list_widget - INFO - Loaded 0 templates from scout\resources\templates
+2025-02-25 12:08:53,817 - scout.ui.views.detection_tab - INFO - Loaded 0 templates from scout\resources\templates
+2025-02-25 12:08:53,817 - scout.ui.views.detection_tab - INFO - Detection tab initialized
+2025-02-25 12:08:53,822 - scout.ui.views.automation_tab - INFO - Automation tab initialized
+2025-02-25 12:08:53,825 - scout.ui.views.game_tab - INFO - Game state tab initialized
+2025-02-25 12:08:59,804 - root - INFO - Logging to file: resources/logs/scout.log
+2025-02-25 12:08:59,805 - root - INFO - Logging initialized with level: info
+2025-02-25 12:08:59,805 - __main__ - INFO - Starting Scout application
+2025-02-25 12:08:59,805 - __main__ - INFO - Default directories created successfully
+2025-02-25 12:08:59,805 - __main__ - INFO - Starting GUI application
+2025-02-25 12:08:59,819 - scout.ui.utils.language_manager - INFO - Using translations directory: D:\OneDrive\AI\Projekte\Bot_worldscan\scout\translations
+2025-02-25 12:08:59,828 - scout.ui.utils.language_manager - INFO - Applied language: en_US
+2025-02-25 12:08:59,828 - scout.ui.utils.language_manager - INFO - LanguageManager initialized with language: en
+2025-02-25 12:08:59,852 - scout.core.window.window_service - INFO - Found window: '#general | Total Battle Guide - Discord' (hwnd: 132134)
+2025-02-25 12:08:59,852 - scout.core.window.window_service - INFO - Window service initialized for window: 'Total Battle'
+2025-02-25 12:08:59,852 - scout.core.automation.automation_service - INFO - Automation service initialized
+2025-02-25 12:08:59,853 - scout.core.game.game_service - INFO - Game service initialized
+2025-02-25 12:08:59,853 - scout.ui.main_window - INFO - Services initialized and registered
+2025-02-25 12:08:59,883 - scout.ui.widgets.template_list_widget - INFO - Template list widget initialized with directory: scout\resources\templates
+2025-02-25 12:08:59,886 - scout.ui.widgets.detection_result_widget - INFO - Detection result widget initialized
+2025-02-25 12:08:59,891 - scout.ui.widgets.template_list_widget - INFO - Loaded 0 templates from scout\resources\templates
+2025-02-25 12:08:59,891 - scout.ui.views.detection_tab - INFO - Loaded 0 templates from scout\resources\templates
+2025-02-25 12:08:59,891 - scout.ui.views.detection_tab - INFO - Detection tab initialized
+2025-02-25 12:08:59,896 - scout.ui.views.automation_tab - INFO - Automation tab initialized
+2025-02-25 12:08:59,899 - scout.ui.views.game_tab - INFO - Game state tab initialized
+2025-02-25 12:10:06,780 - root - INFO - Logging to file: resources/logs/scout.log
+2025-02-25 12:10:06,780 - root - INFO - Logging initialized with level: info
+2025-02-25 12:10:06,780 - __main__ - INFO - Starting Scout application
+2025-02-25 12:10:06,781 - __main__ - INFO - Default directories created successfully
+2025-02-25 12:10:06,781 - __main__ - INFO - Starting GUI application
+2025-02-25 12:10:06,794 - scout.ui.utils.language_manager - INFO - Using translations directory: D:\OneDrive\AI\Projekte\Bot_worldscan\scout\translations
+2025-02-25 12:10:06,808 - scout.ui.utils.language_manager - INFO - Applied language: en_US
+2025-02-25 12:10:06,808 - scout.ui.utils.language_manager - INFO - LanguageManager initialized with language: en
+2025-02-25 12:10:06,843 - scout.core.window.window_service - INFO - Found window: '#general | Total Battle Guide - Discord' (hwnd: 132134)
+2025-02-25 12:10:06,843 - scout.core.window.window_service - INFO - Window service initialized for window: 'Total Battle'
+2025-02-25 12:10:06,844 - scout.core.automation.automation_service - INFO - Automation service initialized
+2025-02-25 12:10:06,844 - scout.core.game.game_service - INFO - Game service initialized
+2025-02-25 12:10:06,844 - scout.ui.main_window - INFO - Services initialized and registered
+2025-02-25 12:10:06,871 - scout.ui.widgets.template_list_widget - INFO - Template list widget initialized with directory: scout\resources\templates
+2025-02-25 12:10:06,873 - scout.ui.widgets.detection_result_widget - INFO - Detection result widget initialized
+2025-02-25 12:10:06,879 - scout.ui.widgets.template_list_widget - INFO - Loaded 0 templates from scout\resources\templates
+2025-02-25 12:10:06,879 - scout.ui.views.detection_tab - INFO - Loaded 0 templates from scout\resources\templates
+2025-02-25 12:10:06,879 - scout.ui.views.detection_tab - INFO - Detection tab initialized
+2025-02-25 12:10:06,883 - scout.ui.views.automation_tab - INFO - Automation tab initialized
+2025-02-25 12:10:06,886 - scout.ui.views.game_tab - INFO - Game state tab initialized
+2025-02-25 12:10:06,886 - scout.ui.models.settings_model - INFO - Settings file not found, using defaults
+2025-02-25 12:10:06,887 - scout.ui.models.settings_model - INFO - Saved settings to C:\Users\schrd\.scout\settings.json
+2025-02-25 12:10:06,887 - scout.ui.models.settings_model - INFO - Settings model initialized
+2025-02-25 12:10:30,530 - root - INFO - Logging to file: resources/logs/scout.log
+2025-02-25 12:10:30,530 - root - INFO - Logging initialized with level: info
+2025-02-25 12:10:30,530 - __main__ - INFO - Starting Scout application
+2025-02-25 12:10:30,531 - __main__ - INFO - Default directories created successfully
+2025-02-25 12:10:30,531 - __main__ - INFO - Starting GUI application
+2025-02-25 12:10:30,544 - scout.ui.utils.language_manager - INFO - Using translations directory: D:\OneDrive\AI\Projekte\Bot_worldscan\scout\translations
+2025-02-25 12:10:30,553 - scout.ui.utils.language_manager - INFO - Applied language: en_US
+2025-02-25 12:10:30,553 - scout.ui.utils.language_manager - INFO - LanguageManager initialized with language: en
+2025-02-25 12:10:30,581 - scout.core.window.window_service - INFO - Found window: '#general | Total Battle Guide - Discord' (hwnd: 132134)
+2025-02-25 12:10:30,581 - scout.core.window.window_service - INFO - Window service initialized for window: 'Total Battle'
+2025-02-25 12:10:30,581 - scout.core.automation.automation_service - INFO - Automation service initialized
+2025-02-25 12:10:30,581 - scout.core.game.game_service - INFO - Game service initialized
+2025-02-25 12:10:30,581 - scout.ui.main_window - INFO - Services initialized and registered
+2025-02-25 12:10:30,608 - scout.ui.widgets.template_list_widget - INFO - Template list widget initialized with directory: scout\resources\templates
+2025-02-25 12:10:30,611 - scout.ui.widgets.detection_result_widget - INFO - Detection result widget initialized
+2025-02-25 12:10:30,616 - scout.ui.widgets.template_list_widget - INFO - Loaded 0 templates from scout\resources\templates
+2025-02-25 12:10:30,616 - scout.ui.views.detection_tab - INFO - Loaded 0 templates from scout\resources\templates
+2025-02-25 12:10:30,616 - scout.ui.views.detection_tab - INFO - Detection tab initialized
+2025-02-25 12:10:30,621 - scout.ui.views.automation_tab - INFO - Automation tab initialized
+2025-02-25 12:10:30,623 - scout.ui.views.game_tab - INFO - Game state tab initialized
+2025-02-25 12:10:30,631 - scout.ui.models.settings_model - INFO - Loaded settings from C:\Users\schrd\.scout\settings.json
+2025-02-25 12:10:30,631 - scout.ui.models.settings_model - INFO - Settings model initialized
+2025-02-25 12:11:10,129 - root - INFO - Logging to file: resources/logs/scout.log
+2025-02-25 12:11:10,129 - root - INFO - Logging initialized with level: info
+2025-02-25 12:11:10,129 - __main__ - INFO - Starting Scout application
+2025-02-25 12:11:10,130 - __main__ - INFO - Default directories created successfully
+2025-02-25 12:11:10,130 - __main__ - INFO - Starting GUI application
+2025-02-25 12:11:10,146 - scout.ui.utils.language_manager - INFO - Using translations directory: D:\OneDrive\AI\Projekte\Bot_worldscan\scout\translations
+2025-02-25 12:11:10,159 - scout.ui.utils.language_manager - INFO - Applied language: en_US
+2025-02-25 12:11:10,159 - scout.ui.utils.language_manager - INFO - LanguageManager initialized with language: en
+2025-02-25 12:11:10,197 - scout.core.window.window_service - INFO - Found window: '#general | Total Battle Guide - Discord' (hwnd: 132134)
+2025-02-25 12:11:10,198 - scout.core.window.window_service - INFO - Window service initialized for window: 'Total Battle'
+2025-02-25 12:11:10,199 - scout.core.automation.automation_service - INFO - Automation service initialized
+2025-02-25 12:11:10,199 - scout.core.game.game_service - INFO - Game service initialized
+2025-02-25 12:11:10,199 - scout.ui.main_window - INFO - Services initialized and registered
+2025-02-25 12:11:10,231 - scout.ui.widgets.template_list_widget - INFO - Template list widget initialized with directory: scout\resources\templates
+2025-02-25 12:11:10,233 - scout.ui.widgets.detection_result_widget - INFO - Detection result widget initialized
+2025-02-25 12:11:10,239 - scout.ui.widgets.template_list_widget - INFO - Loaded 0 templates from scout\resources\templates
+2025-02-25 12:11:10,239 - scout.ui.views.detection_tab - INFO - Loaded 0 templates from scout\resources\templates
+2025-02-25 12:11:10,239 - scout.ui.views.detection_tab - INFO - Detection tab initialized
+2025-02-25 12:11:10,244 - scout.ui.views.automation_tab - INFO - Automation tab initialized
+2025-02-25 12:11:10,246 - scout.ui.views.game_tab - INFO - Game state tab initialized
+2025-02-25 12:11:10,246 - scout.ui.models.settings_model - INFO - Loaded settings from C:\Users\schrd\.scout\settings.json
+2025-02-25 12:11:10,248 - scout.ui.models.settings_model - INFO - Settings model initialized
+2025-02-25 12:11:10,255 - scout.ui.views.settings_tab - ERROR - Error loading settings: 'SettingsTab' object has no attribute 'use_cache'
+Traceback (most recent call last):
+  File "D:\OneDrive\AI\Projekte\Bot_worldscan\scout\ui\views\settings_tab.py", line 891, in _load_settings_to_ui
+    self.use_cache.setChecked(self.settings_model.get("use_caching", True))
+AttributeError: 'SettingsTab' object has no attribute 'use_cache'
+2025-02-25 12:12:54,208 - root - INFO - Logging to file: resources/logs/scout.log
+2025-02-25 12:12:54,208 - root - INFO - Logging initialized with level: info
+2025-02-25 12:12:54,208 - __main__ - INFO - Starting Scout application
+2025-02-25 12:12:54,209 - __main__ - INFO - Default directories created successfully
+2025-02-25 12:12:54,209 - __main__ - INFO - Starting GUI application
+2025-02-25 12:12:54,221 - scout.ui.utils.language_manager - INFO - Using translations directory: D:\OneDrive\AI\Projekte\Bot_worldscan\scout\translations
+2025-02-25 12:12:54,232 - scout.ui.utils.language_manager - INFO - Applied language: en_US
+2025-02-25 12:12:54,232 - scout.ui.utils.language_manager - INFO - LanguageManager initialized with language: en
+2025-02-25 12:12:54,255 - scout.core.window.window_service - INFO - Found window: '#general | Total Battle Guide - Discord' (hwnd: 132134)
+2025-02-25 12:12:54,255 - scout.core.window.window_service - INFO - Window service initialized for window: 'Total Battle'
+2025-02-25 12:12:54,256 - scout.core.automation.automation_service - INFO - Automation service initialized
+2025-02-25 12:12:54,256 - scout.core.game.game_service - INFO - Game service initialized
+2025-02-25 12:12:54,256 - scout.ui.main_window - INFO - Services initialized and registered
+2025-02-25 12:12:54,285 - scout.ui.widgets.template_list_widget - INFO - Template list widget initialized with directory: scout\resources\templates
+2025-02-25 12:12:54,288 - scout.ui.widgets.detection_result_widget - INFO - Detection result widget initialized
+2025-02-25 12:12:54,293 - scout.ui.widgets.template_list_widget - INFO - Loaded 0 templates from scout\resources\templates
+2025-02-25 12:12:54,294 - scout.ui.views.detection_tab - INFO - Loaded 0 templates from scout\resources\templates
+2025-02-25 12:12:54,294 - scout.ui.views.detection_tab - INFO - Detection tab initialized
+2025-02-25 12:12:54,298 - scout.ui.views.automation_tab - INFO - Automation tab initialized
+2025-02-25 12:12:54,300 - scout.ui.views.game_tab - INFO - Game state tab initialized
+2025-02-25 12:12:54,301 - scout.ui.models.settings_model - INFO - Loaded settings from C:\Users\schrd\.scout\settings.json
+2025-02-25 12:12:54,301 - scout.ui.models.settings_model - INFO - Settings model initialized
+2025-02-25 12:12:54,308 - scout.ui.utils.language_manager - INFO - Applied language: en_US
+2025-02-25 12:12:54,309 - scout.ui.utils.language_manager - INFO - Language changed to: en
+2025-02-25 12:13:00,426 - scout.ui.views.settings_tab - INFO - Language changed to: en
+2025-02-25 12:13:00,427 - scout.ui.views.settings_tab - INFO - Settings tab initialized
+2025-02-25 12:13:39,581 - root - INFO - Logging to file: resources/logs/scout.log
+2025-02-25 12:13:39,581 - root - INFO - Logging initialized with level: info
+2025-02-25 12:13:39,581 - __main__ - INFO - Starting Scout application
+2025-02-25 12:13:39,581 - __main__ - INFO - Default directories created successfully
+2025-02-25 12:13:39,581 - __main__ - INFO - Starting GUI application
+2025-02-25 12:13:39,595 - scout.ui.utils.language_manager - INFO - Using translations directory: D:\OneDrive\AI\Projekte\Bot_worldscan\scout\translations
+2025-02-25 12:13:39,607 - scout.ui.utils.language_manager - INFO - Applied language: en_US
+2025-02-25 12:13:39,607 - scout.ui.utils.language_manager - INFO - LanguageManager initialized with language: en
+2025-02-25 12:13:39,630 - scout.core.window.window_service - INFO - Found window: '#general | Total Battle Guide - Discord' (hwnd: 132134)
+2025-02-25 12:13:39,631 - scout.core.window.window_service - INFO - Window service initialized for window: 'Total Battle'
+2025-02-25 12:13:39,631 - scout.core.automation.automation_service - INFO - Automation service initialized
+2025-02-25 12:13:39,631 - scout.core.game.game_service - INFO - Game service initialized
+2025-02-25 12:13:39,631 - scout.ui.main_window - INFO - Services initialized and registered
+2025-02-25 12:13:39,660 - scout.ui.widgets.template_list_widget - INFO - Template list widget initialized with directory: scout\resources\templates
+2025-02-25 12:13:39,662 - scout.ui.widgets.detection_result_widget - INFO - Detection result widget initialized
+2025-02-25 12:13:39,667 - scout.ui.widgets.template_list_widget - INFO - Loaded 0 templates from scout\resources\templates
+2025-02-25 12:13:39,667 - scout.ui.views.detection_tab - INFO - Loaded 0 templates from scout\resources\templates
+2025-02-25 12:13:39,667 - scout.ui.views.detection_tab - INFO - Detection tab initialized
+2025-02-25 12:13:39,672 - scout.ui.views.automation_tab - INFO - Automation tab initialized
+2025-02-25 12:13:39,675 - scout.ui.views.game_tab - INFO - Game state tab initialized
+2025-02-25 12:13:39,676 - scout.ui.models.settings_model - INFO - Loaded settings from C:\Users\schrd\.scout\settings.json
+2025-02-25 12:13:39,676 - scout.ui.models.settings_model - INFO - Settings model initialized
+2025-02-25 12:13:39,682 - scout.ui.utils.language_manager - INFO - Applied language: en_US
+2025-02-25 12:13:39,682 - scout.ui.utils.language_manager - INFO - Language changed to: en
+2025-02-25 12:13:42,052 - scout.ui.views.settings_tab - INFO - Language changed to: en
+2025-02-25 12:13:42,053 - scout.ui.views.settings_tab - INFO - Settings tab initialized
+2025-02-25 12:13:42,059 - scout.ui.main_window - ERROR - Error connecting signals: 'WindowService' object has no attribute 'window_selected'
+2025-02-25 12:13:42,060 - scout.ui.main_window - INFO - Overlay view initialized
+2025-02-25 12:13:42,060 - scout.ui.main_window - INFO - Main window initialized
+2025-02-25 12:13:42,084 - scout.ui.main_window - INFO - Checking for updates in background
+2025-02-25 12:13:43,473 - scout.core.updater.update_checker - ERROR - Unexpected error checking for updates: Expecting value: line 1 column 1 (char 0)

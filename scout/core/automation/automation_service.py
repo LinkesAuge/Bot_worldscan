@@ -14,7 +14,7 @@ import uuid
 from datetime import datetime
 from functools import cmp_to_key
 
-from ..design.singleton import SingletonProtocol
+from ..design.singleton import Singleton
 from ..events.event_bus import EventBus
 from ..events.event import Event
 from ..events.event_types import EventType
@@ -23,39 +23,51 @@ from .task import Task, TaskStatus, TaskPriority
 
 logger = logging.getLogger(__name__)
 
-class AutomationService(AutomationServiceInterface, metaclass=SingletonProtocol):
+class AutomationService(AutomationServiceInterface):
     """
     Service for managing and executing automation tasks.
     
     This service:
-    - Maintains a queue of tasks to execute
-    - Handles task dependencies and priorities
-    - Executes tasks in a background thread
-    - Publishes events for task lifecycle events
-    - Provides methods for monitoring and controlling task execution
+    - Queues tasks based on priority
+    - Executes tasks in a separate thread
+    - Reports task status through events
+    - Handles task failures and recovery
     """
+    
+    # Use a class variable for the singleton instance
+    _instance = None
+    
+    # Override the __new__ method for singleton pattern
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super(AutomationService, cls).__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
     
     def __init__(self, event_bus: EventBus):
         """
         Initialize the automation service.
         
         Args:
-            event_bus: Event bus for publishing task events
+            event_bus: Event bus for publishing and subscribing to events
         """
-        self.event_bus = event_bus
-        self.tasks: Dict[str, Task] = {}
-        self.pending_tasks: Set[str] = set()
-        self.running: bool = False
-        self.paused: bool = False
-        self.worker_thread: Optional[threading.Thread] = None
-        self.execution_context: Dict[str, Any] = {}
+        # Only initialize once
+        if getattr(self, '_initialized', False):
+            return
+            
+        self._initialized = True
+        self._event_bus = event_bus
         self._task_queue = queue.PriorityQueue()
-        self._task_lock = threading.RLock()
-        self._execution_event = threading.Event()
-        self._stop_requested = threading.Event()
-        self._pause_requested = threading.Event()
+        self._tasks: Dict[str, Task] = {}
+        self._pending_tasks: Set[str] = set()
+        self._running = False
+        self._paused = False
+        self._execute_thread = None
+        self._task_completion_callbacks: Dict[str, List[Callable[[Task], None]]] = {}
+        self._task_failure_callbacks: Dict[str, List[Callable[[Task, str], None]]] = {}
+        self._execution_context: Dict[str, Any] = {}
         
-        logger.debug("AutomationService initialized")
+        logger.info("Automation service initialized")
     
     def add_task(self, task: Task) -> None:
         """
@@ -66,21 +78,21 @@ class AutomationService(AutomationServiceInterface, metaclass=SingletonProtocol)
         """
         with self._task_lock:
             # Check if task with same name already exists
-            if task.name in self.tasks:
+            if task.name in self._tasks:
                 logger.warning(f"Task with name '{task.name}' already exists, adding with unique name")
                 # Generate a unique name by appending a UUID
                 original_name = task.name
                 task.name = f"{original_name}_{uuid.uuid4().hex[:8]}"
                 
             # Add to task dictionary
-            self.tasks[task.name] = task
+            self._tasks[task.name] = task
             
             # Add to pending set if not already completed
             if task.status == TaskStatus.PENDING:
-                self.pending_tasks.add(task.name)
+                self._pending_tasks.add(task.name)
                 
                 # If running, add to priority queue
-                if self.running:
+                if self._running:
                     priority_value = task.priority.value
                     self._task_queue.put((priority_value, task.name))
                     
@@ -109,7 +121,7 @@ class AutomationService(AutomationServiceInterface, metaclass=SingletonProtocol)
         Returns:
             The task if found, None otherwise
         """
-        return self.tasks.get(task_name)
+        return self._tasks.get(task_name)
     
     def get_tasks(self, status: Optional[TaskStatus] = None) -> List[Task]:
         """
@@ -122,9 +134,9 @@ class AutomationService(AutomationServiceInterface, metaclass=SingletonProtocol)
             List of matching tasks
         """
         if status is None:
-            return list(self.tasks.values())
+            return list(self._tasks.values())
         else:
-            return [task for task in self.tasks.values() if task.status == status]
+            return [task for task in self._tasks.values() if task.status == status]
     
     def cancel_task(self, task_name: str) -> bool:
         """
@@ -137,7 +149,7 @@ class AutomationService(AutomationServiceInterface, metaclass=SingletonProtocol)
             True if the task was cancelled, False otherwise
         """
         with self._task_lock:
-            task = self.tasks.get(task_name)
+            task = self._tasks.get(task_name)
             if not task:
                 logger.warning(f"Cannot cancel: task '{task_name}' not found")
                 return False
@@ -150,8 +162,8 @@ class AutomationService(AutomationServiceInterface, metaclass=SingletonProtocol)
             task.cancel()
             
             # Remove from pending set
-            if task_name in self.pending_tasks:
-                self.pending_tasks.remove(task_name)
+            if task_name in self._pending_tasks:
+                self._pending_tasks.remove(task_name)
                 
             logger.debug(f"Cancelled task: {task_name}")
             
@@ -163,7 +175,7 @@ class AutomationService(AutomationServiceInterface, metaclass=SingletonProtocol)
     def cancel_all_tasks(self) -> None:
         """Cancel all pending tasks."""
         with self._task_lock:
-            pending_task_names = list(self.pending_tasks)  # Create a copy to avoid modification during iteration
+            pending_task_names = list(self._pending_tasks)  # Create a copy to avoid modification during iteration
             
             for task_name in pending_task_names:
                 self.cancel_task(task_name)
@@ -172,7 +184,7 @@ class AutomationService(AutomationServiceInterface, metaclass=SingletonProtocol)
     
     def start_execution(self) -> None:
         """Start task execution in a background thread."""
-        if self.running:
+        if self._running:
             logger.warning("Task execution already running")
             return
             
@@ -184,34 +196,34 @@ class AutomationService(AutomationServiceInterface, metaclass=SingletonProtocol)
         self._execution_event.set()
         
         # Set running state
-        self.running = True
-        self.paused = False
+        self._running = True
+        self._paused = False
         
         # Create execution thread
-        self.worker_thread = threading.Thread(
+        self._execute_thread = threading.Thread(
             target=self._execution_loop,
             name="AutomationExecutionThread",
             daemon=True
         )
         
         # Start the thread
-        self.worker_thread.start()
+        self._execute_thread.start()
         
         # Publish event
         self._publish_event(EventType.AUTOMATION_STARTED, {
-            'pending_tasks': len(self.pending_tasks)
+            'pending_tasks': len(self._pending_tasks)
         })
     
     def pause_execution(self) -> None:
         """Pause task execution."""
-        if not self.running or self.paused:
+        if not self._running or self._paused:
             logger.warning("Cannot pause: execution not running or already paused")
             return
             
         logger.debug("Pausing task execution")
         
         # Set paused state
-        self.paused = True
+        self._paused = True
         
         # Signal pause
         self._pause_requested.set()
@@ -219,19 +231,19 @@ class AutomationService(AutomationServiceInterface, metaclass=SingletonProtocol)
         
         # Publish event
         self._publish_event(EventType.AUTOMATION_PAUSED, {
-            'pending_tasks': len(self.pending_tasks)
+            'pending_tasks': len(self._pending_tasks)
         })
     
     def resume_execution(self) -> None:
         """Resume task execution."""
-        if not self.running or not self.paused:
+        if not self._running or not self._paused:
             logger.warning("Cannot resume: execution not running or not paused")
             return
             
         logger.debug("Resuming task execution")
         
         # Clear paused state
-        self.paused = False
+        self._paused = False
         
         # Clear pause signal and set execution event
         self._pause_requested.clear()
@@ -239,12 +251,12 @@ class AutomationService(AutomationServiceInterface, metaclass=SingletonProtocol)
         
         # Publish event
         self._publish_event(EventType.AUTOMATION_RESUMED, {
-            'pending_tasks': len(self.pending_tasks)
+            'pending_tasks': len(self._pending_tasks)
         })
     
     def stop_execution(self) -> None:
         """Stop task execution."""
-        if not self.running:
+        if not self._running:
             logger.warning("Cannot stop: execution not running")
             return
             
@@ -255,16 +267,16 @@ class AutomationService(AutomationServiceInterface, metaclass=SingletonProtocol)
         self._execution_event.set()  # In case execution is paused
         
         # Wait for thread to finish (with timeout)
-        if self.worker_thread and self.worker_thread.is_alive():
-            self.worker_thread.join(timeout=1.0)
+        if self._execute_thread and self._execute_thread.is_alive():
+            self._execute_thread.join(timeout=1.0)
             
         # Reset state
-        self.running = False
-        self.paused = False
+        self._running = False
+        self._paused = False
         
         # Publish event
         self._publish_event(EventType.AUTOMATION_STOPPED, {
-            'pending_tasks': len(self.pending_tasks)
+            'pending_tasks': len(self._pending_tasks)
         })
     
     def is_running(self) -> bool:
@@ -274,7 +286,7 @@ class AutomationService(AutomationServiceInterface, metaclass=SingletonProtocol)
         Returns:
             True if the service is running, False otherwise
         """
-        return self.running
+        return self._running
     
     def is_paused(self) -> bool:
         """
@@ -283,7 +295,7 @@ class AutomationService(AutomationServiceInterface, metaclass=SingletonProtocol)
         Returns:
             True if the service is paused, False otherwise
         """
-        return self.paused
+        return self._paused
     
     def execute_task_synchronously(self, task: Task) -> bool:
         """
@@ -298,7 +310,7 @@ class AutomationService(AutomationServiceInterface, metaclass=SingletonProtocol)
         Returns:
             True if the task was successful, False otherwise
         """
-        if not self.execution_context:
+        if not self._execution_context:
             logger.warning("Execution context not set, task may fail")
             
         logger.debug(f"Executing task synchronously: {task.name}")
@@ -310,7 +322,7 @@ class AutomationService(AutomationServiceInterface, metaclass=SingletonProtocol)
         self._publish_task_event(EventType.AUTOMATION_TASK_STARTED, task)
         
         # Execute the task
-        success = task.execute(self.execution_context)
+        success = task.execute(self._execution_context)
         
         # Mark task as completed or failed
         if success:
@@ -332,7 +344,7 @@ class AutomationService(AutomationServiceInterface, metaclass=SingletonProtocol)
         Args:
             context: Execution context dictionary
         """
-        self.execution_context = context
+        self._execution_context = context
         logger.debug(f"Execution context set with keys: {list(context.keys())}")
     
     def add_to_execution_context(self, key: str, value: Any) -> None:
@@ -343,7 +355,7 @@ class AutomationService(AutomationServiceInterface, metaclass=SingletonProtocol)
             key: Key for the value
             value: Value to add
         """
-        self.execution_context[key] = value
+        self._execution_context[key] = value
         logger.debug(f"Added '{key}' to execution context")
     
     def register_task_completion_callback(self, task_name: str, callback: Callable[[Task], None]) -> bool:
@@ -357,7 +369,7 @@ class AutomationService(AutomationServiceInterface, metaclass=SingletonProtocol)
         Returns:
             True if callback was registered, False if task not found
         """
-        task = self.tasks.get(task_name)
+        task = self._tasks.get(task_name)
         if not task:
             logger.warning(f"Cannot register callback: task '{task_name}' not found")
             return False
@@ -376,7 +388,7 @@ class AutomationService(AutomationServiceInterface, metaclass=SingletonProtocol)
         Returns:
             True if callback was registered, False if task not found
         """
-        task = self.tasks.get(task_name)
+        task = self._tasks.get(task_name)
         if not task:
             logger.warning(f"Cannot register callback: task '{task_name}' not found")
             return False
@@ -417,7 +429,7 @@ class AutomationService(AutomationServiceInterface, metaclass=SingletonProtocol)
                     
                 # Get the task
                 with self._task_lock:
-                    task = self.tasks.get(task_name)
+                    task = self._tasks.get(task_name)
                     
                     # Skip if task was removed or is no longer pending
                     if not task or task.status != TaskStatus.PENDING:
@@ -432,8 +444,8 @@ class AutomationService(AutomationServiceInterface, metaclass=SingletonProtocol)
                         continue
                         
                     # Remove from pending set
-                    if task_name in self.pending_tasks:
-                        self.pending_tasks.remove(task_name)
+                    if task_name in self._pending_tasks:
+                        self._pending_tasks.remove(task_name)
                         
                     # Mark task as running
                     task.start()
@@ -444,7 +456,7 @@ class AutomationService(AutomationServiceInterface, metaclass=SingletonProtocol)
                 try:
                     # Execute the task
                     logger.debug(f"Executing task: {task.name}")
-                    success = task.execute(self.execution_context)
+                    success = task.execute(self._execution_context)
                     
                     # Mark task as completed or failed
                     if success:
@@ -476,7 +488,7 @@ class AutomationService(AutomationServiceInterface, metaclass=SingletonProtocol)
             
         finally:
             # Reset running state
-            self.running = False
+            self._running = False
     
     def _refill_task_queue(self) -> None:
         """
@@ -487,12 +499,12 @@ class AutomationService(AutomationServiceInterface, metaclass=SingletonProtocol)
         """
         with self._task_lock:
             # Skip if no pending tasks
-            if not self.pending_tasks:
+            if not self._pending_tasks:
                 return
                 
             # Get all pending tasks
-            pending_tasks = [self.tasks[name] for name in self.pending_tasks
-                           if name in self.tasks]
+            pending_tasks = [self._tasks[name] for name in self._pending_tasks
+                           if name in self._tasks]
             
             # Sort by priority
             pending_tasks.sort(key=lambda t: t.priority.value, reverse=True)
@@ -510,7 +522,7 @@ class AutomationService(AutomationServiceInterface, metaclass=SingletonProtocol)
             event_type: Type of event
             task: Task associated with the event
         """
-        if not self.event_bus:
+        if not self._event_bus:
             return
             
         # Create event data
@@ -534,7 +546,7 @@ class AutomationService(AutomationServiceInterface, metaclass=SingletonProtocol)
             
         # Create and publish event
         event = Event(event_type, event_data)
-        self.event_bus.publish(event)
+        self._event_bus.publish(event)
     
     def _publish_event(self, event_type: EventType, event_data: Dict[str, Any]) -> None:
         """
@@ -544,7 +556,7 @@ class AutomationService(AutomationServiceInterface, metaclass=SingletonProtocol)
             event_type: Type of event
             event_data: Event data
         """
-        if not self.event_bus:
+        if not self._event_bus:
             return
             
         # Add timestamp
@@ -552,4 +564,4 @@ class AutomationService(AutomationServiceInterface, metaclass=SingletonProtocol)
         
         # Create and publish event
         event = Event(event_type, event_data)
-        self.event_bus.publish(event) 
+        self._event_bus.publish(event) 

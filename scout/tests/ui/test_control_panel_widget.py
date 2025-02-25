@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import Qt, QEvent
 
 from scout.ui.widgets.control_panel_widget import ControlPanelWidget
-from scout.ui.main_window import ServiceLocator
+from scout.ui.service_locator_ui import ServiceLocator
 from scout.core.detection.detection_service_interface import DetectionServiceInterface
 from scout.core.automation.automation_service_interface import AutomationServiceInterface
 from scout.core.game.game_state_service_interface import GameStateServiceInterface
@@ -39,7 +39,7 @@ class TestControlPanelWidget(unittest.TestCase):
         
         # Register mock services with ServiceLocator
         # Use patch to temporarily replace the get method of ServiceLocator
-        self.service_locator_patcher = patch('scout.ui.main_window.ServiceLocator.get')
+        self.service_locator_patcher = patch('scout.ui.service_locator_ui.ServiceLocator.get')
         self.mock_service_locator_get = self.service_locator_patcher.start()
         
         # Configure mock to return appropriate services based on interface

@@ -1,0 +1,42 @@
+# Development dependencies for Scout
+
+# Testing
+pytest>=7.3.1
+pytest-cov>=4.1.0
+pytest-qt>=4.2.0
+pytest-xvfb>=2.0.0  # For headless UI testing
+
+# Code quality
+ruff>=0.0.267  # Linting
+mypy>=1.3.0  # Type checking
+pre-commit>=3.3.2
+black>=23.3.0  # Code formatting
+isort>=5.12.0  # Import sorting
+
+# Documentation
+sphinx>=7.0.0  # Documentation generation
+sphinx-rtd-theme>=1.2.0  # Read the Docs theme
+sphinx-autodoc-typehints>=1.23.0  # Type hints in documentation
+
+# Package building
+build>=0.10.0
+twine>=4.0.2
+
+# Translation tools
+pylupdate6  # For extracting translatable strings
+lrelease  # For compiling translation files
+
+# UI development tools
+qt-material>=2.14  # Additional themes for UI development
+pyqtgraph>=0.13.3  # Graphing library for performance testing UI
+
+# Performance testing
+memory-profiler>=0.61.0  # Memory profiling
+line-profiler>=4.0.3  # Line-by-line profiling
+
+# Debugging
+pdbpp>=0.10.3  # Enhanced Python debugger
+ipython>=8.13.0  # Enhanced interactive Python shell
+
+# Mock data generation
+faker>=18.10.0  # For generating test data

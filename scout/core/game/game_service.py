@@ -15,7 +15,7 @@ import json
 import os
 from pathlib import Path
 
-from ..design.singleton import SingletonProtocol
+from ..design.singleton import Singleton
 from ..events.event_bus import EventBus
 from ..events.event import Event
 from ..events.event_types import EventType
@@ -28,7 +28,7 @@ from .game_state import (
 
 logger = logging.getLogger(__name__)
 
-class GameService(GameServiceInterface, metaclass=SingletonProtocol):
+class GameService(GameServiceInterface):
     """
     Service for managing the game state.
     
@@ -40,6 +40,16 @@ class GameService(GameServiceInterface, metaclass=SingletonProtocol):
     - Persists and loads game state to/from disk
     """
     
+    # Use a class variable for the singleton instance
+    _instance = None
+    
+    # Override the __new__ method for singleton pattern
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super(GameService, cls).__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+    
     def __init__(
         self, 
         window_service: WindowServiceInterface,
@@ -48,48 +58,35 @@ class GameService(GameServiceInterface, metaclass=SingletonProtocol):
         state_file_path: Optional[str] = None
     ):
         """
-        Initialize the Game Service.
+        Initialize the game service.
         
         Args:
-            window_service: Service for window management and screen capture
+            window_service: Service for capturing screenshots
             detection_service: Service for detecting game elements
-            event_bus: Event bus for publishing events
-            state_file_path: Path for persisting game state
+            event_bus: Service for publishing/subscribing to events
+            state_file_path: Path to save/load game state (optional)
         """
+        # Only initialize once
+        if getattr(self, '_initialized', False):
+            return
+            
+        self._initialized = True
         self._window_service = window_service
         self._detection_service = detection_service
         self._event_bus = event_bus
+        self._state_file_path = state_file_path
+        self._game_state = GameState()
+        self._last_update = time.time()
+        self._detection_regions: Dict[str, Dict[str, int]] = {}
         
-        # Set default state file path if not provided
-        if state_file_path is None:
-            # Get the directory where this file is located
-            current_dir = Path(os.path.dirname(os.path.abspath(__file__)))
-            state_file_path = current_dir.parent.parent / "data" / "game_state.json"
-            
-            # Ensure data directory exists
-            os.makedirs(os.path.dirname(state_file_path), exist_ok=True)
-            
-        self._state_file_path = Path(state_file_path)
+        # Subscribe to detection events
+        self._event_bus.subscribe(EventType.DETECTION_COMPLETED, self._on_detection_completed)
         
-        # Initialize game state
-        self._state = GameState()
-        self._load_state()
+        logger.info("Game service initialized")
         
-        # Detection regions
-        self._regions = {
-            'coordinates': {'left': 0, 'top': 0, 'width': 200, 'height': 30},
-            'resources': {'left': 0, 'top': 0, 'width': 800, 'height': 100},
-            # Additional regions will be configured during runtime
-        }
-        
-        # Register for relevant events
-        if self._event_bus:
-            self._event_bus.subscribe(
-                EventType.DETECTION_COMPLETED,
-                self._on_detection_completed
-            )
-            
-        logger.info("Game Service initialized")
+        # Load state from file if available
+        if state_file_path:
+            self._load_state()
     
     @property
     def state(self) -> GameState:
@@ -99,7 +96,7 @@ class GameService(GameServiceInterface, metaclass=SingletonProtocol):
         Returns:
             The current GameState
         """
-        return self._state
+        return self._game_state
     
     def configure_detection_regions(self, regions: Dict[str, Dict[str, int]]) -> None:
         """
@@ -108,7 +105,7 @@ class GameService(GameServiceInterface, metaclass=SingletonProtocol):
         Args:
             regions: Dictionary mapping region name to bounding box
         """
-        self._regions.update(regions)
+        self._detection_regions.update(regions)
         logger.debug(f"Updated detection regions: {regions.keys()}")
     
     def update_state(self, force_detection: bool = False) -> None:
@@ -131,7 +128,7 @@ class GameService(GameServiceInterface, metaclass=SingletonProtocol):
             self._update_resources(force_detection)
             
             # Update timestamp
-            self._state.update_timestamp()
+            self._game_state.update_timestamp()
             
             # Save state
             self._save_state()
@@ -150,11 +147,11 @@ class GameService(GameServiceInterface, metaclass=SingletonProtocol):
             force_detection: Whether to bypass caching
         """
         # Skip if coordinates region not configured
-        if 'coordinates' not in self._regions:
+        if 'coordinates' not in self._detection_regions:
             return
             
         # Detect text in coordinates region
-        region = self._regions['coordinates']
+        region = self._detection_regions['coordinates']
         text = self._detection_service.get_text(
             region=region,
             preprocess='thresh'
@@ -168,11 +165,11 @@ class GameService(GameServiceInterface, metaclass=SingletonProtocol):
         coords = self._parse_coordinates(text)
         if coords:
             kingdom, x, y = coords
-            self._state.current_position = Coordinates(kingdom, x, y)
-            logger.debug(f"Updated player coordinates: {self._state.current_position}")
+            self._game_state.current_position = Coordinates(kingdom, x, y)
+            logger.debug(f"Updated player coordinates: {self._game_state.current_position}")
             
             # Add to explored coordinates
-            self._state.explored_coordinates.add(self._state.current_position)
+            self._game_state.explored_coordinates.add(self._game_state.current_position)
         else:
             logger.debug(f"Failed to parse coordinates from text: {text}")
     
@@ -184,11 +181,11 @@ class GameService(GameServiceInterface, metaclass=SingletonProtocol):
             force_detection: Whether to bypass caching
         """
         # Skip if resources region not configured
-        if 'resources' not in self._regions:
+        if 'resources' not in self._detection_regions:
             return
             
         # Detect text in resources region
-        region = self._regions['resources']
+        region = self._detection_regions['resources']
         text = self._detection_service.get_text(
             region=region,
             preprocess='thresh'
@@ -258,7 +255,7 @@ class GameService(GameServiceInterface, metaclass=SingletonProtocol):
                         capacity = int(capacity_str)
                     
                     # Update resource
-                    self._state.resources.update(resource_name, amount, capacity)
+                    self._game_state.resources.update(resource_name, amount, capacity)
                     logger.debug(f"Updated resource {resource_name}: {amount}/{capacity}")
                     
                 except ValueError:
@@ -341,7 +338,7 @@ class GameService(GameServiceInterface, metaclass=SingletonProtocol):
         y = detection.get('y', 0)
         
         # We would need to translate screen coordinates to game coordinates
-        if self._state.current_position:
+        if self._game_state.current_position:
             # This logic would depend on how the game UI maps screen position to game position
             # For now, we'll use a placeholder
             game_coords = self._screen_to_game_coords(x, y)
@@ -355,7 +352,7 @@ class GameService(GameServiceInterface, metaclass=SingletonProtocol):
                 )
                 
                 # Add to game state
-                self._state.add_or_update_entity(entity)
+                self._game_state.add_or_update_entity(entity)
                 logger.debug(f"Added city at {game_coords}")
     
     def _process_resource_detection(self, detection: Dict[str, Any]) -> None:
@@ -384,12 +381,12 @@ class GameService(GameServiceInterface, metaclass=SingletonProtocol):
             Coordinates in game world, or None if conversion not possible
         """
         # We need a current position to use as reference
-        if not self._state.current_position:
+        if not self._game_state.current_position:
             return None
             
         # This logic would need to be customized based on the game's UI
         # For now, just return the current position as a placeholder
-        return self._state.current_position
+        return self._game_state.current_position
     
     def _save_state(self) -> None:
         """Save game state to disk."""
@@ -432,9 +429,9 @@ class GameService(GameServiceInterface, metaclass=SingletonProtocol):
         # would handle all aspects of the game state
         result = {
             'player': {
-                'name': self._state.player_name,
-                'level': self._state.player_level,
-                'power': self._state.player_power
+                'name': self._game_state.player_name,
+                'level': self._game_state.player_level,
+                'power': self._game_state.player_power
             },
             'current_position': None,
             'resources': {},
@@ -442,26 +439,26 @@ class GameService(GameServiceInterface, metaclass=SingletonProtocol):
             'armies': [],
             'known_entities': [],
             'explored_coordinates': [],
-            'last_updated': self._state.last_updated.isoformat()
+            'last_updated': self._game_state.last_updated.isoformat()
         }
         
         # Serialize current position
-        if self._state.current_position:
+        if self._game_state.current_position:
             result['current_position'] = {
-                'kingdom': self._state.current_position.kingdom,
-                'x': self._state.current_position.x,
-                'y': self._state.current_position.y
+                'kingdom': self._game_state.current_position.kingdom,
+                'x': self._game_state.current_position.x,
+                'y': self._game_state.current_position.y
             }
             
         # Serialize resources
-        for name, resource in self._state.resources.as_dict().items():
+        for name, resource in self._game_state.resources.as_dict().items():
             result['resources'][name] = {
                 'amount': resource.amount,
                 'capacity': resource.capacity
             }
             
         # Serialize buildings
-        for name, building in self._state.buildings.items():
+        for name, building in self._game_state.buildings.items():
             b_data = {
                 'name': building.name,
                 'level': building.level,
@@ -482,7 +479,7 @@ class GameService(GameServiceInterface, metaclass=SingletonProtocol):
             result['buildings'].append(b_data)
             
         # Serialize known entities
-        for entity in self._state.known_entities.values():
+        for entity in self._game_state.known_entities.values():
             e_data = {
                 'entity_type': entity.entity_type,
                 'coordinates': {
@@ -500,7 +497,7 @@ class GameService(GameServiceInterface, metaclass=SingletonProtocol):
             result['known_entities'].append(e_data)
             
         # Serialize explored coordinates
-        for coords in self._state.explored_coordinates:
+        for coords in self._game_state.explored_coordinates:
             result['explored_coordinates'].append({
                 'kingdom': coords.kingdom,
                 'x': coords.x,
@@ -521,21 +518,21 @@ class GameService(GameServiceInterface, metaclass=SingletonProtocol):
         try:
             # Deserialize player info
             if 'player' in data:
-                self._state.player_name = data['player'].get('name')
-                self._state.player_level = data['player'].get('level')
-                self._state.player_power = data['player'].get('power')
+                self._game_state.player_name = data['player'].get('name')
+                self._game_state.player_level = data['player'].get('level')
+                self._game_state.player_power = data['player'].get('power')
             
             # Deserialize current position
             if 'current_position' in data and data['current_position']:
                 pos = data['current_position']
-                self._state.current_position = Coordinates(
+                self._game_state.current_position = Coordinates(
                     pos['kingdom'], pos['x'], pos['y']
                 )
                 
             # Deserialize resources
             if 'resources' in data:
                 for name, res_data in data['resources'].items():
-                    self._state.resources.update(
+                    self._game_state.resources.update(
                         name, 
                         res_data.get('amount', 0), 
                         res_data.get('capacity')
@@ -560,7 +557,7 @@ class GameService(GameServiceInterface, metaclass=SingletonProtocol):
                             b_data['construction_time']
                         )
                         
-                    self._state.buildings[building.name] = building
+                    self._game_state.buildings[building.name] = building
                     
             # Deserialize known entities
             if 'known_entities' in data:
@@ -582,7 +579,7 @@ class GameService(GameServiceInterface, metaclass=SingletonProtocol):
                     if 'last_seen' in e_data:
                         entity.last_seen = datetime.fromisoformat(e_data['last_seen'])
                         
-                    self._state.add_or_update_entity(entity)
+                    self._game_state.add_or_update_entity(entity)
                     
             # Deserialize explored coordinates
             if 'explored_coordinates' in data:
@@ -592,11 +589,11 @@ class GameService(GameServiceInterface, metaclass=SingletonProtocol):
                         coords_data['x'], 
                         coords_data['y']
                     )
-                    self._state.explored_coordinates.add(coords)
+                    self._game_state.explored_coordinates.add(coords)
                     
             # Deserialize last updated
             if 'last_updated' in data:
-                self._state.last_updated = datetime.fromisoformat(data['last_updated'])
+                self._game_state.last_updated = datetime.fromisoformat(data['last_updated'])
                 
         except Exception as e:
             logger.error(f"Error deserializing game state: {e}")
@@ -609,12 +606,12 @@ class GameService(GameServiceInterface, metaclass=SingletonProtocol):
         # Create event data - only include basic information to avoid
         # sending too much data in events
         event_data = {
-            'current_position': str(self._state.current_position) if self._state.current_position else None,
+            'current_position': str(self._game_state.current_position) if self._game_state.current_position else None,
             'resources': {
                 name: resource.amount 
-                for name, resource in self._state.resources.as_dict().items()
+                for name, resource in self._game_state.resources.as_dict().items()
             },
-            'last_updated': self._state.last_updated.isoformat()
+            'last_updated': self._game_state.last_updated.isoformat()
         }
         
         # Create and publish event

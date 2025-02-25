@@ -29,13 +29,18 @@ from scout.core.interfaces.service_interfaces import (
 )
 
 # Update the import path for the game service interface
-from scout.core.game.game_service_interface import GameServiceInterface as GameStateServiceInterface
+from scout.core.game.game_service_interface import GameServiceInterface
 
 # Import service implementations (or mock implementations for now)
 from scout.core.detection.detection_service import DetectionService
 from scout.core.automation.automation_service import AutomationService
-from scout.core.game.game_service import GameService as GameStateService
+from scout.core.game.game_service import GameService
+from scout.core.game.game_state_service_interface import GameStateServiceInterface
 from scout.core.window.window_service import WindowService
+from scout.core.events.event_bus import EventBus
+
+# Import the ServiceLocator from the UI module
+from scout.ui.service_locator_ui import ServiceLocator
 
 # Import UI components
 from scout.ui.views.detection_tab import DetectionTab
@@ -55,59 +60,6 @@ from scout.core.updater import (
 
 # Set up logging
 logger = logging.getLogger(__name__)
-
-
-class ServiceLocator:
-    """
-    Service locator for managing application services.
-    
-    This class provides access to core services needed by the UI components,
-    ensuring type-safe access and proper initialization/shutdown.
-    """
-    
-    _services = {}  # Static dictionary of services
-    
-    @classmethod
-    def register(cls, interface_class, implementation):
-        """
-        Register a service implementation for a given interface.
-        
-        Args:
-            interface_class: Interface class that the implementation implements
-            implementation: Service implementation instance
-        """
-        cls._services[interface_class] = implementation
-        logger.debug(f"Registered service: {interface_class.__name__}")
-    
-    @classmethod
-    def get(cls, interface_class):
-        """
-        Get a service by its interface.
-        
-        Args:
-            interface_class: Interface class to look up
-            
-        Returns:
-            Implementation instance or None if not found
-        """
-        if interface_class in cls._services:
-            return cls._services[interface_class]
-        
-        logger.error(f"Service not found: {interface_class.__name__}")
-        return None
-    
-    @classmethod
-    def shutdown(cls):
-        """Shutdown all registered services."""
-        for service_class, service in cls._services.items():
-            try:
-                if hasattr(service, 'shutdown'):
-                    service.shutdown()
-                    logger.debug(f"Shut down service: {service_class.__name__}")
-            except Exception as e:
-                logger.error(f"Error shutting down service {service_class.__name__}: {str(e)}")
-        
-        cls._services.clear()
 
 
 class OverlayView(QWidget):
@@ -237,11 +189,14 @@ class MainWindow(QMainWindow):
     
     def _initialize_services(self):
         """Initialize and register core services."""
+        # Create event bus
+        event_bus = EventBus()
+        
         # Create service instances
-        window_service = WindowService()
-        detection_service = DetectionService(window_service)
-        automation_service = AutomationService(window_service)
-        game_state_service = GameStateService()
+        window_service = WindowService(window_title="Total Battle", event_bus=event_bus)
+        detection_service = DetectionService(event_bus=event_bus, window_service=window_service)
+        automation_service = AutomationService(event_bus=event_bus)
+        game_state_service = GameService(window_service=window_service, detection_service=detection_service, event_bus=event_bus)
         
         # Register with locator
         ServiceLocator.register(WindowServiceInterface, window_service)
@@ -425,7 +380,7 @@ class MainWindow(QMainWindow):
         self.tab_widget.addTab(self.game_tab, tr("Game State"))
         
         # Create settings tab
-        self.settings_tab = SettingsTab()
+        self.settings_tab = SettingsTab(ServiceLocator)
         self.tab_widget.addTab(self.settings_tab, tr("Settings"))
         
         # Connect tab changed signal
@@ -644,15 +599,20 @@ class MainWindow(QMainWindow):
     
     def _connect_signals(self):
         """Connect signals between components."""
-        # Connect detection tab signals
-        self.detection_tab.detection_results_ready.connect(self._on_detection_results)
-        
-        # Connect settings tab signals
-        self.settings_tab.settings_changed.connect(self._on_settings_changed)
-        
-        # Connect window service signals
-        self.window_service.window_selected.connect(self._on_window_selected)
-        self.window_service.window_lost.connect(self._on_window_lost)
+        try:
+            # Connect detection tab signals if available
+            if hasattr(self.detection_tab, 'detection_results_ready'):
+                self.detection_tab.detection_results_ready.connect(self._on_detection_results)
+            
+            # Connect settings tab signals if available
+            if hasattr(self.settings_tab, 'settings_changed'):
+                self.settings_tab.settings_changed.connect(self._on_settings_changed)
+            
+            # Connect window service signals
+            self.window_service.window_selected.connect(self._on_window_selected)
+            self.window_service.window_lost.connect(self._on_window_lost)
+        except Exception as e:
+            logger.error(f"Error connecting signals: {str(e)}")
     
     def _load_settings(self):
         """Load application settings."""

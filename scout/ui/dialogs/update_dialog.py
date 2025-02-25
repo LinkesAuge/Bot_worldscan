@@ -431,9 +431,9 @@ class UpdateDialog(QDialog):
         self.check_button.setEnabled(True)
         
         # Show message
+        install_message = tr('Click "Install Now" to install the update.')
         self.info_browser.append(
-            f"<p><b>{tr('Download complete!')}</b> "
-            f"{tr('Click \"Install Now\" to install the update.')}</p>"
+            f"<p><b>{tr('Download complete!')}</b> {install_message}</p>"
         )
         
         # Clean up thread

@@ -27,8 +27,8 @@ from scout.core.automation.automation_service_interface import AutomationService
 from scout.core.game.game_state_service_interface import GameStateServiceInterface
 from scout.core.window.window_service_interface import WindowServiceInterface
 
-# Import service locator
-from scout.ui.main_window import ServiceLocator
+# Import service locator - updated to use the UI specific service locator
+from scout.ui.service_locator_ui import ServiceLocator
 
 # Set up logging
 logger = logging.getLogger(__name__)
