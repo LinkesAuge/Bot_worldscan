@@ -6,7 +6,9 @@ It integrates all UI components and connects to the core services.
 """
 
 import sys
+import os
 import logging
+import threading
 from typing import Dict, List, Optional, Any
 from pathlib import Path
 
@@ -17,7 +19,7 @@ from PyQt6.QtWidgets import (
     QDockWidget, QSplitter
 )
 from PyQt6.QtGui import QIcon, QFont, QPixmap, QKeySequence, QCloseEvent
-from PyQt6.QtCore import Qt, QSize, QSettings, QTimer, pyqtSignal, QEvent
+from PyQt6.QtCore import Qt, QSize, QSettings, QTimer, pyqtSignal, QEvent, QThread
 
 # Import service interfaces
 from scout.core.detection.detection_service_interface import DetectionServiceInterface
@@ -41,6 +43,11 @@ from scout.ui.widgets.control_panel_widget import ControlPanelWidget
 
 # Import language manager
 from scout.ui.utils.language_manager import get_language_manager, tr
+
+# Import updater components
+from scout.core.updater import (
+    get_update_settings, check_for_updates_in_background, show_update_dialog
+)
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -424,102 +431,134 @@ class MainWindow(QMainWindow):
         self._on_tab_changed(self.tab_widget.currentIndex())
     
     def _create_menu_bar(self):
-        """Create the menu bar."""
+        """Create the application menu bar."""
+        logger.debug("Creating menu bar")
+        
         # Create menu bar
         menu_bar = self.menuBar()
         
         # File menu
-        file_menu = menu_bar.addMenu(tr("File"))
+        file_menu = menu_bar.addMenu(tr("&File"))
         
-        # File -> New
-        new_action = QAction(tr("New"), self)
-        new_action.setShortcut(QKeySequence.StandardKey.New)
+        # New action
+        new_action = QAction(QIcon.fromTheme("document-new"), tr("&New"), self)
+        new_action.setShortcut("Ctrl+N")
+        new_action.setStatusTip(tr("Create a new configuration"))
         new_action.triggered.connect(self._on_new)
         file_menu.addAction(new_action)
         
-        # File -> Open
-        open_action = QAction(tr("Open"), self)
-        open_action.setShortcut(QKeySequence.StandardKey.Open)
+        # Open action
+        open_action = QAction(QIcon.fromTheme("document-open"), tr("&Open..."), self)
+        open_action.setShortcut("Ctrl+O")
+        open_action.setStatusTip(tr("Open a configuration file"))
         open_action.triggered.connect(self._on_open)
         file_menu.addAction(open_action)
         
-        # File -> Save
-        save_action = QAction(tr("Save"), self)
-        save_action.setShortcut(QKeySequence.StandardKey.Save)
+        # Save action
+        save_action = QAction(QIcon.fromTheme("document-save"), tr("&Save"), self)
+        save_action.setShortcut("Ctrl+S")
+        save_action.setStatusTip(tr("Save the current configuration"))
         save_action.triggered.connect(self._on_save)
         file_menu.addAction(save_action)
         
-        # File -> Save As
-        save_as_action = QAction(tr("Save As"), self)
-        save_as_action.setShortcut(QKeySequence.StandardKey.SaveAs)
+        # Save As action
+        save_as_action = QAction(QIcon.fromTheme("document-save-as"), tr("Save &As..."), self)
+        save_as_action.setShortcut("Ctrl+Shift+S")
+        save_as_action.setStatusTip(tr("Save the configuration to a new file"))
         save_as_action.triggered.connect(self._on_save_as)
         file_menu.addAction(save_as_action)
         
+        # Separator
         file_menu.addSeparator()
         
-        # File -> Exit
-        exit_action = QAction(tr("Exit"), self)
-        exit_action.setShortcut(QKeySequence.StandardKey.Quit)
+        # Check for Updates action
+        check_updates_action = QAction(QIcon.fromTheme("system-software-update"), tr("Check for &Updates..."), self)
+        check_updates_action.setStatusTip(tr("Check for application updates"))
+        check_updates_action.triggered.connect(self._on_check_for_updates)
+        file_menu.addAction(check_updates_action)
+        
+        # Preferences action
+        preferences_action = QAction(QIcon.fromTheme("preferences-system"), tr("&Preferences..."), self)
+        preferences_action.setShortcut("Ctrl+P")
+        preferences_action.setStatusTip(tr("Configure application preferences"))
+        preferences_action.triggered.connect(self._on_preferences)
+        file_menu.addAction(preferences_action)
+        
+        # Separator
+        file_menu.addSeparator()
+        
+        # Exit action
+        exit_action = QAction(QIcon.fromTheme("application-exit"), tr("E&xit"), self)
+        exit_action.setShortcut("Alt+F4")
+        exit_action.setStatusTip(tr("Exit the application"))
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
         
-        # Edit menu
-        edit_menu = menu_bar.addMenu(tr("Edit"))
+        # Window menu
+        window_menu = menu_bar.addMenu(tr("&Window"))
         
-        # Edit -> Preferences
-        preferences_action = QAction(tr("Preferences"), self)
-        preferences_action.setShortcut(QKeySequence("Ctrl+,"))
-        preferences_action.triggered.connect(self._on_preferences)
-        edit_menu.addAction(preferences_action)
+        # Capture Window action
+        capture_window_action = QAction(QIcon.fromTheme("view-fullscreen"), tr("&Select Window..."), self)
+        capture_window_action.setStatusTip(tr("Select a window to capture"))
+        capture_window_action.triggered.connect(self._on_capture_window)
+        window_menu.addAction(capture_window_action)
         
-        # View menu
-        view_menu = menu_bar.addMenu(tr("View"))
-        
-        # View -> Refresh
-        refresh_action = QAction(tr("Refresh"), self)
-        refresh_action.setShortcut(QKeySequence.StandardKey.Refresh)
+        # Refresh action
+        refresh_action = QAction(QIcon.fromTheme("view-refresh"), tr("&Refresh"), self)
+        refresh_action.setShortcut("F5")
+        refresh_action.setStatusTip(tr("Refresh the current view"))
         refresh_action.triggered.connect(self._on_refresh)
-        view_menu.addAction(refresh_action)
+        window_menu.addAction(refresh_action)
         
-        # View -> Toggle Overlay
-        self.overlay_action = QAction(tr("Show Overlay"), self)
-        self.overlay_action.setCheckable(True)
-        self.overlay_action.setChecked(False)
-        self.overlay_action.triggered.connect(self._on_toggle_overlay)
-        view_menu.addAction(self.overlay_action)
-        
-        # View -> Capture Screenshot
-        screenshot_action = QAction(tr("Capture Screenshot"), self)
-        screenshot_action.setShortcut(QKeySequence("Ctrl+P"))
+        # Capture Screenshot action
+        screenshot_action = QAction(QIcon.fromTheme("camera-photo"), tr("Capture &Screenshot"), self)
+        screenshot_action.setShortcut("F9")
+        screenshot_action.setStatusTip(tr("Capture a screenshot of the game window"))
         screenshot_action.triggered.connect(self._on_capture_screenshot)
-        view_menu.addAction(screenshot_action)
+        window_menu.addAction(screenshot_action)
+        
+        # Separator
+        window_menu.addSeparator()
+        
+        # Toggle Overlay action
+        self.overlay_action = QAction(QIcon.fromTheme("view-preview"), tr("Show &Overlay"), self)
+        self.overlay_action.setCheckable(True)
+        self.overlay_action.setStatusTip(tr("Toggle detection overlay"))
+        self.overlay_action.triggered.connect(self._on_toggle_overlay)
+        window_menu.addAction(self.overlay_action)
         
         # Tools menu
-        tools_menu = menu_bar.addMenu(tr("Tools"))
+        tools_menu = menu_bar.addMenu(tr("&Tools"))
         
-        # Tools -> Template Creator
-        template_creator_action = QAction(tr("Template Creator"), self)
+        # Template Creator action
+        template_creator_action = QAction(QIcon.fromTheme("document-new"), tr("&Template Creator..."), self)
+        template_creator_action.setStatusTip(tr("Create detection templates"))
         template_creator_action.triggered.connect(self._on_template_creator)
         tools_menu.addAction(template_creator_action)
         
-        # Tools -> Sequence Recorder
-        sequence_recorder_action = QAction(tr("Sequence Recorder"), self)
+        # Sequence Recorder action
+        sequence_recorder_action = QAction(QIcon.fromTheme("media-record"), tr("&Sequence Recorder..."), self)
+        sequence_recorder_action.setStatusTip(tr("Record automation sequences"))
         sequence_recorder_action.triggered.connect(self._on_sequence_recorder)
         tools_menu.addAction(sequence_recorder_action)
         
         # Help menu
-        help_menu = menu_bar.addMenu(tr("Help"))
+        help_menu = menu_bar.addMenu(tr("&Help"))
         
-        # Help -> Documentation
-        documentation_action = QAction(tr("Documentation"), self)
-        documentation_action.setShortcut(QKeySequence.StandardKey.HelpContents)
+        # Documentation action
+        documentation_action = QAction(QIcon.fromTheme("help-browser"), tr("&Documentation"), self)
+        documentation_action.setShortcut("F1")
+        documentation_action.setStatusTip(tr("View documentation"))
         documentation_action.triggered.connect(self._on_documentation)
         help_menu.addAction(documentation_action)
         
-        # Help -> About
-        about_action = QAction(tr("About"), self)
+        # About action
+        about_action = QAction(QIcon.fromTheme("help-about"), tr("&About"), self)
+        about_action.setStatusTip(tr("About this application"))
         about_action.triggered.connect(self._on_about)
         help_menu.addAction(about_action)
+        
+        logger.debug("Menu bar created")
     
     def _create_toolbar(self):
         """Create the toolbar."""
@@ -975,9 +1014,45 @@ class MainWindow(QMainWindow):
         elif current_tab == self.game_tab:
             # Not applicable
             pass
+    
+    def _on_check_for_updates(self):
+        """Handle Check for Updates action."""
+        logger.debug("Check for Updates action triggered")
+        show_update_dialog(self)
 
 
-def run_application():
+def check_updates_if_needed(main_window, force_check=False, skip_check=False):
+    """
+    Check for updates in the background if needed.
+    
+    Args:
+        main_window: The main window instance
+        force_check: Whether to force checking for updates even if disabled in settings
+        skip_check: Whether to skip checking for updates even if enabled in settings
+    """
+    if skip_check:
+        logger.debug("Update check skipped (command-line override)")
+        return
+    
+    # Get update settings
+    update_settings = get_update_settings()
+    
+    # Check if updates should be checked on startup
+    if force_check or update_settings.should_check_updates_on_startup():
+        logger.info("Checking for updates in background")
+        # Use a small delay to ensure the UI is fully loaded before checking
+        QThread.msleep(1000)
+        # Run check in a separate thread to avoid blocking the UI
+        threading.Thread(
+            target=check_for_updates_in_background,
+            args=(main_window,),
+            daemon=True
+        ).start()
+    else:
+        logger.debug("Update check on startup is disabled")
+
+
+def run_application(force_check=False, skip_check=False):
     """
     Run the application.
     
@@ -985,7 +1060,12 @@ def run_application():
     1. Creates the QApplication instance
     2. Initializes the language manager
     3. Creates and shows the main window
-    4. Enters the application event loop
+    4. Checks for updates if needed
+    5. Enters the application event loop
+    
+    Args:
+        force_check: Whether to force checking for updates even if disabled in settings
+        skip_check: Whether to skip checking for updates even if enabled in settings
     
     Returns:
         Application exit code
@@ -993,7 +1073,7 @@ def run_application():
     # Create application
     app = QApplication(sys.argv)
     app.setApplicationName("Scout")
-    app.setApplicationVersion("0.1.0")
+    app.setApplicationVersion("1.0.0")
     
     # Initialize language manager
     language_manager = get_language_manager()
@@ -1001,6 +1081,9 @@ def run_application():
     # Create main window
     main_window = MainWindow()
     main_window.show()
+    
+    # Check for updates if needed
+    check_updates_if_needed(main_window, force_check, skip_check)
     
     # Run application
     return app.exec()

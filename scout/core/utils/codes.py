@@ -1,29 +1,61 @@
 """
 Application Exit Codes
 
-This module defines exit codes used by the application for different 
-scenarios such as restart, update, etc.
+This module defines exit codes used by the Scout application
+to indicate different termination states.
 """
 
-class Codes:
+from enum import IntEnum
+
+
+class Codes(IntEnum):
     """
-    Exit codes used by the application.
+    Exit codes for the Scout application.
     
-    These codes signal the application launcher or wrapper about
-    special actions to take after the application exits.
+    These codes indicate different termination states of the application
+    and can be used to determine the reason for application exit.
     """
     
-    # Normal exit code (0) - standard successful termination
-    NORMAL_EXIT_CODE = 0
+    # Normal exit
+    SUCCESS = 0
     
-    # Restart code (42) - application should be restarted
-    RESTART_CODE = 42
+    # Update-related exit codes
+    UPDATE_CODE = 10  # Application is exiting to apply an update
     
-    # Update code (43) - application should perform an update
-    UPDATE_CODE = 43
+    # Error-related exit codes
+    GENERAL_ERROR = 1       # General application error
+    CONFIG_ERROR = 2        # Configuration error
+    RESOURCE_ERROR = 3      # Resource loading error
+    INITIALIZATION_ERROR = 4  # Application initialization error
     
-    # Error code (1) - application encountered an error
-    ERROR_CODE = 1
+    # User-initiated exit codes
+    USER_CANCEL = 20   # User canceled operation
+    USER_LOGOUT = 21   # User logged out
     
-    # Critical error code (2) - application encountered a critical error
-    CRITICAL_ERROR_CODE = 2 
+    # System-related exit codes
+    SYSTEM_REQUEST = 30  # System requested termination
+    
+    @classmethod
+    def get_description(cls, code: int) -> str:
+        """
+        Get a human-readable description for an exit code.
+        
+        Args:
+            code: The exit code to describe
+            
+        Returns:
+            String description of the exit code
+        """
+        descriptions = {
+            cls.SUCCESS: "Application exited normally",
+            cls.UPDATE_CODE: "Application exited for update",
+            cls.GENERAL_ERROR: "Application encountered a general error",
+            cls.CONFIG_ERROR: "Application encountered a configuration error",
+            cls.RESOURCE_ERROR: "Application failed to load required resources",
+            cls.INITIALIZATION_ERROR: "Application failed to initialize",
+            cls.USER_CANCEL: "User canceled operation",
+            cls.USER_LOGOUT: "User logged out",
+            cls.SYSTEM_REQUEST: "System requested application termination"
+        }
+        
+        return descriptions.get(code, f"Unknown exit code: {code}") 

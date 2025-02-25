@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import QApplication
 
 # Import the main window class
 from scout.ui.main_window import run_application
+from scout.core.utils.codes import Codes
 
 
 def setup_logging(log_level: str, log_file: str = None) -> None:
@@ -129,6 +130,18 @@ def parse_args() -> argparse.Namespace:
         help="Run in headless mode (no GUI)"
     )
     
+    parser.add_argument(
+        "--check-updates",
+        action="store_true",
+        help="Check for updates on startup (even if disabled in settings)"
+    )
+    
+    parser.add_argument(
+        "--no-check-updates",
+        action="store_true",
+        help="Don't check for updates on startup (overrides settings)"
+    )
+    
     return parser.parse_args()
 
 
@@ -156,16 +169,31 @@ def main() -> int:
         if args.no_gui:
             logger.info("Running in headless mode")
             # TODO: Implement headless mode
-            return 0
+            return Codes.SUCCESS
         else:
             logger.info("Starting GUI application")
-            run_application()
-            return 0  # QApplication.exec() will not return until the app exits
+            
+            # Set update flags based on command-line arguments
+            update_check_flags = {}
+            if args.check_updates:
+                update_check_flags["force_check"] = True
+            if args.no_check_updates:
+                update_check_flags["skip_check"] = True
+            
+            # Run the application and get exit code
+            exit_code = run_application(**update_check_flags)
+            
+            # Handle special exit codes
+            if exit_code == Codes.UPDATE_CODE:
+                logger.info("Application exited for update")
+                # Could add additional actions here if needed
+                
+            return exit_code
         
     except Exception as e:
         print(f"Error: {e}")
         print(traceback.format_exc())
-        return 1
+        return Codes.GENERAL_ERROR
 
 
 if __name__ == "__main__":

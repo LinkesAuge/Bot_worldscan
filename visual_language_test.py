@@ -12,7 +12,7 @@ from pathlib import Path
 import logging
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 # Ensure the scout package is in the Python path
@@ -61,63 +61,412 @@ class Language:
 # Simple translation dictionary for demonstration
 DEMO_TRANSLATIONS = {
     "en": {
+        # Tab titles
+        "Basic Components": "Basic Components",
+        "Form Elements": "Form Elements",
+        "Dialogs": "Dialogs",
+        "Complex Layouts": "Complex Layouts",
+        "Game State": "Game State",
+        
+        # Labels and buttons
+        "Select Language:": "Select Language:",
+        "Test All Components": "Test All Components",
+        "Test Results": "Test Results",
+        "Current Language: English": "Current Language: English",
+        "Current Language: German": "Current Language: German",
+        "Current Language: System Default": "Current Language: System Default",
+        
+        # Basic components tab
+        "Test Label": "Test Label",
+        "Test Button": "Test Button",
+        "Test Combobox": "Test Combobox",
+        "Test Checkbox": "Test Checkbox",
         "This is a test label with potentially long text that needs to be properly wrapped and displayed": 
             "This is a test label with potentially long text that needs to be properly wrapped and displayed",
         "Save Configuration": "Save Configuration",
+        "Highlight Layout Issues": "Highlight Layout Issues",
+        "Show Component Bounds": "Show Component Bounds",
+        
+        # Form tab
+        "Test Form": "Test Form",
+        "Test Table": "Test Table",
+        "Test Grid": "Test Grid",
+        "First Name:": "First Name:",
+        "Last Name:": "Last Name:",
+        "Email:": "Email:",
+        "Password:": "Password:",
+        "Confirm Password:": "Confirm Password:",
+        "I agree to the terms": "I agree to the terms",
+        
+        # Dialog tab
+        "Test Message Box": "Test Message Box",
+        "Test Export Dialog": "Test Export Dialog",
+        "Test File Dialog": "Test File Dialog",
+        
+        # Complex layouts tab
+        "Test Settings Panel": "Test Settings Panel",
+        "Test Detection Controls": "Test Detection Controls",
+        "Test Automation Controls": "Test Automation Controls",
+        
+        # Game state tab
+        "Test Resource Panel": "Test Resource Panel",
+        "Test Map Controls": "Test Map Controls",
+        "Test Army Panel": "Test Army Panel",
+        
+        # Common UI elements
         "Cancel": "Cancel",
         "Apply": "Apply",
+        "OK": "OK",
+        "Yes": "Yes", 
+        "No": "No",
+        "&Yes": "&Yes",
+        "&No": "&No",
+        "Save": "Save",
+        "Open": "Open",
+        "Delete": "Delete",
         "Settings": "Settings",
         "Language": "Language",
+        "Help": "Help",
+        "About": "About",
+        "Quit": "Quit",
         "Application": "Application",
         "Detection": "Detection",
         "Automation": "Automation",
-        "Game State": "Game State",
         "Resources": "Resources",
-        "Map": "Map", 
+        "Map": "Map",
         "Army": "Army",
         "Buildings": "Buildings",
-        "Help": "Help",
-        "Test All Components": "Test All Components",
-        "Select Language:": "Select Language:",
         "Action": "Action",
         "Description": "Description",
-        "Select Language:": "Select Language:"
+        "Keyboard Shortcuts": "Keyboard Shortcuts",
+        
+        # UI labels
+        "Settings Panel": "Settings Panel",
+        "Detection Controls": "Detection Controls",
+        "Automation Controls": "Automation Controls",
+        "Resource Panel": "Resource Panel", 
+        "Map Controls": "Map Controls",
+        "Army Panel": "Army Panel",
+        
+        # Additional form fields
+        "Username:": "Username:",
+        "Email Address:": "Email Address:",
+        "Phone Number:": "Phone Number:",
+        "Remember Login:": "Remember Login:",
+        "Account Type:": "Account Type:",
+        "Administrator": "Administrator",
+        "User": "User",
+        "Guest": "Guest",
+        "Name:": "Name:",
+        "Address:": "Address:",
+        "City:": "City:",
+        "State/Province:": "State/Province:",
+        "Postal Code:": "Postal Code:",
+        "Name": "Name",
+        "Type": "Type",
+        
+        # Resource labels
+        "Gold:": "Gold:",
+        "Food:": "Food:",
+        "Wood:": "Wood:",
+        "Stone:": "Stone:",
+        "Iron:": "Iron:",
+        
+        # Detection settings
+        "Detection Settings": "Detection Settings",
+        "Confidence Threshold:": "Confidence Threshold:",
+        "Maximum Matches:": "Maximum Matches:",
+        "Detection Strategy:": "Detection Strategy:",
+        "Use GPU Acceleration:": "Use GPU Acceleration:",
+        "Template Matching": "Template Matching",
+        "Feature Matching": "Feature Matching",
+        "OCR": "OCR",
+        "YOLO": "YOLO",
+        
+        # Dialog items
+        "Confirmation": "Confirmation",
+        "Are you sure you want to perform this action?": "Are you sure you want to perform this action?",
+        "Settings Export": "Settings Export",
+        "Select export options:": "Select export options:",
+        "Include system information": "Include system information",
+        "Include user preferences": "Include user preferences",
+        "Include detection settings": "Include detection settings",
+        "Include automation sequences": "Include automation sequences",
+        "Open Configuration File": "Open Configuration File",
+        "Configuration Files": "Configuration Files",
+        "All Files": "All Files",
+        
+        # Language settings
+        "System Default": "System Default",
+        "English": "English",
+        "German": "German",
+        "French": "French",
+        "Spanish": "Spanish",
+        "Italian": "Italian",
+        
+        # Advanced options
+        "Enable advanced options for detection and processing": "Enable advanced options for detection and processing",
+        
+        # Detection controls
+        "Run Detection": "Run Detection",
+        "Stop": "Stop",
+        "Select Template:": "Select Template:",
+        "Button": "Button",
+        "Dialog": "Dialog", 
+        "Window": "Window",
+        "Resource Icon": "Resource Icon",
+        
+        # Sequence controls
+        "Sequence:": "Sequence:",
+        "Resource Collection": "Resource Collection",
+        "Building Upgrade": "Building Upgrade",
+        "Troop Training": "Troop Training",
+        "Map Exploration": "Map Exploration",
+        "New": "New",
+        "Run": "Run",
+        "Loop:": "Loop:",
+        "Iterations:": "Iterations:",
+        
+        # Map controls
+        "Zoom In": "Zoom In",
+        "Zoom Out": "Zoom Out",
+        "Reset View": "Reset View",
+        "Filter:": "Filter:",
+        "All": "All",
+        "Enemies": "Enemies",
+        "Allies": "Allies",
+        "Points of Interest": "Points of Interest",
+        
+        # Army units
+        "Army Units": "Army Units",
+        "Infantry:": "Infantry:",
+        "Cavalry:": "Cavalry:",
+        "Archers:": "Archers:",
+        "Siege Engines:": "Siege Engines:",
+        "Special Units:": "Special Units:",
+        
+        # Table data
+        "Coffee": "Coffee",
+        "Tea": "Tea",
+        "Water": "Water",
+        "Orange Juice": "Orange Juice",
+        "Apple": "Apple",
+        "Fruit": "Fruit",
+        "Beverage": "Beverage",
+        "Hot drink made from roasted coffee beans": "Hot drink made from roasted coffee beans",
+        "Hot drink made by infusing tea leaves in water": "Hot drink made by infusing tea leaves in water",
+        "Clear, colorless, odorless liquid": "Clear, colorless, odorless liquid",
+        "Juice from oranges": "Juice from oranges",
+        "Round fruit from an apple tree": "Round fruit from an apple tree",
     },
     "de": {
+        # Tab titles
+        "Basic Components": "Grundlegende Komponenten",
+        "Form Elements": "Formularelemente",
+        "Dialogs": "Dialoge",
+        "Complex Layouts": "Komplexe Layouts",
+        "Game State": "Spielstatus",
+        
+        # Labels and buttons
+        "Select Language:": "Sprache auswählen:",
+        "Test All Components": "Alle Komponenten testen",
+        "Test Results": "Testergebnisse",
+        "Current Language: English": "Aktuelle Sprache: Englisch",
+        "Current Language: German": "Aktuelle Sprache: Deutsch",
+        "Current Language: System Default": "Aktuelle Sprache: Systemstandard",
+        
+        # Basic components tab
+        "Test Label": "Label testen",
+        "Test Button": "Button testen",
+        "Test Combobox": "Auswahlfeld testen",
+        "Test Checkbox": "Kontrollkästchen testen",
         "This is a test label with potentially long text that needs to be properly wrapped and displayed": 
             "Dies ist ein Testlabel mit potenziell langem Text, der ordnungsgemäß umgebrochen und angezeigt werden muss",
         "Save Configuration": "Konfiguration speichern",
+        "Highlight Layout Issues": "Layout-Probleme hervorheben",
+        "Show Component Bounds": "Komponentengrenzen anzeigen",
+        
+        # Form tab
+        "Test Form": "Formular testen",
+        "Test Table": "Tabelle testen",
+        "Test Grid": "Gitter testen",
+        "First Name:": "Vorname:",
+        "Last Name:": "Nachname:",
+        "Email:": "E-Mail:",
+        "Password:": "Passwort:",
+        "Confirm Password:": "Passwort bestätigen:",
+        "I agree to the terms": "Ich stimme den Bedingungen zu",
+        
+        # Dialog tab
+        "Test Message Box": "Meldungsfeld testen",
+        "Test Export Dialog": "Exportdialog testen",
+        "Test File Dialog": "Dateiauswahldialog testen",
+        
+        # Complex layouts tab
+        "Test Settings Panel": "Einstellungspanel testen",
+        "Test Detection Controls": "Erkennungssteuerung testen",
+        "Test Automation Controls": "Automatisierungssteuerung testen",
+        
+        # Game state tab
+        "Test Resource Panel": "Ressourcenpanel testen",
+        "Test Map Controls": "Kartensteuerung testen",
+        "Test Army Panel": "Armeepanel testen",
+        
+        # Common UI elements
         "Cancel": "Abbrechen",
         "Apply": "Anwenden",
-        "Settings": "Einstellungen",
-        "Language": "Sprache",
-        "Application": "Anwendung",
-        "Detection": "Erkennung",
-        "Automation": "Automatisierung",
-        "Game State": "Spielstatus",
-        "Resources": "Ressourcen",
-        "Map": "Karte", 
-        "Army": "Armee",
-        "Buildings": "Gebäude",
-        "Help": "Hilfe",
-        "Test All Components": "Alle Komponenten testen",
-        "Select Language:": "Sprache auswählen:",
-        "Action": "Aktion",
-        "Description": "Beschreibung",
-        "Keyboard Shortcuts": "Tastaturkürzel",
         "OK": "OK",
         "Yes": "Ja",
         "No": "Nein",
-        "Open": "Öffnen",
+        "&Yes": "&Ja",
+        "&No": "&Nein",
         "Save": "Speichern",
-        "Delete": "Löschen"
+        "Open": "Öffnen",
+        "Delete": "Löschen",
+        "Settings": "Einstellungen",
+        "Language": "Sprache",
+        "Help": "Hilfe",
+        "About": "Über",
+        "Quit": "Beenden",
+        "Application": "Anwendung",
+        "Detection": "Erkennung",
+        "Automation": "Automatisierung",
+        "Resources": "Ressourcen",
+        "Map": "Karte",
+        "Army": "Armee",
+        "Buildings": "Gebäude",
+        "Action": "Aktion",
+        "Description": "Beschreibung",
+        "Keyboard Shortcuts": "Tastaturkürzel",
+        
+        # UI labels
+        "Settings Panel": "Einstellungsbereich",
+        "Detection Controls": "Erkennungssteuerung",
+        "Automation Controls": "Automatisierungssteuerung",
+        "Resource Panel": "Ressourcenbereich",
+        "Map Controls": "Kartensteuerung",
+        "Army Panel": "Armeebereich",
+        
+        # Additional form fields
+        "Username:": "Benutzername:",
+        "Email Address:": "E-Mail-Adresse:",
+        "Phone Number:": "Telefonnummer:",
+        "Remember Login:": "Anmeldedaten speichern:",
+        "Account Type:": "Kontotyp:",
+        "Administrator": "Administrator",
+        "User": "Benutzer",
+        "Guest": "Gast",
+        "Name:": "Name:",
+        "Address:": "Adresse:",
+        "City:": "Stadt:",
+        "State/Province:": "Bundesland/Provinz:",
+        "Postal Code:": "Postleitzahl:",
+        "Name": "Name",
+        "Type": "Typ",
+        
+        # Resource labels
+        "Gold:": "Gold:",
+        "Food:": "Nahrung:",
+        "Wood:": "Holz:",
+        "Stone:": "Stein:",
+        "Iron:": "Eisen:",
+        
+        # Detection settings
+        "Detection Settings": "Erkennungseinstellungen",
+        "Confidence Threshold:": "Vertrauensschwelle:",
+        "Maximum Matches:": "Maximale Übereinstimmungen:",
+        "Detection Strategy:": "Erkennungsstrategie:",
+        "Use GPU Acceleration:": "GPU-Beschleunigung verwenden:",
+        "Template Matching": "Vorlagenabgleich",
+        "Feature Matching": "Merkmalsabgleich",
+        "OCR": "OCR",
+        "YOLO": "YOLO",
+        
+        # Dialog items
+        "Confirmation": "Bestätigung",
+        "Are you sure you want to perform this action?": "Sind Sie sicher, dass Sie diese Aktion ausführen möchten?",
+        "Settings Export": "Einstellungen exportieren",
+        "Select export options:": "Exportoptionen auswählen:",
+        "Include system information": "Systeminformationen einbeziehen",
+        "Include user preferences": "Benutzereinstellungen einbeziehen",
+        "Include detection settings": "Erkennungseinstellungen einbeziehen",
+        "Include automation sequences": "Automatisierungssequenzen einbeziehen",
+        "Open Configuration File": "Konfigurationsdatei öffnen",
+        "Configuration Files": "Konfigurationsdateien",
+        "All Files": "Alle Dateien",
+        
+        # Language settings
+        "System Default": "Systemstandard",
+        "English": "Englisch",
+        "German": "Deutsch",
+        "French": "Französisch",
+        "Spanish": "Spanisch",
+        "Italian": "Italienisch",
+        
+        # Advanced options
+        "Enable advanced options for detection and processing": "Erweiterte Optionen für Erkennung und Verarbeitung aktivieren",
+        
+        # Detection controls
+        "Run Detection": "Erkennung ausführen",
+        "Stop": "Stoppen",
+        "Select Template:": "Vorlage auswählen:",
+        "Button": "Schaltfläche",
+        "Dialog": "Dialog", 
+        "Window": "Fenster",
+        "Resource Icon": "Ressourcensymbol",
+        
+        # Sequence controls
+        "Sequence:": "Sequenz:",
+        "Resource Collection": "Ressourcensammlung",
+        "Building Upgrade": "Gebäudeausbau",
+        "Troop Training": "Truppenausbildung",
+        "Map Exploration": "Kartenexploration",
+        "New": "Neu",
+        "Run": "Ausführen",
+        "Loop:": "Schleife:",
+        "Iterations:": "Wiederholungen:",
+        
+        # Map controls
+        "Zoom In": "Vergrößern",
+        "Zoom Out": "Verkleinern",
+        "Reset View": "Ansicht zurücksetzen",
+        "Filter:": "Filter:",
+        "All": "Alle",
+        "Enemies": "Feinde",
+        "Allies": "Verbündete",
+        "Points of Interest": "Sehenswürdigkeiten",
+        
+        # Army units
+        "Army Units": "Armeeeinheiten",
+        "Infantry:": "Infanterie:",
+        "Cavalry:": "Kavallerie:",
+        "Archers:": "Bogenschützen:",
+        "Siege Engines:": "Belagerungsmaschinen:",
+        "Special Units:": "Spezialeinheiten:",
+        
+        # Table data
+        "Coffee": "Kaffee",
+        "Tea": "Tee",
+        "Water": "Wasser",
+        "Orange Juice": "Orangensaft",
+        "Apple": "Apfel",
+        "Fruit": "Frucht",
+        "Beverage": "Getränk",
+        "Hot drink made from roasted coffee beans": "Heißgetränk aus gerösteten Kaffeebohnen",
+        "Hot drink made by infusing tea leaves in water": "Heißgetränk aus in Wasser aufgegossenen Teeblättern",
+        "Clear, colorless, odorless liquid": "Klare, farblose, geruchlose Flüssigkeit",
+        "Juice from oranges": "Saft aus Orangen",
+        "Round fruit from an apple tree": "Runde Frucht vom Apfelbaum",
     }
 }
 
 # Override tr function for demonstration
 def demo_tr(source_text, context=None, n=-1):
     """Demo translation function that uses our dictionary."""
-    current_language = getattr(getattr(QApplication.instance(), 'demo_language', None), 'value', Language.ENGLISH)
+    app = QApplication.instance()
+    current_language = getattr(app, 'demo_language', Language.ENGLISH)
+    
+    logger.debug(f"demo_tr called for: '{source_text}', current language: {current_language}")
     
     # If it's English or not in our dictionary, return the source text
     if current_language == Language.ENGLISH:
@@ -125,9 +474,12 @@ def demo_tr(source_text, context=None, n=-1):
     
     # Try to find a translation
     if current_language in DEMO_TRANSLATIONS and source_text in DEMO_TRANSLATIONS[current_language]:
-        return DEMO_TRANSLATIONS[current_language][source_text]
+        translated = DEMO_TRANSLATIONS[current_language][source_text]
+        logger.debug(f"Translation found: '{translated}'")
+        return translated
     
     # Fallback to the original text
+    logger.debug(f"No translation found for: '{source_text}'")
     return source_text
 
 # Try to use the language_manager's tr function, but fall back to our demo one if needed
@@ -143,6 +495,7 @@ class DemoTranslator(QTranslator):
     def __init__(self, language_code):
         super().__init__()
         self.language_code = language_code
+        logger.info(f"Created DemoTranslator for language: {language_code}")
     
     def translate(self, context, source_text, disambiguation=None, n=-1):
         """
@@ -150,7 +503,7 @@ class DemoTranslator(QTranslator):
         
         This is called by Qt when it needs to translate a string.
         """
-        logger.debug(f"Translating: {source_text} (context: {context}, language: {self.language_code})")
+        logger.debug(f"DemoTranslator.translate called for: '{source_text}' (context: {context}, language: {self.language_code})")
         
         # If language is English, return the original text
         if self.language_code == Language.ENGLISH:
@@ -159,12 +512,12 @@ class DemoTranslator(QTranslator):
         # Check if we have a translation for this text
         if self.language_code in DEMO_TRANSLATIONS and source_text in DEMO_TRANSLATIONS[self.language_code]:
             translated = DEMO_TRANSLATIONS[self.language_code][source_text]
-            logger.debug(f"Translated to: {translated}")
+            logger.debug(f"Translation found: '{translated}'")
             return translated
         
         # Log missing translations for debugging
         if self.language_code != Language.ENGLISH:
-            logger.debug(f"No translation found for: {source_text}")
+            logger.debug(f"No translation found for: '{source_text}'")
         
         # Return the original if no translation is found
         return source_text
@@ -575,8 +928,22 @@ class VisualLanguageTest(QMainWindow):
         
         app = QApplication.instance()
         
-        # For demo translations
-        app.demo_language = language_code
+        # Set the language on the app instance - important to set the enum value not string
+        if language_code == Language.GERMAN:
+            app.demo_language = Language.GERMAN
+            logger.info("Set app.demo_language to Language.GERMAN")
+        elif language_code == Language.ENGLISH:
+            app.demo_language = Language.ENGLISH
+            logger.info("Set app.demo_language to Language.ENGLISH")
+        else:
+            # For system, use the system locale
+            system_locale = QLocale.system()
+            if system_locale.language() == QLocale.Language.German:
+                app.demo_language = Language.GERMAN
+                logger.info("Set app.demo_language to Language.GERMAN (system)")
+            else:
+                app.demo_language = Language.ENGLISH
+                logger.info("Set app.demo_language to Language.ENGLISH (system)")
         
         # Remove all translators
         for translator in self.translators.values():
@@ -589,27 +956,30 @@ class VisualLanguageTest(QMainWindow):
             self.current_language = Language.GERMAN
         elif language_code == Language.ENGLISH:
             logger.info("Using English (base language)")
+            app.installTranslator(self.translators[Language.ENGLISH])
             self.current_language = Language.ENGLISH
         else:
             # System language - use system locale to determine
-            system_locale = QLocale.system()
             if system_locale.language() == QLocale.Language.German:
                 logger.info("System language is German, installing German translator")
                 app.installTranslator(self.translators[Language.GERMAN])
                 self.current_language = Language.GERMAN
             else:
                 logger.info("System language defaulting to English")
+                app.installTranslator(self.translators[Language.ENGLISH])
                 self.current_language = Language.ENGLISH
         
         # Force UI update after language change
         self.update_language_info()
         
-        # Refresh the component visualizer with the new language
-        for i in range(self.tabs.count()):
-            tab = self.tabs.widget(i)
-            visualizer = tab.findChild(ComponentVisualizer)
-            if visualizer and visualizer.component:
-                visualizer.update()
+        # Force recreation of components to ensure they use the new language
+        current_tab = self.tabs.currentWidget()
+        if current_tab:
+            # Find and click the first button to recreate the component
+            first_button = current_tab.findChild(QPushButton)
+            if first_button:
+                logger.info(f"Clicking button to recreate component: {first_button.text()}")
+                first_button.click()
         
         # Refresh tab labels
         self.retranslate_ui()
@@ -654,25 +1024,55 @@ class VisualLanguageTest(QMainWindow):
     # Test component generators
     def test_label_component(self, visualizer):
         """Test a label component."""
-        label = QLabel(tr("This is a test label with potentially long text that needs to be properly wrapped and displayed"))
+        # Force using the current language
+        current_language = self.current_language
+        logger.info(f"Creating label with language: {current_language}")
+        
+        # Get the text and explicitly translate it
+        source_text = "This is a test label with potentially long text that needs to be properly wrapped and displayed"
+        if current_language == Language.GERMAN and source_text in DEMO_TRANSLATIONS[Language.GERMAN]:
+            display_text = DEMO_TRANSLATIONS[Language.GERMAN][source_text]
+            logger.info(f"Using direct German translation: {display_text}")
+        else:
+            display_text = tr(source_text)
+            logger.info(f"Using tr() function: {display_text}")
+        
+        # Create the label with the translated text
+        label = QLabel(display_text)
         label.setWordWrap(True)
+        
         visualizer.set_component(
             label, 
             "QLabel Test",
-            "Testing a label with text that may be longer in German than in English."
+            f"Testing with language: {current_language}. Text should be in {'German' if current_language == Language.GERMAN else 'English'}."
         )
-        self.log_result("Tested QLabel component")
+        self.log_result(f"Tested QLabel component with language: {current_language}")
     
     def test_button_component(self, visualizer):
         """Test a button component."""
-        button = QPushButton(tr("Save Configuration"))
-        set_min_width_for_text(button, tr("Save Configuration") + " " * 5)
+        # Force using the current language
+        current_language = self.current_language
+        logger.info(f"Creating button with language: {current_language}")
+        
+        # Get the text and explicitly translate it
+        source_text = "Save Configuration"
+        if current_language == Language.GERMAN and source_text in DEMO_TRANSLATIONS[Language.GERMAN]:
+            display_text = DEMO_TRANSLATIONS[Language.GERMAN][source_text]
+            logger.info(f"Using direct German translation: {display_text}")
+        else:
+            display_text = tr(source_text)
+            logger.info(f"Using tr() function: {display_text}")
+        
+        # Create the button with the translated text
+        button = QPushButton(display_text)
+        set_min_width_for_text(button, display_text + " " * 5)
+        
         visualizer.set_component(
             button,
             "QPushButton Test",
-            "Testing a button with text that may be longer in German than in English."
+            f"Testing with language: {current_language}. Text should be in {'German' if current_language == Language.GERMAN else 'English'}."
         )
-        self.log_result("Tested QPushButton component")
+        self.log_result(f"Tested QPushButton component with language: {current_language}")
     
     def test_combo_component(self, visualizer):
         """Test a combo box component."""
@@ -720,7 +1120,9 @@ class VisualLanguageTest(QMainWindow):
         
         # Add a combo box
         combo = QComboBox()
-        combo.addItems([tr("Administrator"), tr("User"), tr("Guest")])
+        combo.addItems([
+            tr("Administrator"), tr("User"), tr("Guest")
+        ])
         form_layout.addRow(tr("Account Type:"), combo)
         
         visualizer.set_component(
