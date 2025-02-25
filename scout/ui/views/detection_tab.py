@@ -1,28 +1,29 @@
 """
 Detection Tab
 
-This module provides the Detection Tab view for the Scout application.
-It allows users to configure and run detection operations using different strategies,
-view detection results, and manage templates.
+This module provides a tab interface for configuring and running detection operations.
+It allows users to manage templates, configure detection settings, and view results.
 """
 
-import os
 import logging
-from typing import Dict, List, Optional, Any, Tuple
-from pathlib import Path
+from typing import Dict, List, Optional, Any
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
-    QComboBox, QSlider, QSpinBox, QDoubleSpinBox, QGroupBox, 
-    QTabWidget, QScrollArea, QFrame, QSplitter, QFileDialog,
-    QListWidget, QListWidgetItem, QLineEdit, QCheckBox, QMessageBox
+    QListWidget, QListWidgetItem, QFrame, QSplitter, QComboBox,
+    QToolBar, QScrollArea, QLineEdit, QSpinBox, QCheckBox,
+    QMessageBox, QInputDialog, QMenu, QFileDialog, QGridLayout,
+    QGroupBox, QTableWidget, QTableWidgetItem, QHeaderView, QTabWidget
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QSize, QTimer
-from PyQt6.QtGui import QIcon, QPixmap, QImage
+from PyQt6.QtGui import QIcon, QAction
+from PyQt6.QtCore import Qt, pyqtSignal
+
+from pathlib import Path
 
 from scout.core.window.window_service_interface import WindowServiceInterface
 from scout.core.detection.detection_service_interface import DetectionServiceInterface
 from scout.ui.widgets.template_list_widget import TemplateListWidget
 from scout.ui.widgets.detection_result_widget import DetectionResultWidget
+from scout.ui.widgets.detection_history_widget import DetectionHistoryWidget
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -73,336 +74,213 @@ class DetectionTab(QWidget):
     
     def _create_ui(self) -> None:
         """Create the UI components."""
-        # Create main layout
+        # Main layout
         main_layout = QVBoxLayout(self)
         
-        # Create splitter for resizable sections
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        main_layout.addWidget(splitter)
+        # Create tabs for different detection views
+        self.view_tabs = QTabWidget()
+        main_layout.addWidget(self.view_tabs)
         
-        # Left side - Configuration
-        config_widget = QWidget()
-        config_layout = QVBoxLayout(config_widget)
+        # Create real-time detection tab
+        realtime_tab = QWidget()
+        self.view_tabs.addTab(realtime_tab, "Real-time Detection")
         
-        # Detection strategy selection
-        strategy_group = QGroupBox("Detection Strategy")
-        strategy_layout = QVBoxLayout(strategy_group)
+        # Create historical view tab
+        history_tab = QWidget()
+        self.view_tabs.addTab(history_tab, "Detection History")
         
+        # Setup real-time detection tab
+        self._setup_realtime_tab(realtime_tab)
+        
+        # Setup history tab
+        self._setup_history_tab(history_tab)
+    
+    def _setup_realtime_tab(self, tab_widget: QWidget) -> None:
+        """
+        Set up the real-time detection tab.
+        
+        Args:
+            tab_widget: Tab widget to set up
+        """
+        # Create layout for real-time tab
+        realtime_layout = QVBoxLayout(tab_widget)
+        
+        # Create toolbar
+        toolbar = QToolBar()
+        
+        # Detection strategy selector
+        toolbar.addWidget(QLabel("Detection Strategy:"))
         self.strategy_combo = QComboBox()
-        self.strategy_combo.addItem("Template Matching", "template")
-        self.strategy_combo.addItem("OCR Text Recognition", "ocr")
-        self.strategy_combo.addItem("YOLO Object Detection", "yolo")
-        strategy_layout.addWidget(self.strategy_combo)
+        self.strategy_combo.addItems(["Template Matching", "OCR", "YOLO"])
+        toolbar.addWidget(self.strategy_combo)
         
-        config_layout.addWidget(strategy_group)
+        # Add spacer
+        toolbar.addSeparator()
         
-        # Create stacked widget for strategy-specific settings
-        self.strategy_tabs = QTabWidget()
+        # Run detection button
+        self.run_btn = QPushButton("Run Detection")
+        toolbar.addWidget(self.run_btn)
         
-        # Template matching settings
-        self.template_tab = QWidget()
-        template_layout = QVBoxLayout(self.template_tab)
+        # Add toolbar to layout
+        realtime_layout.addWidget(toolbar)
         
-        # Template list
-        self.template_list = TemplateListWidget(str(self._template_dir))
+        # Create main splitter
+        main_splitter = QSplitter(Qt.Orientation.Horizontal)
+        realtime_layout.addWidget(main_splitter)
+        
+        # Left panel - configuration
+        config_panel = QWidget()
+        config_layout = QVBoxLayout(config_panel)
+        
+        # Create template list
+        self.template_group = QGroupBox("Templates")
+        template_layout = QVBoxLayout(self.template_group)
+        
+        self.template_list = TemplateListWidget(self._template_dir)
         template_layout.addWidget(self.template_list)
         
-        # Template confidence setting
-        confidence_layout = QHBoxLayout()
-        confidence_layout.addWidget(QLabel("Confidence:"))
+        config_layout.addWidget(self.template_group)
         
-        self.confidence_slider = QSlider(Qt.Orientation.Horizontal)
-        self.confidence_slider.setRange(1, 100)
-        self.confidence_slider.setValue(70)  # Default 0.7
-        confidence_layout.addWidget(self.confidence_slider, stretch=1)
+        # Create detection parameters group
+        params_group = QGroupBox("Detection Parameters")
+        params_layout = QGridLayout(params_group)
         
-        self.confidence_spin = QDoubleSpinBox()
-        self.confidence_spin.setRange(0.01, 1.0)
-        self.confidence_spin.setSingleStep(0.01)
-        self.confidence_spin.setValue(0.7)
-        confidence_layout.addWidget(self.confidence_spin)
+        # Confidence threshold
+        params_layout.addWidget(QLabel("Confidence Threshold:"), 0, 0)
+        self.confidence_spin = QSpinBox()
+        self.confidence_spin.setRange(1, 100)
+        self.confidence_spin.setValue(70)
+        self.confidence_spin.setSuffix("%")
+        params_layout.addWidget(self.confidence_spin, 0, 1)
         
-        template_layout.addLayout(confidence_layout)
-        
-        # Maximum results
-        max_results_layout = QHBoxLayout()
-        max_results_layout.addWidget(QLabel("Max Results:"))
-        
+        # Max results
+        params_layout.addWidget(QLabel("Max Results:"), 1, 0)
         self.max_results_spin = QSpinBox()
         self.max_results_spin.setRange(1, 100)
         self.max_results_spin.setValue(10)
-        max_results_layout.addWidget(self.max_results_spin)
+        params_layout.addWidget(self.max_results_spin, 1, 1)
         
-        template_layout.addLayout(max_results_layout)
+        # Use region checkbox
+        params_layout.addWidget(QLabel("Use Detection Region:"), 2, 0)
+        self.use_region_check = QCheckBox()
+        params_layout.addWidget(self.use_region_check, 2, 1)
         
-        # Add template tab
-        self.strategy_tabs.addTab(self.template_tab, "Template Matching")
+        # Region parameters
+        params_layout.addWidget(QLabel("X:"), 3, 0)
+        self.region_x_spin = QSpinBox()
+        self.region_x_spin.setRange(0, 3000)
+        self.region_x_spin.setEnabled(False)
+        params_layout.addWidget(self.region_x_spin, 3, 1)
         
-        # OCR settings
-        self.ocr_tab = QWidget()
-        ocr_layout = QVBoxLayout(self.ocr_tab)
+        params_layout.addWidget(QLabel("Y:"), 4, 0)
+        self.region_y_spin = QSpinBox()
+        self.region_y_spin.setRange(0, 3000)
+        self.region_y_spin.setEnabled(False)
+        params_layout.addWidget(self.region_y_spin, 4, 1)
         
-        # Text pattern
-        pattern_layout = QHBoxLayout()
-        pattern_layout.addWidget(QLabel("Text Pattern:"))
+        params_layout.addWidget(QLabel("Width:"), 5, 0)
+        self.region_width_spin = QSpinBox()
+        self.region_width_spin.setRange(10, 3000)
+        self.region_width_spin.setValue(500)
+        self.region_width_spin.setEnabled(False)
+        params_layout.addWidget(self.region_width_spin, 5, 1)
         
-        self.pattern_edit = QLineEdit()
-        self.pattern_edit.setPlaceholderText("Leave empty to detect all text")
-        pattern_layout.addWidget(self.pattern_edit)
+        params_layout.addWidget(QLabel("Height:"), 6, 0)
+        self.region_height_spin = QSpinBox()
+        self.region_height_spin.setRange(10, 3000)
+        self.region_height_spin.setValue(500)
+        self.region_height_spin.setEnabled(False)
+        params_layout.addWidget(self.region_height_spin, 6, 1)
         
-        ocr_layout.addLayout(pattern_layout)
+        config_layout.addWidget(params_group)
         
-        # OCR confidence
-        ocr_confidence_layout = QHBoxLayout()
-        ocr_confidence_layout.addWidget(QLabel("Confidence:"))
+        # Add spacer
+        config_layout.addStretch()
         
-        self.ocr_confidence_slider = QSlider(Qt.Orientation.Horizontal)
-        self.ocr_confidence_slider.setRange(1, 100)
-        self.ocr_confidence_slider.setValue(60)  # Default 0.6
-        ocr_confidence_layout.addWidget(self.ocr_confidence_slider, stretch=1)
+        # Right panel - results
+        self.result_widget = DetectionResultWidget(self.window_service)
         
-        self.ocr_confidence_spin = QDoubleSpinBox()
-        self.ocr_confidence_spin.setRange(0.01, 1.0)
-        self.ocr_confidence_spin.setSingleStep(0.01)
-        self.ocr_confidence_spin.setValue(0.6)
-        ocr_confidence_layout.addWidget(self.ocr_confidence_spin)
+        # Add panels to splitter
+        main_splitter.addWidget(config_panel)
+        main_splitter.addWidget(self.result_widget)
         
-        ocr_layout.addLayout(ocr_confidence_layout)
+        # Set initial splitter sizes (30% left, 70% right)
+        main_splitter.setSizes([300, 700])
+    
+    def _setup_history_tab(self, tab_widget: QWidget) -> None:
+        """
+        Set up the detection history tab.
         
-        # Preprocessing options
-        preprocess_layout = QVBoxLayout()
-        preprocess_layout.addWidget(QLabel("Preprocessing:"))
+        Args:
+            tab_widget: Tab widget to set up
+        """
+        # Create layout for history tab
+        history_layout = QVBoxLayout(tab_widget)
         
-        self.preprocess_none = QCheckBox("None")
-        self.preprocess_none.setChecked(True)
-        preprocess_layout.addWidget(self.preprocess_none)
+        # Create detection history widget
+        self.history_widget = DetectionHistoryWidget(
+            self.window_service, 
+            self.detection_service
+        )
         
-        self.preprocess_threshold = QCheckBox("Threshold")
-        preprocess_layout.addWidget(self.preprocess_threshold)
-        
-        self.preprocess_grayscale = QCheckBox("Grayscale")
-        preprocess_layout.addWidget(self.preprocess_grayscale)
-        
-        self.preprocess_blur = QCheckBox("Blur")
-        preprocess_layout.addWidget(self.preprocess_blur)
-        
-        ocr_layout.addLayout(preprocess_layout)
-        
-        # Add OCR tab
-        self.strategy_tabs.addTab(self.ocr_tab, "OCR")
-        
-        # YOLO settings
-        self.yolo_tab = QWidget()
-        yolo_layout = QVBoxLayout(self.yolo_tab)
-        
-        # Class selection
-        yolo_layout.addWidget(QLabel("Object Classes:"))
-        
-        self.class_list = QListWidget()
-        # Populate with default classes when YOLO is initialized
-        yolo_layout.addWidget(self.class_list)
-        
-        # YOLO confidence
-        yolo_confidence_layout = QHBoxLayout()
-        yolo_confidence_layout.addWidget(QLabel("Confidence:"))
-        
-        self.yolo_confidence_slider = QSlider(Qt.Orientation.Horizontal)
-        self.yolo_confidence_slider.setRange(1, 100)
-        self.yolo_confidence_slider.setValue(50)  # Default 0.5
-        yolo_confidence_layout.addWidget(self.yolo_confidence_slider, stretch=1)
-        
-        self.yolo_confidence_spin = QDoubleSpinBox()
-        self.yolo_confidence_spin.setRange(0.01, 1.0)
-        self.yolo_confidence_spin.setSingleStep(0.01)
-        self.yolo_confidence_spin.setValue(0.5)
-        yolo_confidence_layout.addWidget(self.yolo_confidence_spin)
-        
-        yolo_layout.addLayout(yolo_confidence_layout)
-        
-        # Model selection
-        model_layout = QHBoxLayout()
-        model_layout.addWidget(QLabel("Model:"))
-        
-        self.model_combo = QComboBox()
-        self.model_combo.addItem("YOLOv8n", "yolov8n")
-        self.model_combo.addItem("YOLOv8s", "yolov8s")
-        self.model_combo.addItem("YOLOv8m", "yolov8m")
-        model_layout.addWidget(self.model_combo)
-        
-        yolo_layout.addLayout(model_layout)
-        
-        # Add YOLO tab
-        self.strategy_tabs.addTab(self.yolo_tab, "YOLO")
-        
-        # Add strategy tabs to config layout
-        config_layout.addWidget(self.strategy_tabs)
-        
-        # Add region selection
-        region_group = QGroupBox("Detection Region")
-        region_layout = QVBoxLayout(region_group)
-        
-        self.full_screen_check = QCheckBox("Full Game Window")
-        self.full_screen_check.setChecked(True)
-        region_layout.addWidget(self.full_screen_check)
-        
-        region_buttons_layout = QHBoxLayout()
-        
-        self.select_region_btn = QPushButton("Select Region")
-        self.select_region_btn.setEnabled(False)
-        region_buttons_layout.addWidget(self.select_region_btn)
-        
-        self.clear_region_btn = QPushButton("Clear Region")
-        self.clear_region_btn.setEnabled(False)
-        region_buttons_layout.addWidget(self.clear_region_btn)
-        
-        region_layout.addLayout(region_buttons_layout)
-        
-        # Region info label
-        self.region_info_label = QLabel("Region: Full Window")
-        region_layout.addWidget(self.region_info_label)
-        
-        config_layout.addWidget(region_group)
-        
-        # Run detection button
-        self.run_button = QPushButton("Run Detection")
-        self.run_button.setStyleSheet("font-weight: bold; padding: 8px;")
-        config_layout.addWidget(self.run_button)
-        
-        # Add configuration widget to splitter
-        splitter.addWidget(config_widget)
-        
-        # Right side - Results
-        results_widget = QWidget()
-        results_layout = QVBoxLayout(results_widget)
-        
-        # Results header
-        results_header = QHBoxLayout()
-        results_header.addWidget(QLabel("Detection Results"))
-        
-        self.results_count_label = QLabel("0 results")
-        results_header.addWidget(self.results_count_label, alignment=Qt.AlignmentFlag.AlignRight)
-        
-        results_layout.addLayout(results_header)
-        
-        # Results display
-        self.results_widget = DetectionResultWidget(self.window_service)
-        results_layout.addWidget(self.results_widget)
-        
-        # Add results widget to splitter
-        splitter.addWidget(results_widget)
-        
-        # Set initial splitter sizes (40% left, 60% right)
-        splitter.setSizes([400, 600])
+        history_layout.addWidget(self.history_widget)
     
     def _connect_signals(self) -> None:
         """Connect UI signals to slots."""
-        # Strategy selection
+        # Strategy combo
         self.strategy_combo.currentIndexChanged.connect(self._on_strategy_changed)
         
-        # Template confidence sync
-        self.confidence_slider.valueChanged.connect(
-            lambda val: self.confidence_spin.setValue(val / 100.0)
-        )
-        self.confidence_spin.valueChanged.connect(
-            lambda val: self.confidence_slider.setValue(int(val * 100))
-        )
+        # Run button
+        self.run_btn.clicked.connect(self.run_detection)
         
-        # OCR confidence sync
-        self.ocr_confidence_slider.valueChanged.connect(
-            lambda val: self.ocr_confidence_spin.setValue(val / 100.0)
-        )
-        self.ocr_confidence_spin.valueChanged.connect(
-            lambda val: self.ocr_confidence_slider.setValue(int(val * 100))
-        )
+        # Region checkbox
+        self.use_region_check.toggled.connect(self._on_use_region_toggled)
         
-        # YOLO confidence sync
-        self.yolo_confidence_slider.valueChanged.connect(
-            lambda val: self.yolo_confidence_spin.setValue(val / 100.0)
-        )
-        self.yolo_confidence_spin.valueChanged.connect(
-            lambda val: self.yolo_confidence_slider.setValue(int(val * 100))
-        )
-        
-        # Region selection
-        self.full_screen_check.toggled.connect(self._on_full_screen_toggled)
-        self.select_region_btn.clicked.connect(self._on_select_region_clicked)
-        self.clear_region_btn.clicked.connect(self._on_clear_region_clicked)
-        
-        # Preprocess options mutual exclusivity
-        self.preprocess_none.toggled.connect(self._on_preprocess_none_toggled)
-        
-        # Run detection
-        self.run_button.clicked.connect(self.run_detection)
+        # View tabs
+        self.view_tabs.currentChanged.connect(self._on_view_tab_changed)
     
     def _on_strategy_changed(self, index: int) -> None:
         """
-        Handle detection strategy change.
+        Handle strategy change.
         
         Args:
-            index: Index of the selected strategy
+            index: Selected index
         """
-        strategy = self.strategy_combo.currentData()
-        self._current_strategy = strategy
+        strategy_map = {
+            0: "template",
+            1: "ocr",
+            2: "yolo"
+        }
         
-        # Update strategy-specific UI elements if needed
-        self.strategy_tabs.setCurrentIndex(index)
+        self._current_strategy = strategy_map.get(index, "template")
+        
+        # Update UI based on selected strategy
+        self.template_group.setVisible(self._current_strategy == "template")
     
-    def _on_full_screen_toggled(self, checked: bool) -> None:
+    def _on_use_region_toggled(self, checked: bool) -> None:
         """
-        Handle full screen toggle.
+        Handle use region checkbox toggle.
         
         Args:
-            checked: Whether full screen is enabled
+            checked: Whether the checkbox is checked
         """
-        self.select_region_btn.setEnabled(not checked)
-        self.clear_region_btn.setEnabled(not checked and hasattr(self, '_region'))
-        
-        if checked:
-            self.region_info_label.setText("Region: Full Window")
-            if hasattr(self, '_region'):
-                delattr(self, '_region')
+        # Enable/disable region parameters
+        self.region_x_spin.setEnabled(checked)
+        self.region_y_spin.setEnabled(checked)
+        self.region_width_spin.setEnabled(checked)
+        self.region_height_spin.setEnabled(checked)
     
-    def _on_select_region_clicked(self) -> None:
-        """Handle select region button click."""
-        # First check if we can find the game window
-        if not self.window_service.find_window():
-            QMessageBox.warning(self, "Error", "Could not find game window")
-            return
-        
-        # TODO: Implement region selection using the overlay or a selector tool
-        # For now, just set a hardcoded region
-        self._region = {'x': 100, 'y': 100, 'width': 400, 'height': 400}
-        self.region_info_label.setText(
-            f"Region: ({self._region['x']}, {self._region['y']}, "
-            f"{self._region['width']}x{self._region['height']})"
-        )
-        
-        self.clear_region_btn.setEnabled(True)
-    
-    def _on_clear_region_clicked(self) -> None:
-        """Handle clear region button click."""
-        if hasattr(self, '_region'):
-            delattr(self, '_region')
-        
-        self.region_info_label.setText("Region: Full Window")
-        self.clear_region_btn.setEnabled(False)
-    
-    def _on_preprocess_none_toggled(self, checked: bool) -> None:
+    def _on_view_tab_changed(self, index: int) -> None:
         """
-        Handle preprocess none option toggle.
+        Handle view tab changed.
         
         Args:
-            checked: Whether "None" preprocessing is checked
+            index: Selected tab index
         """
-        # Disable other options if "None" is checked
-        self.preprocess_threshold.setEnabled(not checked)
-        self.preprocess_grayscale.setEnabled(not checked)
-        self.preprocess_blur.setEnabled(not checked)
-        
-        if checked:
-            self.preprocess_threshold.setChecked(False)
-            self.preprocess_grayscale.setChecked(False)
-            self.preprocess_blur.setChecked(False)
+        # If switching to history tab, make sure it's updated
+        if index == 1:  # History tab
+            logger.debug("Switched to history tab")
+            # Any updates needed for the history tab
     
     def _load_templates(self) -> None:
         """Load templates from the templates directory."""
@@ -437,83 +315,74 @@ class DetectionTab(QWidget):
         try:
             if self._current_strategy == "template":
                 # Get selected templates
-                templates = self.template_list.get_selected_templates()
-                if not templates:
+                template_names = self.template_list.get_selected_templates()
+                if not template_names:
                     QMessageBox.warning(self, "Error", "No templates selected")
                     return
                 
-                params['template_names'] = templates
-                results = self.detection_service.detect_template(**params)
+                # Add template names to params
+                params["template_names"] = template_names
+                
+                # Run template detection
+                results = self.detection_service.run_template_detection(
+                    template_names=template_names,
+                    confidence_threshold=params.get("confidence_threshold", 0.7),
+                    max_results=params.get("max_results", 10),
+                    region=params.get("region")
+                )
                 
             elif self._current_strategy == "ocr":
-                results = self.detection_service.detect_text(**params)
+                # Run OCR detection
+                results = self.detection_service.run_ocr_detection(
+                    pattern=params.get("pattern", ""),
+                    confidence_threshold=params.get("confidence_threshold", 0.6),
+                    region=params.get("region")
+                )
                 
             elif self._current_strategy == "yolo":
-                # Get selected classes
-                selected_items = self.class_list.selectedItems()
-                class_names = [item.text() for item in selected_items]
-                
-                if not class_names:
-                    QMessageBox.warning(self, "Error", "No object classes selected")
-                    return
-                
-                params['class_names'] = class_names
-                results = self.detection_service.detect_objects(**params)
-        
+                # Run YOLO detection
+                results = self.detection_service.run_yolo_detection(
+                    classes=params.get("classes"),
+                    confidence_threshold=params.get("confidence_threshold", 0.5),
+                    region=params.get("region")
+                )
+            
+            # Display results
+            self.result_widget.display_results(results, self._current_strategy)
+            
+            # Store results
+            self._detection_results = results
+            
+            # Add to history
+            self.history_widget.add_detection_result(results, self._current_strategy)
+            
+            # Emit signal with strategy and results
+            self.detection_requested.emit(self._current_strategy, params)
+            
         except Exception as e:
             logger.error(f"Error running detection: {e}")
-            QMessageBox.critical(self, "Error", f"Detection failed: {e}")
-            return
-        
-        # Store and display results
-        self._detection_results = results
-        self.results_count_label.setText(f"{len(results)} results")
-        self.results_widget.display_results(results, self._current_strategy)
-        
-        # Emit signal
-        self.detection_requested.emit(self._current_strategy, params)
+            QMessageBox.critical(self, "Error", f"Detection failed: {str(e)}")
     
     def _get_detection_params(self) -> Dict[str, Any]:
         """
-        Get detection parameters based on current settings.
+        Get detection parameters based on current UI settings.
         
         Returns:
             Dictionary of detection parameters
         """
-        params = {}
+        # Common parameters
+        params = {
+            "confidence_threshold": self.confidence_spin.value() / 100.0,
+            "max_results": self.max_results_spin.value()
+        }
         
-        # Add region parameter if custom region is set
-        if not self.full_screen_check.isChecked() and hasattr(self, '_region'):
-            params['region'] = self._region
-        
-        # Strategy-specific parameters
-        if self._current_strategy == "template":
-            params['confidence_threshold'] = self.confidence_spin.value()
-            params['max_results'] = self.max_results_spin.value()
-            
-        elif self._current_strategy == "ocr":
-            # Get pattern if specified
-            pattern = self.pattern_edit.text()
-            if pattern:
-                params['pattern'] = pattern
-                
-            params['confidence_threshold'] = self.ocr_confidence_spin.value()
-            
-            # Preprocessing options
-            if not self.preprocess_none.isChecked():
-                preprocess = []
-                if self.preprocess_threshold.isChecked():
-                    preprocess.append('threshold')
-                if self.preprocess_grayscale.isChecked():
-                    preprocess.append('grayscale')
-                if self.preprocess_blur.isChecked():
-                    preprocess.append('blur')
-                    
-                if preprocess:
-                    params['preprocess'] = preprocess
-                    
-        elif self._current_strategy == "yolo":
-            params['confidence_threshold'] = self.yolo_confidence_spin.value()
-            params['model_name'] = self.model_combo.currentData()
+        # Add region if enabled
+        if self.use_region_check.isChecked():
+            params["region"] = {
+                "x": self.region_x_spin.value(),
+                "y": self.region_y_spin.value(),
+                "width": self.region_width_spin.value(),
+                "height": self.region_height_spin.value()
+            }
         
         return params 

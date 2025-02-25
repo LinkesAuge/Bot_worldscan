@@ -37,6 +37,7 @@ from scout.ui.views.automation_tab import AutomationTab
 from scout.ui.views.game_tab import GameTab
 from scout.ui.views.settings_tab import SettingsTab
 from scout.ui.widgets.detection_result_widget import DetectionResultWidget
+from scout.ui.widgets.control_panel_widget import ControlPanelWidget
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -207,7 +208,7 @@ class MainWindow(QMainWindow):
         self._initialize_services()
         
         # Create UI components
-        self._create_ui()
+        self._init_ui()
         
         # Connect signals
         self._connect_signals()
@@ -242,11 +243,11 @@ class MainWindow(QMainWindow):
         
         logger.info("Services initialized and registered")
     
-    def _create_ui(self):
-        """Create the UI components."""
+    def _init_ui(self):
+        """Initialize the user interface."""
         # Set window properties
         self.setWindowTitle("Scout")
-        self.setMinimumSize(800, 600)
+        self.resize(1200, 800)
         
         # Create central widget
         central_widget = QWidget()
@@ -255,6 +256,9 @@ class MainWindow(QMainWindow):
         # Create main layout
         main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Create control panel
+        self._create_control_panel(main_layout)
         
         # Create tabs
         self.tab_widget = QTabWidget()
@@ -271,6 +275,130 @@ class MainWindow(QMainWindow):
         
         # Create status bar
         self._create_status_bar()
+    
+    def _create_control_panel(self, layout):
+        """
+        Create the control panel widget.
+        
+        Args:
+            layout: Layout to add the control panel to
+        """
+        # Create control panel
+        self.control_panel = ControlPanelWidget()
+        
+        # Connect control panel signals
+        self.control_panel.action_triggered.connect(self._on_control_panel_action)
+        
+        # Add to main layout
+        layout.addWidget(self.control_panel)
+    
+    def _on_control_panel_action(self, action_id, params=None):
+        """
+        Handle actions from the control panel.
+        
+        Args:
+            action_id: Action identifier
+            params: Optional parameters for the action
+        """
+        logger.debug(f"Control panel action: {action_id}, params: {params}")
+        
+        # Handle actions
+        if action_id == "start":
+            self._on_run()
+        elif action_id == "stop":
+            self._on_stop()
+        elif action_id == "pause":
+            self._on_pause()
+        elif action_id == "resume":
+            self._on_resume()
+        elif action_id == "screenshot":
+            self._on_capture_screenshot()
+        elif action_id == "toggle_overlay":
+            self._on_toggle_overlay(not self.overlay_action.isChecked())
+            self.overlay_action.setChecked(not self.overlay_action.isChecked())
+        elif action_id == "template_editor":
+            self._on_template_creator()
+        elif action_id == "sequence_editor":
+            self._on_sequence_recorder()
+        elif action_id == "template_detection":
+            self._run_template_detection()
+        elif action_id == "ocr_detection":
+            self._run_ocr_detection()
+        elif action_id == "capture_window":
+            self._on_capture_window()
+        elif action_id == "create_template":
+            self._on_template_creator()
+        elif action_id == "record_sequence":
+            self._on_sequence_recorder()
+        elif action_id == "edit_settings":
+            self._on_preferences()
+        # ... handle other actions ...
+        else:
+            # Forward to current tab if it has a handle_action method
+            current_tab = self.tab_widget.currentWidget()
+            if hasattr(current_tab, 'handle_action'):
+                current_tab.handle_action(action_id, params)
+            else:
+                logger.warning(f"Unhandled control panel action: {action_id}")
+    
+    def _run_template_detection(self):
+        """Run template detection."""
+        # Make sure detection tab is current
+        self.tab_widget.setCurrentWidget(self.detection_tab)
+        
+        # Run detection
+        self.detection_tab.run_template_detection()
+    
+    def _run_ocr_detection(self):
+        """Run OCR detection."""
+        # Make sure detection tab is current
+        self.tab_widget.setCurrentWidget(self.detection_tab)
+        
+        # Run detection
+        self.detection_tab.run_ocr_detection()
+    
+    def _on_capture_window(self):
+        """Handle capture window action."""
+        # Update the window service to find the game window
+        success = self.window_service.find_window()
+        
+        if success:
+            window_info = self.window_service.get_window_info()
+            self._on_window_selected(window_info)
+        else:
+            self._on_window_lost()
+            
+            # Show error message
+            QMessageBox.warning(
+                self,
+                "Window Not Found",
+                "Could not find the game window. Please make sure the game is running."
+            )
+    
+    def _on_tab_changed(self, index):
+        """
+        Handle tab changes.
+        
+        Args:
+            index: New tab index
+        """
+        # Get current tab widget
+        current_tab = self.tab_widget.widget(index)
+        
+        # Update control panel context based on tab type
+        if isinstance(current_tab, DetectionTab):
+            self.control_panel.set_context("detection")
+        elif isinstance(current_tab, AutomationTab):
+            self.control_panel.set_context("automation")
+        elif isinstance(current_tab, GameTab):
+            self.control_panel.set_context("game_state")
+        elif isinstance(current_tab, SettingsTab):
+            self.control_panel.set_context("default")
+        else:
+            self.control_panel.set_context("default")
+        
+        # Update status
+        self.control_panel.set_status("Ready")
     
     def _create_tabs(self):
         """Create the tab widget and individual tabs."""
@@ -290,6 +418,12 @@ class MainWindow(QMainWindow):
         # Create settings tab
         self.settings_tab = SettingsTab()
         self.tab_widget.addTab(self.settings_tab, "Settings")
+        
+        # Connect tab changed signal
+        self.tab_widget.currentChanged.connect(self._on_tab_changed)
+        
+        # Set initial tab context
+        self._on_tab_changed(self.tab_widget.currentIndex())
     
     def _create_menu_bar(self):
         """Create the menu bar."""
@@ -776,39 +910,67 @@ class MainWindow(QMainWindow):
     
     def _on_run(self):
         """Handle run action."""
-        # This depends on what you're running
-        # It could be detection, automation, etc.
-        
-        # For now, just delegate to the current tab
+        # Get current tab
         current_tab = self.tab_widget.currentWidget()
         
-        if hasattr(current_tab, 'run'):
-            current_tab.run()
-        else:
-            # Show message
-            QMessageBox.information(
-                self,
-                "Run",
-                "Run action not available for the current tab."
-            )
+        # Run appropriate action based on current tab
+        if current_tab == self.detection_tab:
+            self.detection_tab.run_detection()
+            self.control_panel.set_status("Detection running")
+        elif current_tab == self.automation_tab:
+            self.automation_tab.run_sequence()
+            self.control_panel.set_status("Automation running")
+        elif current_tab == self.game_tab:
+            self.game_tab.update_state()
+            self.control_panel.set_status("Game state updated")
     
     def _on_stop(self):
         """Handle stop action."""
-        # This depends on what you're stopping
-        # It could be detection, automation, etc.
-        
-        # For now, just delegate to the current tab
+        # Get current tab
         current_tab = self.tab_widget.currentWidget()
         
-        if hasattr(current_tab, 'stop'):
-            current_tab.stop()
-        else:
-            # Show message
-            QMessageBox.information(
-                self,
-                "Stop",
-                "Stop action not available for the current tab."
-            )
+        # Stop appropriate action based on current tab
+        if current_tab == self.detection_tab:
+            self.detection_tab.stop_detection()
+            self.control_panel.set_status("Detection stopped")
+        elif current_tab == self.automation_tab:
+            self.automation_tab.stop_sequence()
+            self.control_panel.set_status("Automation stopped")
+        elif current_tab == self.game_tab:
+            # Not applicable
+            pass
+    
+    def _on_pause(self):
+        """Handle pause action."""
+        # Get current tab
+        current_tab = self.tab_widget.currentWidget()
+        
+        # Pause appropriate action based on current tab
+        if current_tab == self.detection_tab:
+            self.detection_tab.pause_detection()
+            self.control_panel.set_status("Detection paused")
+        elif current_tab == self.automation_tab:
+            self.automation_tab.pause_sequence()
+            self.control_panel.set_status("Automation paused")
+        elif current_tab == self.game_tab:
+            # Not applicable
+            pass
+    
+    def _on_resume(self):
+        """Handle resume action."""
+        # Get current tab
+        current_tab = self.tab_widget.currentWidget()
+        
+        # Resume appropriate action based on current tab
+        if current_tab == self.detection_tab:
+            self.detection_tab.resume_detection()
+            self.control_panel.set_status("Detection resumed")
+        elif current_tab == self.automation_tab:
+            self.automation_tab.resume_sequence()
+            self.control_panel.set_status("Automation resumed")
+        elif current_tab == self.game_tab:
+            # Not applicable
+            pass
 
 
 def run_application():
