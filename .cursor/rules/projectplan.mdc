@@ -1,0 +1,1141 @@
+---
+description: The plan for our rework / restructure / architecture / refactor that needs to be followed for our code implementation
+globs: *.py
+---
+Make sure to usethe memory.mdc file as your memory.
+The file must be referenced and updated with any progress or changes!
+
+# Please write "Plan" at the beginning of your output if you see this rule
+This is the plan for our rework / restructure / architecture / refactor that needs to be followed for our code implementation:
+
+
+Let's examine this request carefully. The user wants a comprehensive refactoring and restructuring of their codebase to improve its architecture while maintaining all existing functionality. Key goals include:
+Improved separation of concerns
+Better modularity and code reuse
+Observer patterns and other design principles
+PyQt integration throughout, with consistent use of signals
+GUI improvements
+From the attached files and code snippets, it appears this is a "Scout" application for game automation, specifically for "Total Battle". The application includes features like:
+Template matching for detecting game elements
+Overlay system for visualizing detected elements
+OCR capabilities
+Game window tracking
+Automation scripts/sequences
+To create a comprehensive refactoring plan, I'll first analyze the current structure, identify architectural issues, and then propose a detailed plan for restructuring. I'll organize this into:
+Current Architecture Assessment
+Proposed Architecture
+Refactoring Plan by Module
+Implementation Approach
+1. Current Architecture Assessment
+Current File/Module Structure
+Based on the files I can see:
+scout/overlay.py - Manages the transparent overlay window
+scout/main.py - Application entry point
+scout/window_capture.py - Window capture capabilities
+scout/window_manager.py - Manages tracking of the game window
+scout/template_matcher.py - Template matching functionality
+scout/text_ocr.py - Text OCR functionality
+scout/actions.py - Game actions controller for mouse/keyboard actions
+scout/config_manager.py - Configuration management
+scout/sound_manager.py - Sound alert management
+scout/selector_tool.py - Tool for selecting screen regions
+scout/gui.py - Main GUI controller
+scout/automation/executor.py - Automation sequence executor
+scout/automation/core.py - Core automation classes
+scout/automation/gui/debug_window.py - Debug window for automation
+scout/automation/gui/debug_tab.py - Debug tab in debug window
+scout/automation/gui/position_marker.py - Position marker overlay
+scout/automation/gui/action_params.py - Action parameters widgets
+scout/automation/gui/automation_tab.py - Automation tab in main window
+Architectural Issues
+From my analysis, I can identify several architectural issues:
+Inconsistent Modularity:
+Some files handle multiple concerns (e.g., overlay.py handles both window management and template matching visualization)
+Dependencies between modules aren't clearly defined and sometimes circular
+Tight Coupling:
+Many components are tightly coupled (e.g., the overlay directly manages template matching)
+Lack of clear interfaces between components
+Inconsistent Use of PyQt Signals:
+Not all components use PyQt signals for communication
+Some components mix direct method calls with signals
+Scattered Configuration Management:
+Configuration is handled in multiple places
+Mixed UI and Logic:
+Business logic and UI elements are sometimes mixed in the same classes
+Lack of Clear Layer Separation:
+No clear separation between UI, business logic, and data layers
+Inconsistent Error Handling:
+Error handling approach varies across modules
+Now, let's develop a plan for restructuring this codebase to address these issues.
+2. Proposed Architecture
+I'm going to propose a new architecture with clearer separation of concerns and better use of design patterns. Here's a high-level overview:
+
+scout/
+├── __init__.py
+├── main.py                       # Entry point
+├── core/                         # Core functionality
+│   ├── __init__.py
+│   ├── window/                   # Window handling
+│   │   ├── __init__.py
+│   │   ├── window_manager.py
+│   │   └── window_capture.py
+│   ├── detection/                # Detection functionality
+│   │   ├── __init__.py
+│   │   ├── template_matcher.py
+│   │   └── ocr_processor.py
+│   ├── automation/               # Automation functionality
+│   │   ├── __init__.py
+│   │   ├── actions.py
+│   │   ├── executor.py
+│   │   ├── position.py
+│   │   └── sequence.py
+│   ├── config/                   # Configuration management
+│   │   ├── __init__.py
+│   │   └── config_manager.py
+│   └── utils/                    # Utilities
+│       ├── __init__.py
+│       ├── sound_manager.py
+│       └── logger.py
+├── ui/                           # UI components
+│   ├── __init__.py
+│   ├── models/                   # UI data models
+│   │   ├── __init__.py
+│   │   └── models.py
+│   ├── views/                    # View components
+│   │   ├── __init__.py
+│   │   ├── main_window.py
+│   │   ├── overlay_window.py
+│   │   ├── debug_window.py
+│   │   └── selector_window.py
+│   ├── controllers/              # View controllers
+│   │   ├── __init__.py
+│   │   ├── main_controller.py
+│   │   ├── overlay_controller.py
+│   │   ├── automation_controller.py
+│   │   └── detection_controller.py
+│   └── widgets/                  # Reusable UI widgets
+│       ├── __init__.py
+│       ├── action_widgets.py
+│       ├── position_widgets.py
+│       └── control_widgets.py
+├── resources/                    # Application resources
+│   ├── sounds/
+│   ├── templates/
+│   └── icons/
+└── tests/                        # Unit and integration tests
+    ├── __init__.py
+    ├── core/
+    ├── ui/
+    └── integration/
+
+
+
+Design Patterns to Implement
+Observer Pattern:
+Use PyQt signals and slots for event-based communication
+Create a central event bus for cross-component communication
+Model-View-Controller (MVC):
+Separate data models, UI views, and controllers
+Dependency Injection:
+Components receive their dependencies through constructors
+Central service locator for component management
+Factory Pattern:
+Factories for creating complex objects (e.g., action factories, widget factories)
+Strategy Pattern:
+For interchangeable algorithms (e.g., different template matching methods)
+Command Pattern:
+For automation actions
+Facade Pattern:
+Simplified interfaces for complex subsystems
+Core Services
+The architecture will be built around these core services:
+WindowService: Manages window tracking, captures, and coordinate conversion
+DetectionService: Handles template matching and OCR
+AutomationService: Manages positions, actions, and sequence execution
+ConfigService: Centralized configuration management
+EventService: Application-wide event bus
+LoggingService: Unified logging
+3. Refactoring Plan by Module
+Let's break down the refactoring plan by module:
+3.1. Window Management Module
+Current Issues:
+Window management is split across window_manager.py and window_capture.py
+The overlay directly interacts with window management
+Proposed Changes:
+Create a unified WindowService that encapsulates all window-related functionality
+Use an interface-based approach for different capture methods
+Implement an event system for window state changes (moved, resized, etc.)
+3.2. Detection Module
+Current Issues:
+Template matching and OCR are tightly coupled with their users
+No standardized way to register for detection events
+Proposed Changes:
+Create a unified DetectionService with specialized detectors (template, OCR)
+Implement observer pattern for detection events
+Create flexible detector configuration
+3.3. Automation Module
+Current Issues:
+Automation functionality is scattered across multiple files
+Tight coupling between automation components
+Proposed Changes:
+Reorganize into clear submodules (positions, actions, sequences, execution)
+Use command pattern for actions
+Implement clean interfaces for action execution
+3.4. UI Module
+Current Issues:
+UI and business logic are mixed
+Inconsistent use of PyQt patterns
+Proposed Changes:
+Implement proper MVC pattern
+Create reusable UI components
+Standardize on PyQt signals/slots for all UI communication
+3.5. Configuration Module
+Current Issues:
+Configuration management is inconsistent
+Settings are scattered
+Proposed Changes:
+Create a centralized configuration service
+Implement typed configuration with validation
+Provide change notification for config updates
+3.6. Overlay Module
+Current Issues:
+The overlay handles both visualization and detection logic
+Tight coupling with template matching
+Proposed Changes:
+Separate overlay visualization from detection logic
+Make overlay an observer of detection events
+Implement clean drawing abstraction
+4. Implementation Approach
+Given the scale of this refactoring, I recommend a phased approach:
+Phase 1: Core Infrastructure
+Create the new directory structure
+Implement core service interfaces
+Set up the event bus system
+Implement configuration service
+Create base classes and interfaces for all major components
+Phase 2: Module-by-Module Refactoring
+For each module:
+Create new implementations based on the interfaces
+Adapt existing code to use the new interfaces
+Write unit tests for the new implementations
+Migrate functionality from old to new implementations
+Phase 3: UI Refactoring
+Implement the MVC pattern for the UI
+Create the new UI components
+Connect UI components to core services
+Phase 4: Integration and Testing
+Connect all refactored components
+Implement comprehensive integration tests
+Manual testing of all features
+Phase 5: Cleanup and Optimization
+Remove unused code
+Optimize performance bottlenecks
+Improve error handling and logging
+Final code review
+Now, let me provide more detailed implementation guidance for some key parts of this refactoring.
+5. Detailed Implementation Guidance
+5.1. Core Service Interfaces
+
+# scout/core/interfaces.py
+
+from abc import ABC, abstractmethod
+from typing import Protocol, Optional, List, Dict, Any, Tuple
+import numpy as np
+from PyQt6.QtCore import QObject, pyqtSignal
+
+class WindowServiceInterface(Protocol):
+    """Interface for window management service."""
+    def find_window(self) -> bool: ...
+    def get_window_position(self) -> Optional[Tuple[int, int, int, int]]: ...
+    def capture_screenshot(self) -> Optional[np.ndarray]: ...
+    def client_to_screen(self, x: int, y: int) -> Tuple[int, int]: ...
+    def screen_to_client(self, screen_x: int, screen_y: int) -> Tuple[int, int]: ...
+
+class DetectionServiceInterface(Protocol):
+    """Interface for detection service."""
+    def find_templates(self, image: np.ndarray, template_names: Optional[List[str]] = None) -> List[Any]: ...
+    def process_ocr(self, image: np.ndarray, region: Optional[Dict[str, int]] = None) -> str: ...
+    def start_continuous_detection(self, detector_type: str, **params) -> None: ...
+    def stop_continuous_detection(self, detector_type: str) -> None: ...
+
+class AutomationServiceInterface(Protocol):
+    """Interface for automation service."""
+    def execute_sequence(self, sequence_name: str, simulation: bool = False) -> None: ...
+    def add_position(self, name: str, x: int, y: int, description: Optional[str] = None) -> None: ...
+    def add_sequence(self, name: str, actions: List[Dict[str, Any]], description: Optional[str] = None) -> None: ...
+    def get_positions(self) -> Dict[str, Any]: ...
+    def get_sequences(self) -> Dict[str, Any]: ...
+
+class ConfigServiceInterface(Protocol):
+    """Interface for configuration service."""
+    def get_config(self, section: str, key: str, default: Any = None) -> Any: ...
+    def set_config(self, section: str, key: str, value: Any) -> None: ...
+    def get_section(self, section: str) -> Dict[str, Any]: ...
+    def set_section(self, section: str, config: Dict[str, Any]) -> None: ...
+    def save(self) -> None: ...
+
+class EventBusInterface(QObject, Protocol):
+    """Interface for event bus service."""
+    def publish(self, event_type: str, data: Any = None) -> None: ...
+    def subscribe(self, event_type: str, callback: callable) -> None: ...
+    def unsubscribe(self, event_type: str, callback: callable) -> None: ...
+
+
+5.2. Observer Pattern Implementation
+# scout/core/events.py
+
+from PyQt6.QtCore import QObject, pyqtSignal
+from typing import Any, Dict, List, Callable
+
+class EventBus(QObject):
+    """
+    Central event bus for application-wide events.
+    
+    This implements the observer pattern using PyQt signals and slots,
+    allowing components to communicate without direct coupling.
+    """
+    
+    # Define signals for different event types
+    template_match_signal = pyqtSignal(object)  # Template match events
+    ocr_result_signal = pyqtSignal(object)      # OCR result events
+    window_change_signal = pyqtSignal(object)   # Window position/state changes
+    action_executed_signal = pyqtSignal(object) # Action execution events
+    config_changed_signal = pyqtSignal(object)  # Config change events
+    
+    # Generic event signal (event_type, data)
+    generic_event_signal = pyqtSignal(str, object)
+    
+    def __init__(self):
+        super().__init__()
+        self._handlers: Dict[str, List[Callable]] = {}
+    
+    def publish(self, event_type: str, data: Any = None) -> None:
+        """Publish an event to all subscribers."""
+        # Emit the generic signal
+        self.generic_event_signal.emit(event_type, data)
+        
+        # Emit specific signals based on event type
+        if event_type == 'template_match':
+            self.template_match_signal.emit(data)
+        elif event_type == 'ocr_result':
+            self.ocr_result_signal.emit(data)
+        elif event_type == 'window_change':
+            self.window_change_signal.emit(data)
+        elif event_type == 'action_executed':
+            self.action_executed_signal.emit(data)
+        elif event_type == 'config_changed':
+            self.config_changed_signal.emit(data)
+        
+        # Call any registered callback handlers
+        if event_type in self._handlers:
+            for handler in self._handlers[event_type]:
+                handler(data)
+    
+    def subscribe(self, event_type: str, callback: Callable) -> None:
+        """Subscribe to an event type with a callback function."""
+        if event_type not in self._handlers:
+            self._handlers[event_type] = []
+        self._handlers[event_type].append(callback)
+    
+    def unsubscribe(self, event_type: str, callback: Callable) -> None:
+        """Unsubscribe a callback from an event type."""
+        if event_type in self._handlers and callback in self._handlers[event_type]:
+            self._handlers[event_type].remove(callback)
+
+
+5.3. Service Locator Implementation
+# scout/core/services.py
+
+from typing import Dict, Any, Type, TypeVar, Optional
+from .interfaces import (
+    WindowServiceInterface, 
+    DetectionServiceInterface,
+    AutomationServiceInterface,
+    ConfigServiceInterface,
+    EventBusInterface
+)
+
+T = TypeVar('T')
+
+class ServiceLocator:
+    """
+    Service locator for managing application services.
+    
+    This provides centralized access to services while avoiding
+    direct dependencies between components.
+    """
+    
+    _services: Dict[str, Any] = {}
+    
+    @classmethod
+    def register(cls, service_type: str, service: Any) -> None:
+        """Register a service instance."""
+        cls._services[service_type] = service
+    
+    @classmethod
+    def get(cls, service_type: str) -> Any:
+        """Get a service by type."""
+        if service_type not in cls._services:
+            raise KeyError(f"Service '{service_type}' not registered")
+        return cls._services[service_type]
+    
+    @classmethod
+    def get_window_service(cls) -> WindowServiceInterface:
+        """Get the window service."""
+        return cls.get('window')
+    
+    @classmethod
+    def get_detection_service(cls) -> DetectionServiceInterface:
+        """Get the detection service."""
+        return cls.get('detection')
+    
+    @classmethod
+    def get_automation_service(cls) -> AutomationServiceInterface:
+        """Get the automation service."""
+        return cls.get('automation')
+    
+    @classmethod
+    def get_config_service(cls) -> ConfigServiceInterface:
+        """Get the configuration service."""
+        return cls.get('config')
+    
+    @classmethod
+    def get_event_bus(cls) -> EventBusInterface:
+        """Get the event bus."""
+        return cls.get('event_bus')
+
+5.4. MVC Pattern for UI
+# scout/ui/models/detection_model.py
+
+from PyQt6.QtCore import QObject, pyqtSignal
+from typing import List, Dict, Any, Optional
+import numpy as np
+
+class DetectionModel(QObject):
+    """
+    Model for detection-related data.
+    
+    This implements the model part of MVC, storing detection
+    state and notifying observers of changes.
+    """
+    
+    # Signals for detection changes
+    matches_changed = pyqtSignal(list)  # Template matches
+    ocr_result_changed = pyqtSignal(str, list)  # OCR result and regions
+    
+    def __init__(self):
+        super().__init__()
+        self._matches: List[Dict[str, Any]] = []
+        self._ocr_text: str = ""
+        self._ocr_regions: List[Dict[str, Any]] = []
+    
+    @property
+    def matches(self) -> List[Dict[str, Any]]:
+        """Get current template matches."""
+        return self._matches
+    
+    @matches.setter
+    def matches(self, value: List[Dict[str, Any]]) -> None:
+        """Set template matches and notify observers."""
+        self._matches = value
+        self.matches_changed.emit(self._matches)
+    
+    @property
+    def ocr_text(self) -> str:
+        """Get current OCR text."""
+        return self._ocr_text
+    
+    @property
+    def ocr_regions(self) -> List[Dict[str, Any]]:
+        """Get current OCR regions."""
+        return self._ocr_regions
+    
+    def set_ocr_result(self, text: str, regions: List[Dict[str, Any]]) -> None:
+        """Set OCR result and notify observers."""
+        self._ocr_text = text
+        self._ocr_regions = regions
+        self.ocr_result_changed.emit(self._ocr_text, self._ocr_regions)
+
+# scout/ui/controllers/detection_controller.py
+
+from PyQt6.QtCore import QObject, pyqtSlot
+from ...core.services import ServiceLocator
+from ..models.detection_model import DetectionModel
+
+class DetectionController(QObject):
+    """
+    Controller for detection-related operations.
+    
+    This implements the controller part of MVC, handling
+    user interactions and updating the model.
+    """
+    
+    def __init__(self, model: DetectionModel):
+        super().__init__()
+        self.model = model
+        self.detection_service = ServiceLocator.get_detection_service()
+        self.event_bus = ServiceLocator.get_event_bus()
+        
+        # Subscribe to detection events
+        self.event_bus.template_match_signal.connect(self._on_template_match)
+        self.event_bus.ocr_result_signal.connect(self._on_ocr_result)
+    
+    @pyqtSlot(object)
+    def _on_template_match(self, match_data: object) -> None:
+        """Handle template match events."""
+        self.model.matches = match_data
+    
+    @pyqtSlot(object)
+    def _on_ocr_result(self, ocr_data: object) -> None:
+        """Handle OCR result events."""
+        text = ocr_data.get('text', '')
+        regions = ocr_data.get('regions', [])
+        self.model.set_ocr_result(text, regions)
+    
+    def start_template_matching(self, templates: List[str], confidence: float) -> None:
+        """Start template matching with specified parameters."""
+        self.detection_service.start_continuous_detection(
+            'template',
+            templates=templates,
+            confidence=confidence
+        )
+    
+    def stop_template_matching(self) -> None:
+        """Stop template matching."""
+        self.detection_service.stop_continuous_detection('template')
+    
+    def start_ocr(self, region: Dict[str, int], frequency: float) -> None:
+        """Start OCR with specified parameters."""
+        self.detection_service.start_continuous_detection(
+            'ocr',
+            region=region,
+            frequency=frequency
+        )
+    
+    def stop_ocr(self) -> None:
+        """Stop OCR."""
+        self.detection_service.stop_continuous_detection('ocr')
+
+# scout/ui/views/overlay_view.py
+
+from PyQt6.QtWidgets import QWidget
+from PyQt6.QtCore import Qt, pyqtSlot
+from PyQt6.QtGui import QPainter, QPen, QColor, QFont
+from typing import List, Dict, Any
+from ..models.detection_model import DetectionModel
+
+class OverlayView(QWidget):
+    """
+    View for the overlay window.
+    
+    This implements the view part of MVC, displaying
+    detection results on a transparent overlay.
+    """
+    
+    def __init__(self, model: DetectionModel):
+        super().__init__(None)  # No parent widget
+        self.model = model
+        
+        # Configure window properties
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint |
+            Qt.WindowType.WindowStaysOnTopHint |
+            Qt.WindowType.Tool
+        )
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        
+        # Connect model signals
+        self.model.matches_changed.connect(self.update)
+        self.model.ocr_result_changed.connect(self.update)
+    
+    def paintEvent(self, event) -> None:
+        """Paint the overlay with detection results."""
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # Draw matches
+        for match in self.model.matches:
+            self._draw_match(painter, match)
+        
+        # Draw OCR regions
+        for region in self.model.ocr_regions:
+            self._draw_ocr_region(painter, region)
+    
+    def _draw_match(self, painter: QPainter, match: Dict[str, Any]) -> None:
+        """Draw a template match."""
+        # Implementation details...
+    
+    def _draw_ocr_region(self, painter: QPainter, region: Dict[str, Any]) -> None:
+        """Draw an OCR region."""
+        # Implementation details...
+
+5.5. Command Pattern for Automation
+# scout/core/automation/command.py
+
+from abc import ABC, abstractmethod
+from typing import Dict, Any, Optional
+from ..interfaces import WindowServiceInterface
+
+class Command(ABC):
+    """
+    Base class for automation commands.
+    
+    This implements the command pattern, encapsulating all
+    information needed to perform an action.
+    """
+    
+    def __init__(self, params: Dict[str, Any]) -> None:
+        self.params = params
+        self.result: bool = False
+        self.message: str = ""
+    
+    @abstractmethod
+    def execute(self, window_service: WindowServiceInterface) -> bool:
+        """Execute the command."""
+        pass
+    
+    def set_result(self, success: bool, message: str) -> None:
+        """Set the execution result."""
+        self.result = success
+        self.message = message
+    
+    def get_result(self) -> tuple[bool, str]:
+        """Get the execution result."""
+        return (self.result, self.message)
+
+# scout/core/automation/commands/click_command.py
+
+from typing import Dict, Any, Optional
+from ..command import Command
+from ...interfaces import WindowServiceInterface
+from ....core.services import ServiceLocator
+
+class ClickCommand(Command):
+    """Command for performing mouse clicks."""
+    
+    def execute(self, window_service: WindowServiceInterface) -> bool:
+        """Execute a click at the specified position."""
+        x = self.params.get('x', 0)
+        y = self.params.get('y', 0)
+        button = self.params.get('button', 'left')
+        clicks = self.params.get('clicks', 1)
+        relative = self.params.get('relative_to_window', True)
+        
+        try:
+            # Get game actions service
+            actions_service = ServiceLocator.get('actions')
+            
+            # Perform the click
+            actions_service.click_at(x, y, relative, button, clicks)
+            
+            self.set_result(True, f"Clicked at ({x}, {y})")
+            return True
+            
+        except Exception as e:
+            self.set_result(False, f"Click failed: {str(e)}")
+            return False
+
+# scout/core/automation/command_factory.py
+
+from typing import Dict, Any, Optional, Type
+from .command import Command
+from .commands.click_command import ClickCommand
+# Import other command types...
+
+class CommandFactory:
+    """Factory for creating command objects."""
+    
+    _commands: Dict[str, Type[Command]] = {
+        'click': ClickCommand,
+        # Register other command types...
+    }
+    
+    @classmethod
+    def create_command(cls, type_name: str, params: Dict[str, Any]) -> Optional[Command]:
+        """Create a command of the specified type."""
+        if type_name not in cls._commands:
+            return None
+        
+        command_class = cls._commands[type_name]
+        return command_class(params)
+    
+    @classmethod
+    def register_command(cls, type_name: str, command_class: Type[Command]) -> None:
+        """Register a new command type."""
+        cls._commands[type_name] = command_class
+
+5.6. Strategy Pattern for Detectors
+# scout/core/detection/strategy.py
+
+from abc import ABC, abstractmethod
+from typing import List, Dict, Any, Optional
+import numpy as np
+
+class DetectionStrategy(ABC):
+    """
+    Base class for detection strategies.
+    
+    This implements the strategy pattern, allowing different
+    detection algorithms to be used interchangeably.
+    """
+    
+    @abstractmethod
+    def detect(self, image: np.ndarray, params: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Perform detection on an image.
+        
+        Args:
+            image: Image to analyze
+            params: Detection parameters
+            
+        Returns:
+            List of detection results
+        """
+        pass
+
+# scout/core/detection/strategies/template_strategy.py
+
+from typing import List, Dict, Any, Optional
+import numpy as np
+import cv2
+from ..strategy import DetectionStrategy
+
+class TemplateMatchingStrategy(DetectionStrategy):
+    """Strategy for template matching detection."""
+    
+    def detect(self, image: np.ndarray, params: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Perform template matching on an image.
+        
+        Args:
+            image: Image to analyze
+            params: Detection parameters including templates and confidence
+            
+        Returns:
+            List of template match results
+        """
+        templates = params.get('templates', {})
+        confidence = params.get('confidence', 0.8)
+        template_names = params.get('template_names', None)
+        
+        if template_names:
+            # Filter templates by name
+            selected_templates = {
+                name: template 
+                for name, template in templates.items() 
+                if name in template_names
+            }
+        else:
+            # Use all templates
+            selected_templates = templates
+        
+        results = []
+        
+        # Perform template matching for each template
+        for name, template in selected_templates.items():
+            # Match template
+            result = cv2.matchTemplate(image, template, cv2.TM_CCOEFF_NORMED)
+            locations = np.where(result >= confidence)
+            
+            for y, x in zip(*locations):
+                width = template.shape[1]
+                height = template.shape[0]
+                match_confidence = float(result[y, x])
+                
+                # Create match result
+                match = {
+                    'template_name': name,
+                    'x': int(x),
+                    'y': int(y),
+                    'width': width,
+                    'height': height,
+                    'confidence': match_confidence
+                }
+                
+                results.append(match)
+        
+        return results
+
+# scout/core/detection/strategy_factory.py
+
+from typing import Dict, Type
+from .strategy import DetectionStrategy
+from .strategies.template_strategy import TemplateMatchingStrategy
+# Import other strategy types...
+
+class DetectionStrategyFactory:
+    """Factory for creating detection strategy objects."""
+    
+    _strategies: Dict[str, Type[DetectionStrategy]] = {
+        'template': TemplateMatchingStrategy,
+        # Register other strategy types...
+    }
+    
+    @classmethod
+    def create_strategy(cls, strategy_type: str) -> DetectionStrategy:
+        """Create a strategy of the specified type."""
+        if strategy_type not in cls._strategies:
+            raise ValueError(f"Unknown strategy type: {strategy_type}")
+        
+        strategy_class = cls._strategies[strategy_type]
+        return strategy_class()
+    
+    @classmethod
+    def register_strategy(cls, strategy_type: str, strategy_class: Type[DetectionStrategy]) -> None:
+        """Register a new strategy type."""
+        cls._strategies[strategy_type] = strategy_class
+
+5.7. Application Initialization
+# scout/main.py
+
+import sys
+from PyQt6.QtWidgets import QApplication
+from PyQt6.QtCore import QTimer
+
+from .core.config.config_manager import ConfigManager
+from .core.window.window_manager import WindowManager
+from .core.detection.detector_service import DetectorService
+from .core.automation.automation_service import AutomationService
+from .core.events import EventBus
+from .core.services import ServiceLocator
+
+from .ui.models.models import ApplicationModel
+from .ui.controllers.main_controller import MainController
+from .ui.views.main_window import MainWindow
+
+def main():
+    """Application entry point."""
+    try:
+        # Create application
+        app = QApplication(sys.argv)
+        
+        # Initialize services
+        config_service = ConfigManager()
+        window_service = WindowManager("Total Battle")
+        event_bus = EventBus()
+        detection_service = DetectorService(window_service, event_bus, config_service)
+        automation_service = AutomationService(window_service, event_bus, config_service)
+        
+        # Register services
+        ServiceLocator.register('config', config_service)
+        ServiceLocator.register('window', window_service)
+        ServiceLocator.register('detection', detection_service)
+        ServiceLocator.register('automation', automation_service)
+        ServiceLocator.register('event_bus', event_bus)
+        
+        # Create MVC components
+        model = ApplicationModel()
+        controller = MainController(model)
+        view = MainWindow(model, controller)
+        
+        # Show the main window
+        view.show()
+        
+        # Start the application
+        sys.exit(app.exec())
+        
+    except Exception as e:
+        print(f"Application error: {e}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
+
+6. Refactoring Procedure
+Here's a step-by-step procedure for implementing this refactoring:
+Create the new directory structure:
+Set up the new folder structure as specified
+Create empty __init__.py files for each package
+Implement core interfaces and services:
+Create interfaces for all major components
+Implement the service locator and event bus
+Refactor window management:
+Migrate functionality from window_capture.py and window_manager.py to the new structure
+Implement the WindowService class
+Refactor detection services:
+Implement the detection strategy pattern
+Create the DetectorService class
+Migrate template matching and OCR functionality
+Refactor automation components:
+Implement the command pattern for actions
+Create the AutomationService class
+Migrate position and sequence management
+Build UI models:
+Create data models for all UI components
+Implement PyQt signals for model changes
+Create UI controllers:
+Implement controllers that connect UI actions to services
+Connect controllers to models
+Build UI views:
+Implement view components that observe models
+Create reusable widgets
+Refactor overlay:
+Separate overlay visualization from detection logic
+Make overlay an observer of detection events
+Connect everything:
+Wire up all components
+Test end-to-end functionality
+Add documentation and tests:
+Document the new architecture
+Create comprehensive tests
+This is an extensive refactoring effort that will take time to implement properly. I recommend breaking it down into smaller tasks and tackling them one at a time while maintaining the ability to run and test the application throughout the process.
+This refactoring plan addresses all the architectural issues identified in the current codebase and will result in a much more maintainable, modular, and extensible application.
+</think>
+Comprehensive Refactoring Plan for Scout Codebase
+After analyzing your codebase, I can see this is a promising automation tool for "Total Battle" with features like template matching, OCR, and overlay functionality. The code structure needs improvement to align with best practices in software engineering.
+Current Architecture Assessment
+Strengths
+Good separation into functional modules (template matcher, window manager, etc.)
+Use of PyQt for UI framework
+Comprehensive functionality with automation, template matching, and OCR
+Issues to Address
+Inconsistent Modularity: Components like the Overlay handle multiple concerns
+Tight Coupling: Components directly reference each other, creating dependency cycles
+Mixed Layers: UI, business logic, and data access are often combined
+Inconsistent Event Handling: Mix of direct method calls and signals/slots
+Code Duplication: Similar functionality implemented in multiple places
+Configuration Management: Settings managed inconsistently across components
+Proposed Architecture
+I recommend restructuring to a clean architecture with clear separation of concerns:
+
+
+scout/
+├── main.py                       # Entry point
+├── core/                         # Business logic
+│   ├── window/                   # Window management
+│   ├── detection/                # Template matching & OCR
+│   ├── automation/               # Automation system
+│   ├── services/                 # Cross-cutting services
+│   └── config/                   # Configuration
+├── ui/                           # All UI components
+│   ├── models/                   # UI data models
+│   ├── views/                    # PyQt views
+│   ├── controllers/              # UI controllers
+│   └── widgets/                  # Reusable widgets
+├── resources/                    # Non-code resources
+└── tests/                        # Test suite
+
+Key Design Patterns to Implement
+1. Observer Pattern
+Use PyQt's signals and slots as the foundation for all communication:
+# core/detection/detector.py
+class TemplateDetector(QObject):
+    template_matched = pyqtSignal(list)  # Emits match data
+    
+    def process_frame(self, frame):
+        matches = self._find_matches(frame)
+        if matches:
+            self.template_matched.emit(matches)
+
+2. Dependency Injection
+Components receive dependencies through constructors instead of creating them:
+# Before (tightly coupled):
+class TemplateMatchExecutor:
+    def __init__(self):
+        self.window_manager = WindowManager("Total Battle")
+        self.matcher = TemplateMatcher(self.window_manager)
+
+# After (loosely coupled):
+class TemplateMatchExecutor:
+    def __init__(self, window_service, matcher_service):
+        self.window_service = window_service
+        self.matcher_service = matcher_service
+
+3. Service Locator
+Manage application-wide services:
+class ServiceLocator:
+    _services = {}
+    
+    @classmethod
+    def register(cls, name, service):
+        cls._services[name] = service
+        
+    @classmethod
+    def get(cls, name):
+        return cls._services.get(name)
+
+# Register services
+ServiceLocator.register('window', WindowService())
+ServiceLocator.register('detector', DetectorService())
+
+# Use services
+window_service = ServiceLocator.get('window')
+
+4. MVC Pattern for UI
+Separate UI into Model, View, and Controller components:
+# Model: Holds data and business logic
+class OverlayModel(QObject):
+    matches_changed = pyqtSignal(list)
+    
+    def update_matches(self, matches):
+        self._matches = matches
+        self.matches_changed.emit(matches)
+
+# View: Displays data to the user
+class OverlayView(QWidget):
+    def __init__(self, model):
+        super().__init__()
+        self.model = model
+        self.model.matches_changed.connect(self.update)
+    
+    def paintEvent(self, event):
+        # Draw matches from self.model._matches
+
+# Controller: Handles user input
+class OverlayController:
+    def __init__(self, model, detection_service):
+        self.model = model
+        self.detection_service = detection_service
+        self.detection_service.template_matched.connect(self.on_template_matched)
+    
+    def on_template_matched(self, matches):
+        self.model.update_matches(matches)
+
+5. Command Pattern for Automation
+Encapsulate actions as command objects:
+class Command(ABC):
+    @abstractmethod
+    def execute(self):
+        pass
+
+class ClickCommand(Command):
+    def __init__(self, x, y, game_actions):
+        self.x = x
+        self.y = y
+        self.game_actions = game_actions
+        
+    def execute(self):
+        self.game_actions.click_at(self.x, self.y)
+
+Implementation Plan
+Phase 1: Core Infrastructure (2-3 weeks)
+Create new folder structure
+Implement ServiceLocator and EventBus
+Define core interfaces for all services
+Create base classes for common patterns
+Phase 2: Refactor Core Modules (3-4 weeks)
+Window Management
+Separate window detection, position tracking, and screenshot capture
+Implement event-based window state change notification
+Detection System
+Create clean interfaces for all detection strategies
+Implement observer pattern for detection events
+Separate template matching logic from visualization
+Automation System
+Implement command pattern for all actions
+Create proper sequence execution pipeline
+Separate position tracking from execution logic
+Phase 3: UI Refactoring (3-4 weeks)
+Create UI models for all data displayed in the interface
+Implement controllers to mediate between UI and services
+Rebuild views to observe models instead of directly accessing services
+Create reusable widget components
+Phase 4: Overlay Improvements (2 weeks)
+Separate overlay visualization from detection logic
+Make overlay an observer of detection events
+Implement proper window tracking and transparency
+Phase 5: Testing and Final Integration (2-3 weeks)
+Create comprehensive test suite
+Fix any integration issues
+Optimize performance bottlenecks
+Document the new architecture
+
+Detailed Implementation Examples
+Here's how some key components would look after refactoring:
+
+1. Window Service
+# core/window/window_service.py
+class WindowService(QObject):
+    window_moved = pyqtSignal(int, int, int, int)  # x, y, width, height
+    window_state_changed = pyqtSignal(str)  # minimized, maximized, etc.
+    screenshot_captured = pyqtSignal(object)  # numpy array
+    
+    def __init__(self, window_title):
+        super().__init__()
+        self.window_title = window_title
+        self.window_tracker = WindowTracker(window_title)
+        self.capture_provider = ScreenCaptureProvider()
+        
+    def capture_screenshot(self):
+        screenshot = self.capture_provider.capture(self.window_tracker.hwnd)
+        self.screenshot_captured.emit(screenshot)
+        return screenshot
+        
+    def get_window_position(self):
+        return self.window_tracker.get_position()
+        
+    def client_to_screen(self, x, y):
+        return self.window_tracker.client_to_screen(x, y)
+
+2. Detection Service
+# core/detection/detection_service.py
+class DetectionService(QObject):
+    template_matched = pyqtSignal(list)  # List of match data
+    ocr_processed = pyqtSignal(str, list)  # Text and regions
+    
+    def __init__(self, window_service, config_service):
+        super().__init__()
+        self.window_service = window_service
+        self.config_service = config_service
+        
+        # Create detectors
+        self.template_detector = TemplateDetector(self.config_service)
+        self.ocr_detector = OCRDetector(self.config_service)
+        
+        # Connect signals
+        self.template_detector.matches_found.connect(self.template_matched)
+        self.ocr_detector.text_recognized.connect(self.ocr_processed)
+        
+    def start_template_detection(self, template_names=None, confidence=0.8):
+        # Configure detector
+        self.template_detector.configure(
+            template_names=template_names,
+            confidence=confidence
+        )
+        
+        # Start detection
+        self._start_detection_loop(self.template_detector)
+
+3. Overlay View
+# ui/views/overlay_view.py
+class OverlayView(QWidget):
+    def __init__(self, model, window_service):
+        super().__init__()
+        self.model = model
+        self.window_service = window_service
+        
+        # Configure window
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint |
+            Qt.WindowType.WindowStaysOnTopHint |
+            Qt.WindowType.Tool
+        )
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        
+        # Connect signals
+        self.model.matches_changed.connect(self.update)
+        self.window_service.window_moved.connect(self.update_position)
+        
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # Draw diagnostic indicator
+        painter.setPen(QPen(QColor(0, 255, 0), 2))
+        painter.drawEllipse(10, 10, 20, 20)
+        painter.drawText(40, 25, "Drawing Active")
+        
+        # Draw matches
+        for match in self.model.matches:
+            self._draw_match(painter, match)
+
+Benefits of This Refactoring
+Improved Maintainability: Clear separation of concerns makes the code easier to understand
+Enhanced Testability: Components can be tested in isolation
+Better Extensibility: New features can be added without modifying existing code
+Reduced Coupling: Components communicate through well-defined interfaces
+Consistent Error Handling: Standardized approach to error management
+Improved Performance: Better resource management through proper lifecycle handling
+Enhanced UI Responsiveness: Separation of UI and business logic prevents UI freezing
+

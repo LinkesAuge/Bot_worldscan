@@ -1,133 +1,218 @@
-from typing import NoReturn
+#!/usr/bin/env python
+"""
+Scout - Game Automation Assistant
+
+This is the main entry point for the Scout application.
+It initializes the application, sets up logging, and launches the UI.
+"""
+
 import sys
-from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import QTimer
-import cv2
-import time
-import win32api
-import win32con
-from scout.overlay import Overlay
-from scout.gui import OverlayController
-from scout.template_matcher import TemplateMatcher
-from scout.text_ocr import TextOCR
-from scout.actions import GameActions
+import os
 import logging
-from scout.config_manager import ConfigManager
-from scout.sound_manager import SoundManager
-from scout.window_manager import WindowManager
-from scout.debug_window import DebugWindow
+import argparse
+from pathlib import Path
+from typing import List, Optional
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    datefmt='%H:%M:%S'
-)
+from PyQt6.QtWidgets import QApplication, QStyleFactory
+from PyQt6.QtGui import QIcon, QFont
+from PyQt6.QtCore import QDir, Qt
 
-logger = logging.getLogger(__name__)
+from scout.ui.main_window import MainWindow
+from scout.core.services.service_locator import ServiceLocator
 
-"""
-Total Battle Scout - Game Automation Tool
 
-This is the main entry point for the Total Battle Scout application, which provides automated 
-scanning and template matching capabilities for the Total Battle game. The application creates
-a transparent overlay on top of the game window to highlight detected elements and provides
-a control interface for scanning the game world.
-
-Key Components:
-- Overlay: Transparent window that highlights detected game elements
-- Template Matcher: Detects specific game elements using image recognition
-- World Scanner: Systematically explores the game world
-- GUI Controller: User interface for controlling all features
-"""
-
-def is_key_pressed(key_code: int) -> bool:
+def setup_logging(log_level: str = "INFO", log_file: Optional[str] = None) -> None:
     """
-    Check if a specific keyboard key is currently being pressed.
-    
-    This function uses the Windows API to detect the current state of any keyboard key.
-    It's used for hotkey detection in the application.
+    Set up logging configuration.
     
     Args:
-        key_code: Windows virtual key code (e.g., VK_F10 for F10 key)
-        
-    Returns:
-        bool: True if the key is currently pressed, False otherwise
+        log_level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        log_file: Path to log file (None for console only)
     """
-    return win32api.GetAsyncKeyState(key_code) & 0x8000 != 0
+    # Convert string level to numeric level
+    numeric_level = getattr(logging, log_level.upper(), None)
+    if not isinstance(numeric_level, int):
+        numeric_level = logging.INFO
+    
+    # Configure logging
+    log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    date_format = "%Y-%m-%d %H:%M:%S"
+    
+    handlers = []
+    
+    # Add console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(logging.Formatter(log_format, date_format))
+    handlers.append(console_handler)
+    
+    # Add file handler if log file is specified
+    if log_file:
+        log_dir = os.path.dirname(log_file)
+        if log_dir and not os.path.exists(log_dir):
+            os.makedirs(log_dir, exist_ok=True)
+            
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setFormatter(logging.Formatter(log_format, date_format))
+        handlers.append(file_handler)
+    
+    # Configure root logger
+    logging.basicConfig(
+        level=numeric_level,
+        format=log_format,
+        datefmt=date_format,
+        handlers=handlers
+    )
+    
+    # Set level for specific modules
+    logging.getLogger("PIL").setLevel(logging.WARNING)
+    logging.getLogger("matplotlib").setLevel(logging.WARNING)
 
-def main() -> None:
+
+def parse_arguments() -> argparse.Namespace:
     """
-    Main application entry point that initializes and starts all components.
+    Parse command-line arguments.
     
-    This function:
-    1. Creates the Qt application instance
-    2. Loads configuration settings
-    3. Sets up the window manager to track the game window
-    4. Creates the overlay system for highlighting game elements
-    5. Initializes the GUI controller
-    6. Connects all necessary callbacks
-    7. Starts the application event loop
-    
-    The application runs until the user closes it or an unhandled error occurs.
-    All errors are logged for debugging purposes.
+    Returns:
+        Parsed command-line arguments
     """
-    logger.info("Starting application")
+    parser = argparse.ArgumentParser(description="Scout - Game Automation Assistant")
     
-    try:
-        app = QApplication(sys.argv)
-        
-        logger.info("Initializing components")
-        config_manager = ConfigManager()
-        
-        # Load settings
-        overlay_settings = config_manager.get_overlay_settings()
-        template_settings = config_manager.get_template_matching_settings()
-        
-        # Initialize window manager first
-        window_manager = WindowManager("Total Battle")
-        
-        # Create debug window
-        debug_window = DebugWindow()
-        
-        # Create game actions controller
-        game_actions = GameActions(window_manager)
-        
-        # Create text OCR
-        text_ocr = TextOCR(
-            debug_window=debug_window,
-            window_manager=window_manager
-        )
-        
-        # Create overlay with window manager and settings
-        overlay = Overlay(
-            window_manager=window_manager,
-            template_settings=template_settings,
-            overlay_settings=overlay_settings
-        )
-        
-        # Create controller
-        controller = OverlayController(
-            overlay=overlay,
-            overlay_settings=overlay_settings,
-            template_settings=template_settings,
-            game_actions=game_actions,
-            text_ocr=text_ocr,
-            debug_window=debug_window
-        )
-        
-        # Set up callbacks
-        controller.set_toggle_callback(overlay.toggle)
-        controller.set_quit_callback(app.quit)
-        
-        # Show the controller window
-        controller.show()
-        
-        # Start the application
-        sys.exit(app.exec())
-        
-    except Exception as e:
-        logger.error(f"Application error: {e}", exc_info=True)
-        sys.exit(1)
+    # Logging options
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="Set logging level"
+    )
+    
+    parser.add_argument(
+        "--log-file",
+        type=str,
+        default=None,
+        help="Path to log file (defaults to console only)"
+    )
+    
+    # Application options
+    parser.add_argument(
+        "--window-title",
+        type=str,
+        default=None,
+        help="Game window title to find"
+    )
+    
+    parser.add_argument(
+        "--templates-dir",
+        type=str,
+        default=None,
+        help="Directory containing template images"
+    )
+    
+    # Development options
+    parser.add_argument(
+        "--dev-mode",
+        action="store_true",
+        help="Enable development mode"
+    )
+    
+    return parser.parse_args()
+
+
+def create_resource_directories() -> None:
+    """Create necessary resource directories if they don't exist."""
+    # List of directories to create
+    directories = [
+        Path("scout/resources/templates"),
+        Path("scout/resources/sequences"),
+        Path("scout/resources/logs"),
+        Path("scout/resources/states")
+    ]
+    
+    # Create each directory
+    for directory in directories:
+        directory.mkdir(parents=True, exist_ok=True)
+        logging.debug(f"Ensured directory exists: {directory}")
+
+
+def setup_application_style(app: QApplication) -> None:
+    """
+    Set up application style and appearance.
+    
+    Args:
+        app: QApplication instance
+    """
+    # Set application style to Fusion (cross-platform modern look)
+    app.setStyle(QStyleFactory.create("Fusion"))
+    
+    # Set default font
+    font = QFont("Segoe UI", 9)
+    app.setFont(font)
+    
+    # Set application icon
+    # TODO: Replace with actual icon when available
+    # app.setWindowIcon(QIcon("path/to/icon.png"))
+    
+    # Configure high-DPI scaling
+    app.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling, True)
+    app.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps, True)
+
+
+def main() -> int:
+    """
+    Main application entry point.
+    
+    Returns:
+        Application exit code
+    """
+    # Parse command-line arguments
+    args = parse_arguments()
+    
+    # Set up logging
+    default_log_file = None
+    if not args.log_file:
+        log_dir = Path.home() / '.scout' / 'logs'
+        log_dir.mkdir(parents=True, exist_ok=True)
+        default_log_file = str(log_dir / 'scout.log')
+    
+    setup_logging(args.log_level, args.log_file or default_log_file)
+    
+    # Log startup information
+    logging.info("Starting Scout application")
+    logging.debug(f"Arguments: {args}")
+    
+    # Create resource directories
+    create_resource_directories()
+    
+    # Create application
+    app = QApplication(sys.argv)
+    app.setApplicationName("Scout")
+    app.setApplicationVersion("0.1.0")  # TODO: Use version from package
+    
+    # Set up application style
+    setup_application_style(app)
+    
+    # Create main window
+    main_window = MainWindow()
+    
+    # Apply command-line settings if provided
+    if args.window_title:
+        logging.info(f"Setting window title from command line: {args.window_title}")
+        main_window.window_service.set_window_title(args.window_title)
+    
+    if args.templates_dir:
+        logging.info(f"Setting templates directory from command line: {args.templates_dir}")
+        template_path = Path(args.templates_dir)
+        if template_path.exists() and template_path.is_dir():
+            main_window.detection_service.register_template_strategy(str(template_path))
+        else:
+            logging.warning(f"Templates directory not found: {args.templates_dir}")
+    
+    # Show the main window
+    main_window.show()
+    
+    # Start the application event loop
+    return app.exec()
+
 
 if __name__ == "__main__":
-    main() 
+    sys.exit(main()) 

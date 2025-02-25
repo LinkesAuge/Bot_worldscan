@@ -10,6 +10,10 @@ globs: *.py
 description: General guidance and coding for the project
 globs: *.py
 ---
+
+Make sure to usethe memory.mdc file as your memory.
+The file must be referenced and updated with any progress or changes!
+
 Scout Projekt for Total Battle game
 
 # PROJECT OVERVIEW
@@ -23,12 +27,11 @@ To achieve this we take screenshots of the current game state and analyse them w
 
 # TECH AND LIBRARIES STACK
 - Python as coding language
-- PyQt6 for GUI development
-- pynput, pydirectinput and pyautogui for any controlls like mouse or keyboard
+- PyQt6 
+- pynput, pydirectinput and pyautogui
 - WindwsAPI for window management
-- cv2 (OpenCV) for computer vision tasks like pattern matching
-- pytesseract (Tesseract 5.5) for OCR / optical character recognition
-- mss for taking screenshots
+- cv2
+- pytesseract (Tesseract 5.5)on
 - numpy for maths and data handling
 - uv for project dependency management and virtual environments
 

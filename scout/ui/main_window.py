@@ -1,0 +1,837 @@
+"""
+Main Window
+
+This module provides the main application window for the Scout application.
+It integrates all UI components and connects to the core services.
+"""
+
+import sys
+import logging
+from typing import Dict, List, Optional, Any
+from pathlib import Path
+
+from PyQt6.QtWidgets import (
+    QMainWindow, QApplication, QWidget, QVBoxLayout, QHBoxLayout, 
+    QLabel, QPushButton, QTabWidget, QToolBar, QStatusBar, 
+    QMenuBar, QMenu, QMessageBox, QDialog, QFileDialog, QAction,
+    QDockWidget, QSplitter
+)
+from PyQt6.QtGui import QIcon, QFont, QPixmap, QKeySequence, QCloseEvent
+from PyQt6.QtCore import Qt, QSize, QSettings, QTimer, pyqtSignal, QEvent
+
+# Import service interfaces
+from scout.core.detection.detection_service_interface import DetectionServiceInterface
+from scout.core.automation.automation_service_interface import AutomationServiceInterface
+from scout.core.game.game_state_service_interface import GameStateServiceInterface
+from scout.core.window.window_service_interface import WindowServiceInterface
+
+# Import service implementations (or mock implementations for now)
+from scout.core.detection.detection_service import DetectionService
+from scout.core.automation.automation_service import AutomationService
+from scout.core.game.game_state_service import GameStateService
+from scout.core.window.window_service import WindowService
+
+# Import UI components
+from scout.ui.views.detection_tab import DetectionTab
+from scout.ui.views.automation_tab import AutomationTab
+from scout.ui.views.game_tab import GameTab
+from scout.ui.views.settings_tab import SettingsTab
+from scout.ui.widgets.detection_result_widget import DetectionResultWidget
+
+# Set up logging
+logger = logging.getLogger(__name__)
+
+
+class ServiceLocator:
+    """
+    Service locator for managing application services.
+    
+    This class provides access to core services needed by the UI components,
+    ensuring type-safe access and proper initialization/shutdown.
+    """
+    
+    _services = {}  # Static dictionary of services
+    
+    @classmethod
+    def register(cls, interface_class, implementation):
+        """
+        Register a service implementation for a given interface.
+        
+        Args:
+            interface_class: Interface class that the implementation implements
+            implementation: Service implementation instance
+        """
+        cls._services[interface_class] = implementation
+        logger.debug(f"Registered service: {interface_class.__name__}")
+    
+    @classmethod
+    def get(cls, interface_class):
+        """
+        Get a service by its interface.
+        
+        Args:
+            interface_class: Interface class to look up
+            
+        Returns:
+            Implementation instance or None if not found
+        """
+        if interface_class in cls._services:
+            return cls._services[interface_class]
+        
+        logger.error(f"Service not found: {interface_class.__name__}")
+        return None
+    
+    @classmethod
+    def shutdown(cls):
+        """Shutdown all registered services."""
+        for service_class, service in cls._services.items():
+            try:
+                if hasattr(service, 'shutdown'):
+                    service.shutdown()
+                    logger.debug(f"Shut down service: {service_class.__name__}")
+            except Exception as e:
+                logger.error(f"Error shutting down service {service_class.__name__}: {str(e)}")
+        
+        cls._services.clear()
+
+
+class OverlayView(QWidget):
+    """
+    Transparent window for visualizing detection results in real-time.
+    
+    This window is overlaid on top of the target application window
+    and shows detection results as they occur.
+    """
+    
+    def __init__(self, window_service: WindowServiceInterface):
+        """
+        Initialize the overlay view.
+        
+        Args:
+            window_service: Service for window management
+        """
+        super().__init__(None, Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool)
+        
+        # Store services
+        self.window_service = window_service
+        
+        # Initialize state
+        self._results = []
+        self._target_window_rect = None
+        self._visible = False
+        
+        # Configure window
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAutoFillBackground(False)
+        
+        # Create update timer
+        self._create_update_timer()
+        
+        logger.info("Overlay view initialized")
+    
+    def _create_update_timer(self):
+        """Create timer for updating overlay position and content."""
+        self.update_timer = QTimer(self)
+        self.update_timer.timeout.connect(self._update_position)
+        self.update_timer.start(100)  # 10 fps
+    
+    def _update_position(self):
+        """Update overlay position to match target window."""
+        if self._visible:
+            # Get target window position and size
+            target_rect = self.window_service.get_window_rect()
+            
+            if target_rect != self._target_window_rect:
+                # Update overlay position and size
+                self.setGeometry(target_rect)
+                self._target_window_rect = target_rect
+                self.update()
+    
+    def set_results(self, results: List[Dict[str, Any]]):
+        """
+        Set detection results to display.
+        
+        Args:
+            results: List of detection result dictionaries
+        """
+        self._results = results
+        self.update()
+    
+    def show_overlay(self, show: bool):
+        """
+        Show or hide the overlay.
+        
+        Args:
+            show: Whether to show the overlay
+        """
+        self._visible = show
+        
+        if show:
+            # Update position before showing
+            self._update_position()
+            self.show()
+        else:
+            self.hide()
+    
+    def paintEvent(self, event):
+        """
+        Handle paint event.
+        
+        Args:
+            event: Paint event
+        """
+        if not self._visible or not self._results:
+            return
+        
+        # Create painter
+        painter = self.window_service.create_overlay_painter(self)
+        
+        # Draw results
+        self.window_service.draw_detection_results(painter, self._results)
+
+
+class MainWindow(QMainWindow):
+    """
+    Main application window for Scout.
+    
+    This window integrates all UI components and connects to core services.
+    It provides a tabbed interface for detection, automation, game state,
+    and settings, as well as menus and toolbars for common actions.
+    """
+    
+    def __init__(self):
+        """Initialize the main window."""
+        super().__init__()
+        
+        # Initialize services and register with locator
+        self._initialize_services()
+        
+        # Create UI components
+        self._create_ui()
+        
+        # Connect signals
+        self._connect_signals()
+        
+        # Load settings
+        self._load_settings()
+        
+        # Create overlay
+        self._create_overlay()
+        
+        logger.info("Main window initialized")
+    
+    def _initialize_services(self):
+        """Initialize and register core services."""
+        # Create service instances
+        window_service = WindowService()
+        detection_service = DetectionService(window_service)
+        automation_service = AutomationService(window_service)
+        game_state_service = GameStateService()
+        
+        # Register with locator
+        ServiceLocator.register(WindowServiceInterface, window_service)
+        ServiceLocator.register(DetectionServiceInterface, detection_service)
+        ServiceLocator.register(AutomationServiceInterface, automation_service)
+        ServiceLocator.register(GameStateServiceInterface, game_state_service)
+        
+        # Store references
+        self.window_service = window_service
+        self.detection_service = detection_service
+        self.automation_service = automation_service
+        self.game_state_service = game_state_service
+        
+        logger.info("Services initialized and registered")
+    
+    def _create_ui(self):
+        """Create the UI components."""
+        # Set window properties
+        self.setWindowTitle("Scout")
+        self.setMinimumSize(800, 600)
+        
+        # Create central widget
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        
+        # Create main layout
+        main_layout = QVBoxLayout(central_widget)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Create tabs
+        self.tab_widget = QTabWidget()
+        main_layout.addWidget(self.tab_widget)
+        
+        # Create tabs
+        self._create_tabs()
+        
+        # Create menu bar
+        self._create_menu_bar()
+        
+        # Create toolbar
+        self._create_toolbar()
+        
+        # Create status bar
+        self._create_status_bar()
+    
+    def _create_tabs(self):
+        """Create the tab widget and individual tabs."""
+        # Create detection tab
+        self.detection_tab = DetectionTab(self.detection_service, self.window_service)
+        self.tab_widget.addTab(self.detection_tab, "Detection")
+        
+        # Create automation tab
+        self.automation_tab = AutomationTab(
+            self.automation_service, self.detection_service, self.window_service)
+        self.tab_widget.addTab(self.automation_tab, "Automation")
+        
+        # Create game state tab
+        self.game_tab = GameTab(self.game_state_service, self.detection_service)
+        self.tab_widget.addTab(self.game_tab, "Game State")
+        
+        # Create settings tab
+        self.settings_tab = SettingsTab()
+        self.tab_widget.addTab(self.settings_tab, "Settings")
+    
+    def _create_menu_bar(self):
+        """Create the menu bar."""
+        # Create menu bar
+        menu_bar = self.menuBar()
+        
+        # File menu
+        file_menu = menu_bar.addMenu("File")
+        
+        # File -> New
+        new_action = QAction("New", self)
+        new_action.setShortcut(QKeySequence.StandardKey.New)
+        new_action.triggered.connect(self._on_new)
+        file_menu.addAction(new_action)
+        
+        # File -> Open
+        open_action = QAction("Open", self)
+        open_action.setShortcut(QKeySequence.StandardKey.Open)
+        open_action.triggered.connect(self._on_open)
+        file_menu.addAction(open_action)
+        
+        # File -> Save
+        save_action = QAction("Save", self)
+        save_action.setShortcut(QKeySequence.StandardKey.Save)
+        save_action.triggered.connect(self._on_save)
+        file_menu.addAction(save_action)
+        
+        # File -> Save As
+        save_as_action = QAction("Save As", self)
+        save_as_action.setShortcut(QKeySequence.StandardKey.SaveAs)
+        save_as_action.triggered.connect(self._on_save_as)
+        file_menu.addAction(save_as_action)
+        
+        file_menu.addSeparator()
+        
+        # File -> Exit
+        exit_action = QAction("Exit", self)
+        exit_action.setShortcut(QKeySequence.StandardKey.Quit)
+        exit_action.triggered.connect(self.close)
+        file_menu.addAction(exit_action)
+        
+        # Edit menu
+        edit_menu = menu_bar.addMenu("Edit")
+        
+        # Edit -> Preferences
+        preferences_action = QAction("Preferences", self)
+        preferences_action.triggered.connect(self._on_preferences)
+        edit_menu.addAction(preferences_action)
+        
+        # View menu
+        view_menu = menu_bar.addMenu("View")
+        
+        # View -> Overlay
+        self.overlay_action = QAction("Show Overlay", self)
+        self.overlay_action.setCheckable(True)
+        self.overlay_action.setChecked(False)
+        self.overlay_action.triggered.connect(self._on_toggle_overlay)
+        view_menu.addAction(self.overlay_action)
+        
+        # View -> Refresh
+        refresh_action = QAction("Refresh", self)
+        refresh_action.setShortcut(QKeySequence.StandardKey.Refresh)
+        refresh_action.triggered.connect(self._on_refresh)
+        view_menu.addAction(refresh_action)
+        
+        # Tools menu
+        tools_menu = menu_bar.addMenu("Tools")
+        
+        # Tools -> Capture Screenshot
+        screenshot_action = QAction("Capture Screenshot", self)
+        screenshot_action.triggered.connect(self._on_capture_screenshot)
+        tools_menu.addAction(screenshot_action)
+        
+        # Tools -> Template Creator
+        template_creator_action = QAction("Template Creator", self)
+        template_creator_action.triggered.connect(self._on_template_creator)
+        tools_menu.addAction(template_creator_action)
+        
+        # Tools -> Sequence Recorder
+        sequence_recorder_action = QAction("Sequence Recorder", self)
+        sequence_recorder_action.triggered.connect(self._on_sequence_recorder)
+        tools_menu.addAction(sequence_recorder_action)
+        
+        # Help menu
+        help_menu = menu_bar.addMenu("Help")
+        
+        # Help -> Documentation
+        docs_action = QAction("Documentation", self)
+        docs_action.triggered.connect(self._on_documentation)
+        help_menu.addAction(docs_action)
+        
+        # Help -> About
+        about_action = QAction("About", self)
+        about_action.triggered.connect(self._on_about)
+        help_menu.addAction(about_action)
+    
+    def _create_toolbar(self):
+        """Create the toolbar."""
+        # Create toolbar
+        toolbar = QToolBar("Main Toolbar")
+        toolbar.setMovable(False)
+        toolbar.setIconSize(QSize(24, 24))
+        self.addToolBar(toolbar)
+        
+        # Add actions
+        # TODO: Replace with actual icons
+        
+        # New action
+        new_action = QAction("New", self)
+        new_action.triggered.connect(self._on_new)
+        toolbar.addAction(new_action)
+        
+        # Open action
+        open_action = QAction("Open", self)
+        open_action.triggered.connect(self._on_open)
+        toolbar.addAction(open_action)
+        
+        # Save action
+        save_action = QAction("Save", self)
+        save_action.triggered.connect(self._on_save)
+        toolbar.addAction(save_action)
+        
+        toolbar.addSeparator()
+        
+        # Screenshot action
+        screenshot_action = QAction("Screenshot", self)
+        screenshot_action.triggered.connect(self._on_capture_screenshot)
+        toolbar.addAction(screenshot_action)
+        
+        # Overlay action
+        overlay_action = QAction("Overlay", self)
+        overlay_action.setCheckable(True)
+        overlay_action.setChecked(False)
+        overlay_action.triggered.connect(self._on_toggle_overlay)
+        toolbar.addAction(overlay_action)
+        
+        toolbar.addSeparator()
+        
+        # Run action
+        run_action = QAction("Run", self)
+        run_action.triggered.connect(self._on_run)
+        toolbar.addAction(run_action)
+        
+        # Stop action
+        stop_action = QAction("Stop", self)
+        stop_action.triggered.connect(self._on_stop)
+        toolbar.addAction(stop_action)
+        
+        # Store reference
+        self.toolbar = toolbar
+    
+    def _create_status_bar(self):
+        """Create the status bar."""
+        # Create status bar
+        status_bar = QStatusBar()
+        self.setStatusBar(status_bar)
+        
+        # Create status labels
+        self.status_label = QLabel("Ready")
+        status_bar.addWidget(self.status_label, 1)
+        
+        # Create window status label
+        self.window_status = QLabel("No target window")
+        status_bar.addPermanentWidget(self.window_status)
+    
+    def _create_overlay(self):
+        """Create the overlay window."""
+        self.overlay = OverlayView(self.window_service)
+    
+    def _connect_signals(self):
+        """Connect signals between components."""
+        # Connect detection tab signals
+        self.detection_tab.detection_results_ready.connect(self._on_detection_results)
+        
+        # Connect settings tab signals
+        self.settings_tab.settings_changed.connect(self._on_settings_changed)
+        
+        # Connect window service signals
+        self.window_service.window_selected.connect(self._on_window_selected)
+        self.window_service.window_lost.connect(self._on_window_lost)
+    
+    def _load_settings(self):
+        """Load application settings."""
+        settings = QSettings("ScoutTeam", "Scout")
+        
+        # Load window geometry
+        if settings.contains("mainwindow/geometry"):
+            self.restoreGeometry(settings.value("mainwindow/geometry"))
+        
+        # Load window state
+        if settings.contains("mainwindow/state"):
+            self.restoreState(settings.value("mainwindow/state"))
+        
+        # Load last active tab
+        if settings.contains("mainwindow/active_tab"):
+            active_tab = int(settings.value("mainwindow/active_tab", 0))
+            self.tab_widget.setCurrentIndex(active_tab)
+    
+    def _save_settings(self):
+        """Save application settings."""
+        settings = QSettings("ScoutTeam", "Scout")
+        
+        # Save window geometry
+        settings.setValue("mainwindow/geometry", self.saveGeometry())
+        
+        # Save window state
+        settings.setValue("mainwindow/state", self.saveState())
+        
+        # Save active tab
+        settings.setValue("mainwindow/active_tab", self.tab_widget.currentIndex())
+    
+    def closeEvent(self, event: QCloseEvent):
+        """
+        Handle window close event.
+        
+        Args:
+            event: Close event
+        """
+        # Save settings
+        self._save_settings()
+        
+        # Hide overlay
+        if self.overlay:
+            self.overlay.hide()
+        
+        # Shut down services
+        ServiceLocator.shutdown()
+        
+        # Accept event
+        event.accept()
+    
+    def _on_detection_results(self, results: List[Dict[str, Any]]):
+        """
+        Handle detection results from the detection tab.
+        
+        Args:
+            results: List of detection result dictionaries
+        """
+        # Update overlay with results
+        if self.overlay and self.overlay._visible:
+            self.overlay.set_results(results)
+    
+    def _on_settings_changed(self, settings: Dict[str, Any]):
+        """
+        Handle settings changes.
+        
+        Args:
+            settings: Updated settings dictionary
+        """
+        # Apply settings to services
+        # This is a simplified version - in a real app, we'd need to
+        # update each service with its specific settings
+        
+        # Update window service settings
+        window_settings = settings.get("window", {})
+        if window_settings:
+            self.window_service.apply_settings(window_settings)
+        
+        # Update detection service settings
+        detection_settings = settings.get("detection", {})
+        if detection_settings:
+            self.detection_service.apply_settings(detection_settings)
+        
+        # Update automation service settings
+        automation_settings = settings.get("automation", {})
+        if automation_settings:
+            self.automation_service.apply_settings(automation_settings)
+        
+        # Update UI settings
+        ui_settings = settings.get("ui", {})
+        if ui_settings:
+            self._apply_ui_settings(ui_settings)
+    
+    def _apply_ui_settings(self, ui_settings: Dict[str, Any]):
+        """
+        Apply UI settings.
+        
+        Args:
+            ui_settings: UI settings dictionary
+        """
+        # Apply theme
+        theme = ui_settings.get("theme", "system")
+        # TODO: Implement theme switching
+        
+        # Apply font size
+        font_size = ui_settings.get("font_size", 10)
+        font = QFont()
+        font.setPointSize(font_size)
+        QApplication.setFont(font)
+        
+        # Apply other UI settings as needed
+    
+    def _on_window_selected(self, window_info: Dict[str, Any]):
+        """
+        Handle window selection event.
+        
+        Args:
+            window_info: Window information dictionary
+        """
+        # Update status bar
+        window_title = window_info.get("title", "Unknown")
+        self.window_status.setText(f"Target: {window_title}")
+        
+        # Enable actions that require a target window
+        self.overlay_action.setEnabled(True)
+    
+    def _on_window_lost(self):
+        """Handle window loss event."""
+        # Update status bar
+        self.window_status.setText("No target window")
+        
+        # Disable overlay
+        self.overlay_action.setChecked(False)
+        self._on_toggle_overlay(False)
+        
+        # Disable actions that require a target window
+        self.overlay_action.setEnabled(False)
+    
+    def _on_toggle_overlay(self, checked: bool):
+        """
+        Handle overlay toggle.
+        
+        Args:
+            checked: Whether the overlay should be shown
+        """
+        if self.overlay:
+            self.overlay.show_overlay(checked)
+    
+    def _on_new(self):
+        """Handle new action."""
+        # This depends on what "new" means in your application
+        # It could be a new configuration, a new automation sequence, etc.
+        
+        # For now, just show a message
+        QMessageBox.information(
+            self,
+            "New",
+            "New action not yet implemented."
+        )
+    
+    def _on_open(self):
+        """Handle open action."""
+        # Open file dialog
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Open File",
+            "",
+            "Scout Files (*.scout);;All Files (*)"
+        )
+        
+        if file_path:
+            # Load file
+            # TODO: Implement file loading
+            
+            # Show message
+            QMessageBox.information(
+                self,
+                "Open",
+                f"File opened: {file_path}"
+            )
+    
+    def _on_save(self):
+        """Handle save action."""
+        # This depends on what you're saving
+        # It could be the current configuration, the current automation sequence, etc.
+        
+        # For now, just show a message
+        QMessageBox.information(
+            self,
+            "Save",
+            "Save action not yet implemented."
+        )
+    
+    def _on_save_as(self):
+        """Handle save as action."""
+        # Open file dialog
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save File",
+            "",
+            "Scout Files (*.scout);;All Files (*)"
+        )
+        
+        if file_path:
+            # Save file
+            # TODO: Implement file saving
+            
+            # Show message
+            QMessageBox.information(
+                self,
+                "Save As",
+                f"File saved: {file_path}"
+            )
+    
+    def _on_preferences(self):
+        """Handle preferences action."""
+        # Switch to settings tab
+        self.tab_widget.setCurrentWidget(self.settings_tab)
+    
+    def _on_refresh(self):
+        """Handle refresh action."""
+        # Refresh current tab
+        current_tab = self.tab_widget.currentWidget()
+        
+        if hasattr(current_tab, 'refresh'):
+            current_tab.refresh()
+    
+    def _on_capture_screenshot(self):
+        """Handle capture screenshot action."""
+        # Capture screenshot
+        screenshot = self.window_service.capture_screenshot()
+        
+        if screenshot is not None:
+            # Open file dialog
+            file_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Save Screenshot",
+                "",
+                "PNG Images (*.png);;JPEG Images (*.jpg);;All Files (*)"
+            )
+            
+            if file_path:
+                # Save screenshot
+                import cv2
+                cv2.imwrite(file_path, screenshot)
+                
+                # Show message
+                QMessageBox.information(
+                    self,
+                    "Screenshot",
+                    f"Screenshot saved to {file_path}"
+                )
+        else:
+            # Show error message
+            QMessageBox.warning(
+                self,
+                "Screenshot",
+                "Failed to capture screenshot. No target window selected."
+            )
+    
+    def _on_template_creator(self):
+        """Handle template creator action."""
+        # TODO: Implement template creator dialog
+        
+        # For now, just show a message
+        QMessageBox.information(
+            self,
+            "Template Creator",
+            "Template creator not yet implemented."
+        )
+    
+    def _on_sequence_recorder(self):
+        """Handle sequence recorder action."""
+        # TODO: Implement sequence recorder dialog
+        
+        # For now, just show a message
+        QMessageBox.information(
+            self,
+            "Sequence Recorder",
+            "Sequence recorder not yet implemented."
+        )
+    
+    def _on_documentation(self):
+        """Handle documentation action."""
+        # TODO: Open documentation
+        
+        # For now, just show a message
+        QMessageBox.information(
+            self,
+            "Documentation",
+            "Documentation not yet implemented."
+        )
+    
+    def _on_about(self):
+        """Handle about action."""
+        # Show about dialog
+        QMessageBox.about(
+            self,
+            "About Scout",
+            "Scout - Game Automation and Detection Tool\n\n"
+            "Version: 0.1.0\n"
+            "Copyright © 2023"
+        )
+    
+    def _on_run(self):
+        """Handle run action."""
+        # This depends on what you're running
+        # It could be detection, automation, etc.
+        
+        # For now, just delegate to the current tab
+        current_tab = self.tab_widget.currentWidget()
+        
+        if hasattr(current_tab, 'run'):
+            current_tab.run()
+        else:
+            # Show message
+            QMessageBox.information(
+                self,
+                "Run",
+                "Run action not available for the current tab."
+            )
+    
+    def _on_stop(self):
+        """Handle stop action."""
+        # This depends on what you're stopping
+        # It could be detection, automation, etc.
+        
+        # For now, just delegate to the current tab
+        current_tab = self.tab_widget.currentWidget()
+        
+        if hasattr(current_tab, 'stop'):
+            current_tab.stop()
+        else:
+            # Show message
+            QMessageBox.information(
+                self,
+                "Stop",
+                "Stop action not available for the current tab."
+            )
+
+
+def run_application():
+    """Run the Scout application."""
+    # Create application
+    app = QApplication(sys.argv)
+    app.setApplicationName("Scout")
+    app.setOrganizationName("ScoutTeam")
+    
+    # Create main window
+    main_window = MainWindow()
+    main_window.show()
+    
+    # Run application
+    sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    # Set up logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
+    
+    # Run application
+    run_application() 

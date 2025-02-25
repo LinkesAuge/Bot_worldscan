@@ -1,0 +1,348 @@
+---
+description: 
+globs: 
+---
+---
+description: 
+globs: 
+---
+# Project Memory
+
+Date: 2023-11-30
+Status: Implementation in progress
+Phase: Phase 3 - Integration and Testing
+Active Task: UI Components
+
+## Project Structure
+The project is organized as follows:
+
+```
+scout/
+├── __init__.py
+├── core/
+│   ├── __init__.py
+│   ├── design/
+│   │   ├── __init__.py
+│   │   ├── singleton.py
+│   │   ├── observer.py
+│   │   ├── strategy.py
+│   │   └── factory.py
+│   ├── events/
+│   │   ├── __init__.py
+│   │   ├── event.py
+│   │   ├── event_bus.py
+│   │   └── event_types.py
+│   ├── window/
+│   │   ├── __init__.py
+│   │   ├── window_service.py
+│   │   ├── window_service_interface.py
+│   │   ├── window_capture.py
+│   │   └── capture_strategies.py
+│   ├── detection/
+│   │   ├── __init__.py
+│   │   ├── detection_service.py
+│   │   ├── detection_service_interface.py
+│   │   ├── strategy.py
+│   │   └── strategies/
+│   │       ├── __init__.py
+│   │       ├── template_strategy.py
+│   │       ├── ocr_strategy.py
+│   │       └── yolo_strategy.py
+│   ├── game/
+│   │   ├── __init__.py
+│   │   ├── game_state.py
+│   │   ├── game_service.py
+│   │   └── game_service_interface.py
+│   ├── automation/
+│   │   ├── __init__.py
+│   │   ├── automation_service.py
+│   │   ├── automation_service_interface.py
+│   │   ├── task.py
+│   │   └── tasks/
+│   │       ├── __init__.py
+│   │       ├── basic_tasks.py
+│   │       └── game_tasks.py
+│   ├── services/
+│   │   ├── __init__.py
+│   │   └── service_locator.py
+│   └── utils/
+│       ├── __init__.py
+│       ├── performance.py
+│       ├── caching.py
+│       ├── parallel.py
+│       ├── memory.py
+│       └── benchmark.py
+├── ui/
+│   ├── __init__.py
+│   ├── main_window.py
+│   ├── controllers/
+│   │   ├── __init__.py
+│   │   └── main_controller.py
+│   ├── models/
+│   │   ├── __init__.py
+│   │   └── settings_model.py
+│   ├── views/
+│   │   ├── __init__.py
+│   │   ├── detection_tab.py
+│   │   ├── automation_tab.py
+│   │   ├── game_tab.py
+│   │   └── settings_tab.py
+│   └── widgets/
+│       ├── __init__.py
+│       ├── template_list_widget.py
+│       ├── detection_result_widget.py
+│       ├── task_editor_widget.py
+│       └── game_state_widget.py
+├── resources/
+│   ├── templates/
+│   ├── sequences/
+│   ├── logs/
+│   └── states/
+├── tests/
+│   ├── __init__.py
+│   ├── core/
+│   │   ├── __init__.py
+│   │   ├── test_event_bus.py
+│   │   ├── test_window_service.py
+│   │   ├── test_game_service.py
+│   │   ├── test_automation_service.py
+│   │   └── detection/
+│   │       ├── __init__.py
+│   │       ├── test_template_strategy.py
+│   │       ├── test_ocr_strategy.py
+│   │       ├── test_yolo_strategy.py
+│   │       └── test_detection_service.py
+│   ├── integration/
+│   │   ├── __init__.py
+│   │   ├── test_window_detection_integration.py
+│   │   ├── test_detection_game_integration.py
+│   │   ├── test_game_automation_integration.py
+│   │   └── test_end_to_end_integration.py
+│   └── e2e/
+│       ├── __init__.py
+│       ├── test_resource_collection_workflow.py
+│       ├── test_building_upgrade_workflow.py
+│       └── test_map_exploration_workflow.py
+├── benchmark_detection.py
+└── main.py
+```
+
+## Project Plan Progress
+
+### Phase 1: Core Infrastructure (COMPLETED)
+- ✅ Design Patterns Implementation
+- ✅ Event System
+- ✅ Service Interfaces
+
+### Phase 2: Module Refactoring (COMPLETED)
+- ✅ Window Management Module
+- ✅ Detection System Module
+  - ✅ Template Matching Strategy
+  - ✅ OCR Strategy
+  - ✅ YOLO Strategy
+  - ✅ Detection Service Implementation
+- ✅ Game State Module
+  - ✅ Game State Data Models
+  - ✅ Game Service Implementation
+  - ✅ Game Service Interface
+- ✅ Automation Module
+  - ✅ Task Interface and Models
+  - ✅ Basic Task Types
+  - ✅ Game-Specific Task Types
+  - ✅ Automation Service Implementation
+  - ✅ Task Scheduler and Executor
+
+### Phase 3: Integration and Testing (IN PROGRESS)
+- ✅ Integration Tests (COMPLETED)
+  - ✅ Window-Detection Integration Tests
+  - ✅ Detection-Game Integration Tests
+  - ✅ Game-Automation Integration Tests
+  - ✅ End-to-End Integration Tests
+- ✅ End-to-End Testing (COMPLETED)
+  - ✅ Resource Collection Workflow
+  - ✅ Building Upgrade Workflow
+  - ✅ Map Exploration Workflow
+- ✅ Performance Optimization (COMPLETED)
+  - ✅ Profiling and Bottleneck Identification
+  - ✅ Caching Implementation
+  - ✅ Parallel Processing
+  - ✅ Memory Management
+  - ✅ Integration of Optimizations
+  - ✅ Performance Testing and Verification
+- 🔄 UI Components (IN PROGRESS)
+  - ✅ Core UI Framework
+    - ✅ Created __init__.py files for all UI packages
+    - ✅ Implemented ServiceLocator for dependency management
+    - ✅ Implemented OverlayView for visualization
+    - ✅ Implemented MainWindow with event handling
+    - ✅ Set up menus, toolbars, and status bar
+  - ✅ Tab-specific Views
+    - ✅ Implemented DetectionTab for configuring and running detection operations
+    - ✅ Implemented AutomationTab for managing automation sequences
+    - ✅ Implemented GameTab for state management and transitions
+    - ✅ Implemented SettingsTab for application configuration
+  - ✅ Specialized UI Widgets
+    - ✅ Implemented TemplateListWidget for template management
+    - ✅ Implemented DetectionResultWidget for result visualization
+  - 🔄 Control Panel (IN PROGRESS)
+    - ⬜ Main application controls
+    - ⬜ Quick access toolbar
+    - ⬜ Context-sensitive action panel
+  - ⬜ Visualization Components
+    - ⬜ Real-time detection overlay
+    - ⬜ Historical detection visualization
+    - ⬜ Game state visualization
+  - ⬜ Configuration Interface
+    - ⬜ Detection configuration
+    - ⬜ Automation sequence configuration
+    - ⬜ Application settings configuration
+
+## Implementation Notes
+
+### Core Infrastructure
+- Implemented singleton, observer, strategy, and factory patterns
+- Created an event system with pub/sub functionality
+- Defined service interfaces for all major components
+
+### Window Management Module
+- Implemented `WindowService` following the `WindowServiceInterface`
+- Created `WindowCapture` using Strategy pattern for different capture methods
+  - `MSSCaptureStrategy` for fast screen capture
+  - `Win32CaptureStrategy` for precise client area capture
+- Added event-based notifications for window state changes
+- Implemented coordinate conversions between screen and client coordinates
+- Created unit tests to verify functionality
+- Enhanced window tracking with DPI scaling awareness
+
+### Detection System Module
+- Created `DetectionStrategy` interface with common detection methods
+- Implemented multiple concrete detection strategies:
+  - `TemplateMatchingStrategy`: For image template-based detection
+    - Supports loading templates from directory
+    - Configurable matching method and threshold
+    - Performance optimized with result grouping
+  - `OCRStrategy`: For text recognition using Tesseract OCR
+    - Supports multiple preprocessing methods
+    - Region-specific text extraction
+    - Pattern matching and confidence filtering
+  - `YOLOStrategy`: For neural network-based object detection
+    - Support for multiple frameworks (OpenCV, ONNX, Ultralytics)
+    - Configurable confidence thresholds
+    - Class filtering capabilities
+- Implemented `DetectionService` that:
+  - Manages and coordinates multiple detection strategies
+  - Provides convenient methods for common detection tasks
+  - Implements caching for improved performance
+  - Publishes events when detections occur
+  - Integrates with WindowService for screenshot capture
+- Created comprehensive unit tests for all components
+- Added standardized detection result format for consistency across strategies
+
+### Game State Module
+- Created comprehensive Game State data models:
+  - `Coordinates`: For tracking positions in the game world
+  - `Resource` and `Resources`: For tracking game resources
+  - `Building`: For tracking buildings and their levels
+  - `Army`: For tracking armies and units
+  - `MapEntity`: For tracking entities discovered on the map
+  - `GameState`: Central data structure for game state
+- Implemented `GameService` that:
+  - Uses the Detection Service to extract game information from screenshots
+  - Maintains and updates the game state based on detections
+  - Parses text to extract coordinates and resource information
+  - Processes different types of detection results (template, OCR, YOLO)
+  - Persists the game state to disk for continuity across sessions
+  - Publishes events when the game state changes
+  - Provides a clean interface for querying the game state
+- Created `GameServiceInterface` to define the contract for game services
+- Implemented detection region configuration for targeted analysis
+- Added coordinate conversion between screen and game-world coordinates
+- Created comprehensive unit tests for the Game Service
+
+### Automation Module
+- Designed a flexible Task system using the Command pattern:
+  - `Task`: Base class for all automation tasks
+  - `CompositeTask`: For composing multiple tasks into sequences
+  - Task dependencies and priorities
+  - Support for success/failure callbacks
+  - Comprehensive task status tracking
+- Implemented a wide range of task types:
+  - Basic tasks: Click, Drag, Type, Wait, Detect
+  - Game-specific tasks: NavigateToCoordinates, WaitForElement, CollectResources, ScanArea
+- Created `AutomationService` that:
+  - Manages scheduling and execution of tasks
+  - Handles task dependencies and priorities
+  - Executes tasks in a background thread
+  - Provides callbacks for task completion
+  - Handles error recovery and retry logic
+  - Supports saving and loading task sequences
+  - Integrates with other services via the service locator
+
+### UI Components
+- Implemented a clean directory structure following the MVC pattern:
+  - `controllers/`: For application logic
+  - `models/`: For data models
+  - `views/`: For tab-specific UI views
+  - `widgets/`: For reusable UI components
+- Created the core UI framework:
+  - `ServiceLocator`: For managing service dependencies with type-safe access
+  - `OverlayView`: Transparent window for visualizing detection results
+  - `MainWindow`: Application window with tabs, menus, and event handling
+- Implemented tab-specific views:
+  - `DetectionTab`: For configuring and running detection operations
+    - Support for multiple detection strategies
+    - Template management interface
+    - Detection result visualization
+  - `AutomationTab`: For creating and managing automation sequences
+    - Sequence editor for adding/removing/reordering actions
+    - Action property editor for configuring actions
+    - Execution controls for running/stopping sequences
+  - `GameTab`: For managing game state
+    - State variable editor for viewing/editing state
+    - State transition editor for defining state transitions
+    - State history view for tracking changes
+  - `SettingsTab`: For configuring application settings
+    - Tabbed interface for different setting categories
+    - Settings model for loading/saving/validating settings
+- Created specialized UI widgets:
+  - `TemplateListWidget`: For managing and selecting template images
+    - Template import/delete/rename functionality
+    - Preview capabilities
+    - Drag-and-drop support
+  - `DetectionResultWidget`: For visualizing detection results
+    - Image display with result overlays
+    - Results table with details and selection
+    - Zoom/pan capabilities for detailed inspection
+
+## Next Steps
+1. Complete UI Components:
+   - Implement tab-specific views:
+     - Detection tab for managing detection operations
+     - Automation tab for creating and running task sequences
+     - Game State tab for viewing and editing game data
+     - Settings tab for application configuration
+   - Create specialized UI widgets:
+     - Template list widget
+     - Detection result visualization
+     - Task editor and sequence builder
+     - Game state visualization
+2. Prepare for final release:
+   - Documentation
+   - Configuration system
+   - Error reporting
+   - Packaging and distribution
+
+## Dependencies
+- Core:
+  - OpenCV: For image processing and template matching
+  - Tesseract OCR: For text recognition
+  - Pytesseract: Python binding for Tesseract
+  - MSS: For fast screen capture
+  - NumPy: For numerical operations
+  - Psutil: For system resource monitoring
+  - Matplotlib: For visualization of benchmark results
+- UI:
+  - PyQt6: For GUI framework
+- Optional:
+  - ONNX Runtime: For ONNX model inference
+  - Ultralytics: For YOLOv8 models
