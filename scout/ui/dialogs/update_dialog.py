@@ -362,7 +362,7 @@ class UpdateDialog(QDialog):
         
         # Add changelog if available
         if self.update_info.get("changelog"):
-            html += f"<h4>{tr('What\'s New:')}</h4>"
+            html += "<h4>" + tr('What is New:') + "</h4>"
             html += f"<div>{self.update_info['changelog']}</div>"
         
         # Set HTML in browser

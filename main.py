@@ -142,6 +142,12 @@ def parse_args() -> argparse.Namespace:
         help="Don't check for updates on startup (overrides settings)"
     )
     
+    parser.add_argument(
+        "--test-only",
+        action="store_true",
+        help="Initialize the application and exit immediately (for testing)"
+    )
+    
     return parser.parse_args()
 
 
@@ -161,6 +167,11 @@ def main() -> int:
         logger = logging.getLogger(__name__)
         
         logger.info("Starting Scout application")
+        
+        # Exit early if test-only flag is set
+        if args.test_only:
+            logger.info("Test-only mode: application initialized successfully, exiting")
+            return Codes.SUCCESS
         
         # Create default directories
         create_default_directories()

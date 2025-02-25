@@ -1,6 +1,6 @@
-# Installation Guide
+# Installation Guide for Scout 1.0.0 - 2025-02-28
 
-This guide provides detailed instructions for installing Scout on your system. Scout is primarily developed for Windows and requires several dependencies to function properly.
+This guide provides detailed instructions for installing Scout 1.0.0 on your system. Scout is primarily developed for Windows and requires several dependencies to function properly.
 
 ## Prerequisites
 

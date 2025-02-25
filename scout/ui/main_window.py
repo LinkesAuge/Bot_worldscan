@@ -15,22 +15,26 @@ from pathlib import Path
 from PyQt6.QtWidgets import (
     QMainWindow, QApplication, QWidget, QVBoxLayout, QHBoxLayout, 
     QLabel, QPushButton, QTabWidget, QToolBar, QStatusBar, 
-    QMenuBar, QMenu, QMessageBox, QDialog, QFileDialog, QAction,
+    QMenuBar, QMenu, QMessageBox, QDialog, QFileDialog, 
     QDockWidget, QSplitter
 )
-from PyQt6.QtGui import QIcon, QFont, QPixmap, QKeySequence, QCloseEvent
+from PyQt6.QtGui import QIcon, QFont, QPixmap, QKeySequence, QCloseEvent, QAction
 from PyQt6.QtCore import Qt, QSize, QSettings, QTimer, pyqtSignal, QEvent, QThread
 
-# Import service interfaces
-from scout.core.detection.detection_service_interface import DetectionServiceInterface
-from scout.core.automation.automation_service_interface import AutomationServiceInterface
-from scout.core.game.game_state_service_interface import GameStateServiceInterface
-from scout.core.window.window_service_interface import WindowServiceInterface
+# Import service interfaces from the centralized interfaces module
+from scout.core.interfaces.service_interfaces import (
+    DetectionServiceInterface,
+    AutomationServiceInterface,
+    WindowServiceInterface
+)
+
+# Update the import path for the game service interface
+from scout.core.game.game_service_interface import GameServiceInterface as GameStateServiceInterface
 
 # Import service implementations (or mock implementations for now)
 from scout.core.detection.detection_service import DetectionService
 from scout.core.automation.automation_service import AutomationService
-from scout.core.game.game_state_service import GameStateService
+from scout.core.game.game_service import GameService as GameStateService
 from scout.core.window.window_service import WindowService
 
 # Import UI components

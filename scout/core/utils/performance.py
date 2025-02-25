@@ -15,7 +15,12 @@ import functools
 import gc
 import logging
 import os
-import psutil
+# Try to import real psutil, fall back to our stub implementation
+try:
+    import psutil
+except ImportError:
+    from .psutil_stub import Process, virtual_memory, cpu_count, cpu_percent, disk_usage
+    import scout.core.utils.psutil_stub as psutil
 import tracemalloc
 from typing import Callable, Dict, List, Tuple, Any, Optional
 import numpy as np

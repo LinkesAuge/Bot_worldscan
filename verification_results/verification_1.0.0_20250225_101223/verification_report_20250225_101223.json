@@ -1,0 +1,96 @@
+{
+  "version": "1.0.0",
+  "timestamp": "20250225_101223",
+  "platform": "Windows",
+  "system_info": {
+    "os": "Windows",
+    "os_version": "10.0.22631",
+    "os_release": "10",
+    "architecture": "AMD64",
+    "platform": "Windows-10-10.0.22631-SP0",
+    "python_version": "3.10.16",
+    "processor": "AMD64 Family 25 Model 97 Stepping 2, AuthenticAMD"
+  },
+  "summary": {
+    "total": 8,
+    "succeeded": 2,
+    "failed": 0,
+    "skipped": 6,
+    "not_run": 0,
+    "success_rate": 25.0
+  },
+  "results": [
+    {
+      "name": "Requirements Check",
+      "category": "Environment",
+      "status": "Success",
+      "details": "All required tools are installed",
+      "duration": 0.1766681671142578,
+      "start_time": 1740474743.8388898,
+      "end_time": 1740474744.015558
+    },
+    {
+      "name": "Version Consistency",
+      "category": "Code and Version",
+      "status": "Success",
+      "details": "Version numbers are consistent across all files",
+      "duration": 0.00099945068359375,
+      "start_time": 1740474744.015558,
+      "end_time": 1740474744.0165575
+    },
+    {
+      "name": "Documentation",
+      "category": "Documentation",
+      "status": "Skipped",
+      "details": "Documentation check skipped",
+      "duration": null,
+      "start_time": 1740474744.0165575,
+      "end_time": null
+    },
+    {
+      "name": "Linting",
+      "category": "Tests",
+      "status": "Skipped",
+      "details": "Linting skipped",
+      "duration": null,
+      "start_time": 1740474744.0165575,
+      "end_time": null
+    },
+    {
+      "name": "Unit Tests",
+      "category": "Tests",
+      "status": "Skipped",
+      "details": "Unit tests skipped",
+      "duration": null,
+      "start_time": 1740474744.0165575,
+      "end_time": null
+    },
+    {
+      "name": "Integration Tests",
+      "category": "Tests",
+      "status": "Skipped",
+      "details": "Integration tests skipped",
+      "duration": null,
+      "start_time": 1740474744.0165575,
+      "end_time": null
+    },
+    {
+      "name": "Windows Build",
+      "category": "Build",
+      "status": "Skipped",
+      "details": "Build skipped",
+      "duration": null,
+      "start_time": 1740474744.0165575,
+      "end_time": null
+    },
+    {
+      "name": "Release Artifacts",
+      "category": "Build",
+      "status": "Skipped",
+      "details": "Artifact generation skipped",
+      "duration": null,
+      "start_time": 1740474744.0165575,
+      "end_time": null
+    }
+  ]
+}

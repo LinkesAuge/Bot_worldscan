@@ -14,7 +14,7 @@ import uuid
 from datetime import datetime
 from functools import cmp_to_key
 
-from ..design.singleton import Singleton
+from ..design.singleton import SingletonProtocol
 from ..events.event_bus import EventBus
 from ..events.event import Event
 from ..events.event_types import EventType
@@ -23,7 +23,7 @@ from .task import Task, TaskStatus, TaskPriority
 
 logger = logging.getLogger(__name__)
 
-class AutomationService(AutomationServiceInterface, metaclass=Singleton):
+class AutomationService(AutomationServiceInterface, metaclass=SingletonProtocol):
     """
     Service for managing and executing automation tasks.
     

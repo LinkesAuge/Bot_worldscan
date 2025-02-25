@@ -15,7 +15,7 @@ import json
 import os
 from pathlib import Path
 
-from ..design.singleton import Singleton
+from ..design.singleton import SingletonProtocol
 from ..events.event_bus import EventBus
 from ..events.event import Event
 from ..events.event_types import EventType
@@ -28,7 +28,7 @@ from .game_state import (
 
 logger = logging.getLogger(__name__)
 
-class GameService(GameServiceInterface):
+class GameService(GameServiceInterface, metaclass=SingletonProtocol):
     """
     Service for managing the game state.
     

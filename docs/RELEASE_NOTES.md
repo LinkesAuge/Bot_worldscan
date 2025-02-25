@@ -1,6 +1,6 @@
 # Scout Release Notes
 
-## Version 1.0.0 (Final Release) - February 2025
+## Version 1.0.0 (Final Release) - 2025-02-28
 
 We're excited to announce the final release of Scout 1.0.0! This release marks the completion of all planned features and represents a stable, production-ready application for automating interactions with the Total Battle game.
 

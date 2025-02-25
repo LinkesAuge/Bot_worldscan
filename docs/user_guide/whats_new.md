@@ -1,6 +1,6 @@
-# What's New in Scout 1.0.0
+# What's New in Scout 1.0.0 - 2025-02-28
 
-This document highlights the new features and improvements in the Scout 1.0.0 release, focusing on how they enhance your experience with the application.
+This document highlights the new features and improvements in the Scout 1.0.0 release (2025-02-28), focusing on how they enhance your experience with the application.
 
 ## New Features
 
