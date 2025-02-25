@@ -15,6 +15,7 @@ from PyQt6.QtGui import QKeySequence
 from PyQt6.QtCore import Qt
 
 from scout.ui.utils.shortcuts import get_shortcut_manager, ShortcutContext
+from scout.ui.utils.language_manager import tr
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -41,7 +42,7 @@ class KeyboardShortcutsDialog(QDialog):
         self.shortcut_manager = get_shortcut_manager()
         
         # Set up dialog
-        self.setWindowTitle("Keyboard Shortcuts")
+        self.setWindowTitle(tr("Keyboard Shortcuts"))
         self.setMinimumSize(600, 400)
         self.resize(700, 500)
         
@@ -59,12 +60,12 @@ class KeyboardShortcutsDialog(QDialog):
         
         # Add tab for each context
         contexts = [
-            (ShortcutContext.APPLICATION, "Application"),
-            (ShortcutContext.NAVIGATION, "Navigation"),
-            (ShortcutContext.DETECTION, "Detection"),
-            (ShortcutContext.AUTOMATION, "Automation"),
-            (ShortcutContext.GAME, "Game"),
-            (ShortcutContext.DEBUGGING, "Debugging")
+            (ShortcutContext.APPLICATION, tr("Application")),
+            (ShortcutContext.NAVIGATION, tr("Navigation")),
+            (ShortcutContext.DETECTION, tr("Detection")),
+            (ShortcutContext.AUTOMATION, tr("Automation")),
+            (ShortcutContext.GAME, tr("Game")),
+            (ShortcutContext.DEBUGGING, tr("Debugging"))
         ]
         
         for context, title in contexts:
@@ -77,12 +78,12 @@ class KeyboardShortcutsDialog(QDialog):
         button_layout.addStretch()
         
         # Reset button
-        reset_button = QPushButton("Reset to Defaults")
+        reset_button = QPushButton(tr("Reset to Defaults"))
         reset_button.clicked.connect(self._on_reset)
         button_layout.addWidget(reset_button)
         
         # Close button
-        close_button = QPushButton("Close")
+        close_button = QPushButton(tr("Close"))
         close_button.clicked.connect(self.accept)
         button_layout.addWidget(close_button)
         
@@ -102,79 +103,79 @@ class KeyboardShortcutsDialog(QDialog):
         tab = QWidget()
         layout = QVBoxLayout(tab)
         
-        # Title
-        title = QLabel(f"{context.name.title()} Shortcuts")
-        title.setStyleSheet("font-weight: bold; font-size: 14px;")
-        layout.addWidget(title)
+        # Create shortcuts table
+        shortcuts_table = QTableWidget()
+        shortcuts_table.setColumnCount(3)
+        shortcuts_table.setHorizontalHeaderLabels([
+            tr("Action"), tr("Shortcut"), tr("Description")
+        ])
         
-        # Description
-        description = QLabel("These shortcuts are available in the application. "
-                            "Click on a shortcut to edit it.")
-        layout.addWidget(description)
+        # Adjust column sizes
+        shortcuts_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        shortcuts_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        shortcuts_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         
         # Get shortcuts for context
-        shortcuts = self.shortcut_manager.get_shortcuts_by_context(context)
+        shortcuts = self.shortcut_manager.get_shortcuts_for_context(context)
+        shortcuts_table.setRowCount(len(shortcuts))
         
-        # Create table
-        table = QTableWidget(len(shortcuts), 2)
-        table.setHorizontalHeaderLabels(["Action", "Shortcut"])
-        table.verticalHeader().setVisible(False)
-        table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        layout.addWidget(table)
-        
-        # Add shortcuts to table
-        row = 0
-        for shortcut_id, (key_sequence, description) in shortcuts.items():
-            # Create action item
-            action_item = QTableWidgetItem(description)
-            action_item.setData(Qt.ItemDataRole.UserRole, shortcut_id)
-            action_item.setFlags(action_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            table.setItem(row, 0, action_item)
+        # Populate table
+        for i, (shortcut_id, shortcut_info) in enumerate(shortcuts.items()):
+            # Action name
+            action_name = shortcut_info.get("name", shortcut_id)
+            action_item = QTableWidgetItem(action_name)
+            shortcuts_table.setItem(i, 0, action_item)
             
-            # Create shortcut item
-            shortcut_item = QTableWidgetItem(key_sequence.toString())
-            shortcut_item.setFlags(shortcut_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            table.setItem(row, 1, shortcut_item)
+            # Shortcut key sequence
+            key_sequence = shortcut_info.get("key_sequence", "")
+            key_item = QTableWidgetItem(key_sequence)
+            key_item.setData(Qt.ItemDataRole.UserRole, shortcut_id)  # Store ID for editing
+            shortcuts_table.setItem(i, 1, key_item)
             
-            row += 1
+            # Description
+            description = shortcut_info.get("description", "")
+            desc_item = QTableWidgetItem(description)
+            shortcuts_table.setItem(i, 2, desc_item)
         
-        # Connect double-click signal
-        table.itemDoubleClicked.connect(self._on_shortcut_edit)
+        # Double-click to edit shortcut
+        shortcuts_table.itemDoubleClicked.connect(self._on_shortcut_edit)
+        
+        # Add table to layout
+        layout.addWidget(shortcuts_table)
+        
+        # Add note about editing
+        note_label = QLabel(tr("Double-click on a shortcut to edit it."))
+        note_label.setStyleSheet("color: gray; font-style: italic;")
+        layout.addWidget(note_label)
         
         return tab
     
     def _on_shortcut_edit(self, item):
         """
-        Handle shortcut edit request.
+        Handle shortcut editing.
         
         Args:
-            item: Table item that was double-clicked
+            item: Table item being edited
         """
-        # We only handle double-clicks on shortcut cells
+        # Only handle shortcut column
         if item.column() != 1:
             return
         
-        # Get shortcut ID from action item
-        action_item = item.tableWidget().item(item.row(), 0)
-        shortcut_id = action_item.data(Qt.ItemDataRole.UserRole)
+        # Get shortcut ID from item
+        shortcut_id = item.data(Qt.ItemDataRole.UserRole)
+        if not shortcut_id:
+            return
         
         # TODO: Implement shortcut editing dialog
-        logger.debug(f"Edit shortcut: {shortcut_id}")
+        logger.info(f"Editing shortcut: {shortcut_id}")
     
     def _on_reset(self):
-        """Handle reset to defaults action."""
-        # Reset shortcuts
+        """Handle reset button click."""
+        # Reset all shortcuts
         self.shortcut_manager.reset_shortcuts()
+        logger.info("Reset all shortcuts to defaults")
         
-        # Recreate layout to show updated shortcuts
-        # Remove old layout first
-        old_layout = self.layout()
-        if old_layout:
-            while old_layout.count():
-                item = old_layout.takeAt(0)
-                if item.widget():
-                    item.widget().deleteLater()
-        
-        # Create new layout
-        self._create_layout() 
+        # Refresh dialog
+        self.close()
+        self.__init__(self.parent())
+        self.show() 

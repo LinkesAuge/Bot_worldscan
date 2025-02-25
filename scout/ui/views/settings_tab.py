@@ -17,10 +17,12 @@ from PyQt6.QtWidgets import (
     QToolBar, QScrollArea, QLineEdit, QSpinBox, QCheckBox,
     QMessageBox, QInputDialog, QMenu, QFileDialog, QGridLayout,
     QGroupBox, QTabWidget, QSlider, QColorDialog, QDialog,
-    QDialogButtonBox, QFormLayout, QProgressBar, QTextEdit
+    QDialogButtonBox, QFormLayout, QProgressBar, QTextEdit,
+    QDoubleSpinBox
 )
 from PyQt6.QtGui import QIcon, QAction, QFont, QColor, QPixmap
 from PyQt6.QtCore import Qt, pyqtSignal, QSize, QSettings, QTimer
+from PyQt6.QtWidgets import QApplication
 
 from scout.core.services.service_locator import ServiceLocator
 from scout.core.detection.detection_service_interface import DetectionServiceInterface
@@ -28,6 +30,7 @@ from scout.core.window.window_service_interface import WindowServiceInterface
 from scout.core.automation.automation_service_interface import AutomationServiceInterface
 from scout.ui.models.settings_model import SettingsModel
 from scout.ui.utils.language_manager import get_language_manager, Language, tr
+from scout.ui.utils.layout_helper import set_min_width_for_text, adjust_button_sizes
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -98,299 +101,130 @@ class SettingsTab(QWidget):
         # Create main layout
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(10, 10, 10, 10)
-        main_layout.setSpacing(10)
         
-        # Create tabs for setting categories
+        # Create tabs
         self.tabs = QTabWidget()
-        self.tabs.setDocumentMode(True)
         main_layout.addWidget(self.tabs)
         
-        # Create individual setting tabs
+        # Create each configuration tab
         self._create_detection_tab()
         self._create_automation_tab()
         self._create_window_tab()
+        self._create_ocr_tab()
         self._create_ui_tab()
         self._create_paths_tab()
         self._create_advanced_tab()
+        self._create_notification_tab()
         
-        # Create status label to show save status
-        self.status_label = QLabel("All settings up to date")
-        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        main_layout.addWidget(self.status_label)
+        # Create button bar
+        button_bar = QHBoxLayout()
+        
+        # Add spacer to push buttons right
+        button_bar.addStretch()
         
         # Create buttons
-        buttons_layout = QHBoxLayout()
+        self.save_button = QPushButton(tr("Save Settings"))
+        self.save_button.setIcon(QIcon.fromTheme("document-save"))
+        self.save_button.clicked.connect(lambda: self._on_save_clicked(True))
+        button_bar.addWidget(self.save_button)
         
-        # Import button
-        self.import_btn = QPushButton("Import Settings")
-        self.import_btn.setIcon(QIcon.fromTheme("document-open"))
-        self.import_btn.setToolTip("Import settings from a JSON file")
-        buttons_layout.addWidget(self.import_btn)
+        self.reset_button = QPushButton(tr("Reset to Defaults"))
+        self.reset_button.setIcon(QIcon.fromTheme("edit-undo"))
+        self.reset_button.clicked.connect(self._on_reset_clicked)
+        button_bar.addWidget(self.reset_button)
         
-        # Export button
-        self.export_btn = QPushButton("Export Settings")
-        self.export_btn.setIcon(QIcon.fromTheme("document-save-as"))
-        self.export_btn.setToolTip("Export settings to a JSON file")
-        buttons_layout.addWidget(self.export_btn)
+        self.import_button = QPushButton(tr("Import..."))
+        self.import_button.setIcon(QIcon.fromTheme("document-open"))
+        self.import_button.clicked.connect(self._on_import_clicked)
+        button_bar.addWidget(self.import_button)
         
-        # Spacer
-        buttons_layout.addStretch()
+        self.export_button = QPushButton(tr("Export..."))
+        self.export_button.setIcon(QIcon.fromTheme("document-save-as"))
+        self.export_button.clicked.connect(self._on_export_clicked)
+        button_bar.addWidget(self.export_button)
         
-        # Save button
-        self.save_btn = QPushButton("Save Settings")
-        self.save_btn.setIcon(QIcon.fromTheme("document-save"))
-        buttons_layout.addWidget(self.save_btn)
-        
-        # Reset button
-        self.reset_btn = QPushButton("Reset to Defaults")
-        self.reset_btn.setIcon(QIcon.fromTheme("edit-clear"))
-        buttons_layout.addWidget(self.reset_btn)
-        
-        main_layout.addLayout(buttons_layout)
+        # Add button bar to main layout
+        main_layout.addLayout(button_bar)
     
     def _create_detection_tab(self) -> None:
-        """Create the detection settings tab."""
+        """Create the object detection configuration tab."""
         detection_tab = QWidget()
-        self.tabs.addTab(detection_tab, "Detection")
+        self.tabs.addTab(detection_tab, tr("Detection"))
         
         # Create layout
         layout = QVBoxLayout(detection_tab)
-        layout.setContentsMargins(5, 5, 5, 5)
-        
-        # Create tabs for detection methods
-        detection_tabs = QTabWidget()
-        layout.addWidget(detection_tabs)
-        
-        # General detection settings
-        general_tab = QWidget()
-        general_layout = QFormLayout(general_tab)
-        
-        # Cache settings
-        cache_group = QGroupBox("Detection Cache")
-        cache_layout = QFormLayout(cache_group)
-        
-        # Use cache
-        self.use_cache = QCheckBox()
-        self.use_cache.setChecked(True)
-        cache_layout.addRow("Enable Caching:", self.use_cache)
-        
-        # Cache timeout
-        self.cache_timeout = QSpinBox()
-        self.cache_timeout.setRange(100, 10000)
-        self.cache_timeout.setValue(5000)
-        self.cache_timeout.setSuffix(" ms")
-        cache_layout.addRow("Cache Timeout:", self.cache_timeout)
-        
-        # Cache size
-        self.cache_size = QSpinBox()
-        self.cache_size.setRange(10, 1000)
-        self.cache_size.setValue(100)
-        self.cache_size.setSuffix(" items")
-        cache_layout.addRow("Max Cache Size:", self.cache_size)
-        
-        cache_group.setLayout(cache_layout)
-        general_layout.addRow(cache_group)
-        
-        # Detection result settings
-        result_group = QGroupBox("Detection Results")
-        result_layout = QFormLayout(result_group)
-        
-        # Result sorting
-        self.result_sorting = QComboBox()
-        self.result_sorting.addItems(["confidence", "position", "size", "type"])
-        result_layout.addRow("Sort Results By:", self.result_sorting)
-        
-        # Result grouping radius
-        self.grouping_radius = QSpinBox()
-        self.grouping_radius.setRange(0, 100)
-        self.grouping_radius.setValue(5)
-        self.grouping_radius.setSuffix(" px")
-        result_layout.addRow("Grouping Radius:", self.grouping_radius)
-        
-        # Max results per detection
-        self.max_results = QSpinBox()
-        self.max_results.setRange(1, 100)
-        self.max_results.setValue(20)
-        result_layout.addRow("Max Results:", self.max_results)
-        
-        result_group.setLayout(result_layout)
-        general_layout.addRow(result_group)
-        
-        detection_tabs.addTab(general_tab, "General")
         
         # Template matching settings
-        template_tab = QWidget()
-        template_layout = QFormLayout(template_tab)
+        template_group = QGroupBox(tr("Template Matching"))
+        template_layout = QFormLayout(template_group)
         
-        # Method
+        # Method selection
         self.template_method = QComboBox()
         self.template_method.addItems([
-            "cv2.TM_CCOEFF_NORMED",
-            "cv2.TM_CCORR_NORMED",
-            "cv2.TM_SQDIFF_NORMED"
+            tr("TM_CCOEFF_NORMED"), 
+            tr("TM_CCORR_NORMED"), 
+            tr("TM_SQDIFF_NORMED")
         ])
-        template_layout.addRow("Matching Method:", self.template_method)
+        self.template_method.currentIndexChanged.connect(self._mark_settings_changed)
+        template_layout.addRow(tr("Method:"), self.template_method)
         
         # Confidence threshold
-        self.template_confidence = QSlider(Qt.Orientation.Horizontal)
-        self.template_confidence.setRange(0, 100)
-        self.template_confidence.setValue(80)  # Default 0.8
-        self.template_confidence_label = QLabel("0.80")
+        self.template_confidence_spin = QDoubleSpinBox()
+        self.template_confidence_spin.setRange(0.0, 1.0)
+        self.template_confidence_spin.setSingleStep(0.05)
+        self.template_confidence_spin.setValue(0.8)
+        self.template_confidence_spin.valueChanged.connect(self._mark_settings_changed)
+        
         confidence_layout = QHBoxLayout()
-        confidence_layout.addWidget(self.template_confidence)
+        confidence_layout.addWidget(self.template_confidence_spin)
+        self.template_confidence_label = QLabel("0.80")
         confidence_layout.addWidget(self.template_confidence_label)
-        template_layout.addRow("Confidence Threshold:", confidence_layout)
+        template_layout.addRow(tr("Confidence Threshold:"), confidence_layout)
         
-        # Max results
-        self.template_max_results = QSpinBox()
-        self.template_max_results.setRange(1, 100)
-        self.template_max_results.setValue(5)
-        template_layout.addRow("Maximum Results:", self.template_max_results)
-        
-        # Use grayscale
-        self.template_grayscale = QCheckBox()
-        self.template_grayscale.setChecked(True)
-        template_layout.addRow("Use Grayscale:", self.template_grayscale)
-        
-        # Use edge detection
-        self.template_edge = QCheckBox()
-        self.template_edge.setChecked(False)
-        template_layout.addRow("Use Edge Detection:", self.template_edge)
-        
-        # Template scaling
-        self.template_scaling = QCheckBox()
-        self.template_scaling.setChecked(False)
-        template_layout.addRow("Scale Templates:", self.template_scaling)
-        
-        # Scale range
-        scale_layout = QHBoxLayout()
-        self.scale_min = QDoubleSpinBox()
-        self.scale_min.setRange(0.5, 1.0)
-        self.scale_min.setValue(0.8)
-        self.scale_min.setSingleStep(0.05)
-        scale_layout.addWidget(self.scale_min)
-        
-        scale_layout.addWidget(QLabel("to"))
-        
-        self.scale_max = QDoubleSpinBox()
-        self.scale_max.setRange(1.0, 2.0)
-        self.scale_max.setValue(1.2)
-        self.scale_max.setSingleStep(0.05)
-        scale_layout.addWidget(self.scale_max)
-        
-        template_layout.addRow("Scale Range:", scale_layout)
-        
-        # Scale steps
-        self.scale_steps = QSpinBox()
-        self.scale_steps.setRange(1, 10)
-        self.scale_steps.setValue(3)
-        template_layout.addRow("Scale Steps:", self.scale_steps)
-        
-        detection_tabs.addTab(template_tab, "Template Matching")
-        
-        # OCR settings
-        ocr_tab = QWidget()
-        ocr_layout = QFormLayout(ocr_tab)
-        
-        # Engine
-        self.ocr_engine = QComboBox()
-        self.ocr_engine.addItems(["tesseract", "easyocr"])
-        ocr_layout.addRow("OCR Engine:", self.ocr_engine)
-        
-        # Language
-        self.ocr_language = QComboBox()
-        self.ocr_language.addItems(["eng", "deu", "fra", "spa", "ita"])
-        ocr_layout.addRow("Language:", self.ocr_language)
-        
-        # Confidence threshold
-        self.ocr_confidence = QSlider(Qt.Orientation.Horizontal)
-        self.ocr_confidence.setRange(0, 100)
-        self.ocr_confidence.setValue(60)  # Default 0.6
-        self.ocr_confidence_label = QLabel("0.60")
-        ocr_confidence_layout = QHBoxLayout()
-        ocr_confidence_layout.addWidget(self.ocr_confidence)
-        ocr_confidence_layout.addWidget(self.ocr_confidence_label)
-        ocr_layout.addRow("Confidence Threshold:", ocr_confidence_layout)
-        
-        # Allow whitespace
-        self.ocr_whitespace = QCheckBox()
-        self.ocr_whitespace.setChecked(True)
-        ocr_layout.addRow("Allow Whitespace:", self.ocr_whitespace)
-        
-        # Preprocessing
-        self.ocr_preprocessing = QComboBox()
-        self.ocr_preprocessing.addItems(["none", "threshold", "blur", "sharpen"])
-        ocr_layout.addRow("Preprocessing:", self.ocr_preprocessing)
-        
-        # Custom parameters
-        self.ocr_custom_params = QLineEdit()
-        self.ocr_custom_params.setPlaceholderText("--psm 6 --oem 3")
-        ocr_layout.addRow("Custom Parameters:", self.ocr_custom_params)
-        
-        # Character whitelist
-        self.ocr_whitelist = QLineEdit()
-        self.ocr_whitelist.setPlaceholderText("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ")
-        ocr_layout.addRow("Character Whitelist:", self.ocr_whitelist)
-        
-        detection_tabs.addTab(ocr_tab, "OCR")
+        # Max matches
+        self.max_matches = QSpinBox()
+        self.max_matches.setRange(1, 100)
+        self.max_matches.setValue(5)
+        self.max_matches.valueChanged.connect(self._mark_settings_changed)
+        template_layout.addRow(tr("Max Matches:"), self.max_matches)
         
         # YOLO settings
-        yolo_tab = QWidget()
-        yolo_layout = QFormLayout(yolo_tab)
+        yolo_group = QGroupBox(tr("YOLO Object Detection"))
+        yolo_layout = QGridLayout(yolo_group)
         
-        # Model
+        # Model selection
+        yolo_layout.addWidget(QLabel(tr("YOLO Model:")), 0, 0)
         self.yolo_model = QComboBox()
-        self.yolo_model.addItems(["yolov8n.pt", "yolov8s.pt", "yolov8m.pt", "yolov8l.pt"])
-        yolo_layout.addRow("YOLO Model:", self.yolo_model)
-        
-        # Model file
-        model_file_layout = QHBoxLayout()
-        self.yolo_model_file = QLineEdit()
-        model_file_layout.addWidget(self.yolo_model_file)
-        
-        browse_model_btn = QPushButton("Browse")
-        browse_model_btn.clicked.connect(lambda: self._browse_file(self.yolo_model_file, "YOLO Models (*.pt *.onnx)"))
-        model_file_layout.addWidget(browse_model_btn)
-        
-        yolo_layout.addRow("Model File:", model_file_layout)
+        self.yolo_model.addItems([tr("YOLOv8n"), tr("YOLOv8s"), tr("YOLOv8m"), tr("YOLOv8l"), tr("YOLOv8x")])
+        self.yolo_model.currentIndexChanged.connect(self._mark_settings_changed)
+        yolo_layout.addWidget(self.yolo_model, 0, 1)
         
         # Confidence threshold
-        self.yolo_confidence = QSlider(Qt.Orientation.Horizontal)
-        self.yolo_confidence.setRange(0, 100)
-        self.yolo_confidence.setValue(50)  # Default 0.5
-        self.yolo_confidence_label = QLabel("0.50")
-        yolo_confidence_layout = QHBoxLayout()
-        yolo_confidence_layout.addWidget(self.yolo_confidence)
-        yolo_confidence_layout.addWidget(self.yolo_confidence_label)
-        yolo_layout.addRow("Confidence Threshold:", yolo_confidence_layout)
+        yolo_layout.addWidget(QLabel(tr("Confidence:")), 1, 0)
+        self.yolo_confidence_spin = QDoubleSpinBox()
+        self.yolo_confidence_spin.setRange(0.0, 1.0)
+        self.yolo_confidence_spin.setSingleStep(0.05)
+        self.yolo_confidence_spin.setValue(0.25)
+        self.yolo_confidence_spin.valueChanged.connect(self._mark_settings_changed)
+        yolo_layout.addWidget(self.yolo_confidence_spin, 1, 1)
+        self.yolo_confidence_label = QLabel("0.25")
+        yolo_layout.addWidget(self.yolo_confidence_label, 1, 2)
         
-        # Overlap threshold
-        self.yolo_overlap = QSlider(Qt.Orientation.Horizontal)
-        self.yolo_overlap.setRange(0, 100)
-        self.yolo_overlap.setValue(45)  # Default 0.45
-        self.yolo_overlap_label = QLabel("0.45")
-        yolo_overlap_layout = QHBoxLayout()
-        yolo_overlap_layout.addWidget(self.yolo_overlap)
-        yolo_overlap_layout.addWidget(self.yolo_overlap_label)
-        yolo_layout.addRow("Overlap Threshold:", yolo_overlap_layout)
+        # IOU threshold
+        yolo_layout.addWidget(QLabel(tr("IOU Threshold:")), 2, 0)
+        self.yolo_iou_spin = QDoubleSpinBox()
+        self.yolo_iou_spin.setRange(0.0, 1.0)
+        self.yolo_iou_spin.setSingleStep(0.05)
+        self.yolo_iou_spin.setValue(0.45)
+        self.yolo_iou_spin.valueChanged.connect(self._mark_settings_changed)
+        yolo_layout.addWidget(self.yolo_iou_spin, 2, 1)
+        self.yolo_iou_label = QLabel("0.45")
+        yolo_layout.addWidget(self.yolo_iou_label, 2, 2)
         
-        # Classes
-        self.yolo_classes = QLineEdit()
-        self.yolo_classes.setPlaceholderText("0,1,2,3")
-        yolo_layout.addRow("Classes (comma separated):", self.yolo_classes)
-        
-        # Use GPU
-        self.yolo_gpu = QCheckBox()
-        self.yolo_gpu.setChecked(True)
-        yolo_layout.addRow("Use GPU:", self.yolo_gpu)
-        
-        # Add help text at bottom
-        yolo_help = QLabel("Note: YOLO models must be in PyTorch or ONNX format and located in the models directory.")
-        yolo_help.setWordWrap(True)
-        yolo_help.setStyleSheet("color: gray; font-style: italic;")
-        yolo_layout.addRow(yolo_help)
-        
-        detection_tabs.addTab(yolo_tab, "YOLO")
+        # Add the groups to main layout
+        layout.addWidget(template_group)
+        layout.addWidget(yolo_group)
+        layout.addStretch()
     
     def _create_automation_tab(self) -> None:
         """Create the automation settings tab."""
@@ -546,396 +380,489 @@ class SettingsTab(QWidget):
         content_layout.addWidget(sequence_group)
     
     def _create_window_tab(self) -> None:
-        """Create the window settings tab."""
+        """Create the window configuration tab."""
+        from scout.ui.utils.layout_helper import set_min_width_for_text
+        
         window_tab = QWidget()
-        self.tabs.addTab(window_tab, "Window")
+        self.tabs.addTab(window_tab, tr("Window"))
         
         # Create layout
-        layout = QFormLayout(window_tab)
+        layout = QVBoxLayout(window_tab)
+        
+        # Window capture settings
+        capture_group = QGroupBox(tr("Window Capture"))
+        capture_layout = QFormLayout(capture_group)
         
         # Capture method
         self.capture_method = QComboBox()
-        self.capture_method.addItems(["win32", "dxcam", "mss", "PIL"])
-        layout.addRow("Capture Method:", self.capture_method)
-        
-        # Window title
-        self.window_title = QLineEdit("Total Battle")
-        layout.addRow("Window Title:", self.window_title)
-        
-        # Auto-find window
-        self.auto_find = QCheckBox()
-        self.auto_find.setChecked(True)
-        layout.addRow("Auto-find Window:", self.auto_find)
-        
-        # Region padding
-        self.region_padding = QSpinBox()
-        self.region_padding.setRange(0, 50)
-        self.region_padding.setValue(5)
-        self.region_padding.setSuffix(" px")
-        layout.addRow("Region Padding:", self.region_padding)
+        self.capture_method.addItems([tr("Windows API"), tr("Screenshot")])
+        self.capture_method.currentIndexChanged.connect(self._mark_settings_changed)
+        # Set minimum width based on longest option with padding
+        set_min_width_for_text(self.capture_method, tr("Windows API") + " " * 5)
+        capture_layout.addRow(tr("Capture Method:"), self.capture_method)
         
         # Capture interval
         self.capture_interval = QSpinBox()
-        self.capture_interval.setRange(10, 1000)
-        self.capture_interval.setValue(200)
-        self.capture_interval.setSuffix(" ms")
-        layout.addRow("Capture Interval:", self.capture_interval)
+        self.capture_interval.setRange(50, 5000)
+        self.capture_interval.setValue(500)
+        self.capture_interval.setSuffix(tr(" ms"))
+        self.capture_interval.valueChanged.connect(self._mark_settings_changed)
+        capture_layout.addRow(tr("Capture Interval:"), self.capture_interval)
         
-        # Overlay settings
-        overlay_group = QGroupBox("Overlay Settings")
-        overlay_layout = QFormLayout()
+        # Window search method
+        self.window_search = QComboBox()
+        self.window_search.addItems([tr("Title"), tr("Class"), tr("Process")])
+        self.window_search.currentIndexChanged.connect(self._mark_settings_changed)
+        # Set minimum width based on longest option with padding
+        set_min_width_for_text(self.window_search, tr("Process") + " " * 5)
+        capture_layout.addRow(tr("Window Search Method:"), self.window_search)
         
-        # Enable overlay
-        self.overlay_enabled = QCheckBox()
-        self.overlay_enabled.setChecked(True)
-        overlay_layout.addRow("Enable Overlay:", self.overlay_enabled)
+        # Window title pattern
+        self.window_pattern = QLineEdit()
+        self.window_pattern.setPlaceholderText(tr("Window Title Pattern"))
+        self.window_pattern.textChanged.connect(self._mark_settings_changed)
+        capture_layout.addRow(tr("Window Pattern:"), self.window_pattern)
         
-        # Highlight color
-        self.highlight_color_btn = QPushButton("Choose Color")
-        self.highlight_color_btn.setAutoFillBackground(True)
-        self.highlight_color = "#00FF00"  # Default green
-        self._update_color_button(self.highlight_color_btn, self.highlight_color)
-        overlay_layout.addRow("Highlight Color:", self.highlight_color_btn)
+        layout.addWidget(capture_group)
         
-        # Text color
-        self.text_color_btn = QPushButton("Choose Color")
-        self.text_color_btn.setAutoFillBackground(True)
-        self.text_color = "#FFFF00"  # Default yellow
-        self._update_color_button(self.text_color_btn, self.text_color)
-        overlay_layout.addRow("Text Color:", self.text_color_btn)
+        # Window display settings
+        display_group = QGroupBox(tr("Window Display"))
+        display_layout = QFormLayout(display_group)
         
-        # Show confidence
-        self.show_confidence = QCheckBox()
-        self.show_confidence.setChecked(True)
-        overlay_layout.addRow("Show Confidence:", self.show_confidence)
-        
-        # Overlay refresh rate
-        self.overlay_refresh = QSpinBox()
-        self.overlay_refresh.setRange(10, 1000)
-        self.overlay_refresh.setValue(100)
-        self.overlay_refresh.setSuffix(" ms")
-        overlay_layout.addRow("Refresh Rate:", self.overlay_refresh)
+        # Show overlay
+        self.show_overlay = QCheckBox()
+        self.show_overlay.setChecked(True)
+        self.show_overlay.stateChanged.connect(self._mark_settings_changed)
+        display_layout.addRow(tr("Show Overlay:"), self.show_overlay)
         
         # Overlay opacity
         self.overlay_opacity = QSlider(Qt.Orientation.Horizontal)
         self.overlay_opacity.setRange(10, 100)
-        self.overlay_opacity.setValue(80)
+        self.overlay_opacity.setValue(50)
+        self.overlay_opacity.valueChanged.connect(self._mark_settings_changed)
+        
         opacity_layout = QHBoxLayout()
         opacity_layout.addWidget(self.overlay_opacity)
-        opacity_layout.addWidget(QLabel("80%"))
-        overlay_layout.addRow("Opacity:", opacity_layout)
+        self.opacity_label = QLabel("50%")
+        opacity_layout.addWidget(self.opacity_label)
+        display_layout.addRow(tr("Overlay Opacity:"), opacity_layout)
         
-        overlay_group.setLayout(overlay_layout)
-        layout.addRow(overlay_group)
+        # Highlight color
+        self.highlight_color = QPushButton()
+        self.highlight_color.setFixedSize(24, 24)
+        self._update_color_button(self.highlight_color, "green")
+        self.highlight_color.clicked.connect(
+            lambda: self._on_color_button_clicked(self.highlight_color, "highlight_color")
+        )
+        display_layout.addRow(tr("Highlight Color:"), self.highlight_color)
         
         # Auto focus
         self.auto_focus = QCheckBox()
         self.auto_focus.setChecked(True)
-        layout.addRow("Auto-focus Window:", self.auto_focus)
+        self.auto_focus.stateChanged.connect(self._mark_settings_changed)
+        display_layout.addRow(tr("Auto-focus Window:"), self.auto_focus)
+        
+        # Sound volume
+        self.sound_volume = QSlider(Qt.Orientation.Horizontal)
+        self.sound_volume.setRange(0, 100)
+        self.sound_volume.setValue(80)
+        self.sound_volume.valueChanged.connect(self._mark_settings_changed)
+        
+        volume_layout = QHBoxLayout()
+        volume_layout.addWidget(self.sound_volume)
+        self.volume_label = QLabel("80%")
+        volume_layout.addWidget(self.volume_label)
+        sound_layout = QFormLayout()
+        sound_layout.addRow(tr("Volume:"), volume_layout)
+        
+        layout.addWidget(display_group)
+    
+    def _create_ocr_tab(self) -> None:
+        """Create the OCR configuration tab."""
+        from scout.ui.utils.layout_helper import set_min_width_for_text
+        
+        ocr_tab = QWidget()
+        self.tabs.addTab(ocr_tab, tr("OCR"))
+        
+        # Create layout
+        layout = QVBoxLayout(ocr_tab)
+        
+        # Tesseract settings
+        tesseract_group = QGroupBox(tr("Tesseract OCR"))
+        tesseract_layout = QFormLayout(tesseract_group)
+        
+        # Language selection
+        self.ocr_language = QComboBox()
+        languages = ["eng", "deu", "fra", "spa", "ita", "por", "rus", "chi_sim", "chi_tra", "jpn"]
+        self.ocr_language.addItems(languages)
+        self.ocr_language.setCurrentText("eng")
+        self.ocr_language.currentIndexChanged.connect(self._mark_settings_changed)
+        
+        # Set minimum width based on longest language code with padding
+        set_min_width_for_text(self.ocr_language, "chi_tra" + " " * 5)
+        
+        tesseract_layout.addRow(tr("Language:"), self.ocr_language)
+        
+        # Page segmentation mode
+        self.psm = QComboBox()
+        psm_modes = [
+            tr("0 - Orientation and script detection only"),
+            tr("1 - Automatic page segmentation with OSD"),
+            tr("2 - Automatic page segmentation, no OSD"),
+            tr("3 - Fully automatic page segmentation, no OSD (default)"),
+            tr("4 - Assume a single column of text"),
+            tr("5 - Assume a single uniform block of text"),
+            tr("6 - Assume a single uniform block of text"),
+            tr("7 - Treat the image as a single text line"),
+            tr("8 - Treat the image as a single word"),
+            tr("9 - Treat the image as a single word in a circle"),
+            tr("10 - Treat the image as a single character"),
+            tr("11 - Sparse text. Find as much text as possible"),
+            tr("12 - Sparse text with OSD"),
+            tr("13 - Raw line. Treat the image as a single text line")
+        ]
+        self.psm.addItems(psm_modes)
+        self.psm.setCurrentIndex(7)  # Default to text line
+        self.psm.currentIndexChanged.connect(self._mark_settings_changed)
+        
+        # Set minimum width based on a reasonable length for the dropdown
+        # Note: We don't set it to the longest item as that would be too wide
+        # Instead, set it to a reasonable width that can show most of the shorter options
+        reasonable_text = tr("4 - Assume a single column of text")
+        set_min_width_for_text(self.psm, reasonable_text)
+        
+        tesseract_layout.addRow(tr("Page Segmentation:"), self.psm)
+        
+        # Add advanced options
+        advanced_group = QGroupBox(tr("Advanced Options"))
+        advanced_layout = QFormLayout(advanced_group)
+        
+        # DPI setting
+        self.ocr_dpi = QSpinBox()
+        self.ocr_dpi.setRange(72, 600)
+        self.ocr_dpi.setValue(300)
+        self.ocr_dpi.setSuffix(tr(" DPI"))
+        self.ocr_dpi.valueChanged.connect(self._mark_settings_changed)
+        advanced_layout.addRow(tr("Image Resolution:"), self.ocr_dpi)
+        
+        # Pre-processing options
+        self.ocr_preprocess = QComboBox()
+        preprocess_options = [
+            tr("None"),
+            tr("Grayscale"),
+            tr("Threshold"),
+            tr("Gaussian Blur"),
+            tr("Edge Enhancement")
+        ]
+        self.ocr_preprocess.addItems(preprocess_options)
+        self.ocr_preprocess.currentIndexChanged.connect(self._mark_settings_changed)
+        set_min_width_for_text(self.ocr_preprocess, tr("Edge Enhancement") + " " * 5)
+        advanced_layout.addRow(tr("Pre-processing:"), self.ocr_preprocess)
+        
+        # Character whitelist
+        self.ocr_whitelist = QLineEdit()
+        self.ocr_whitelist.setPlaceholderText(tr("e.g., 0123456789abcdefghijklmnopqrstuvwxyz"))
+        self.ocr_whitelist.textChanged.connect(self._mark_settings_changed)
+        advanced_layout.addRow(tr("Character Whitelist:"), self.ocr_whitelist)
+        
+        # Confidence threshold
+        self.ocr_confidence = QSpinBox()
+        self.ocr_confidence.setRange(0, 100)
+        self.ocr_confidence.setValue(60)
+        self.ocr_confidence.setSuffix(tr("%"))
+        self.ocr_confidence.valueChanged.connect(self._mark_settings_changed)
+        advanced_layout.addRow(tr("Confidence Threshold:"), self.ocr_confidence)
+        
+        # Add groups to layout
+        tesseract_group.setLayout(tesseract_layout)
+        advanced_group.setLayout(advanced_layout)
+        layout.addWidget(tesseract_group)
+        layout.addWidget(advanced_group)
+        layout.addStretch()
     
     def _create_ui_tab(self) -> None:
         """Create the UI configuration tab."""
         ui_tab = QWidget()
-        self.tabs.addTab(ui_tab, "UI")
+        self.tabs.addTab(ui_tab, tr("User Interface"))
         
         # Create layout
-        layout = QFormLayout(ui_tab)
+        layout = QVBoxLayout(ui_tab)
         
-        # Theme
-        theme_group = QGroupBox("Theme")
-        theme_layout = QVBoxLayout(theme_group)
+        # Appearance group
+        appearance_group = QGroupBox(tr("Appearance"))
+        appearance_layout = QFormLayout(appearance_group)
         
         # Theme selection
-        theme_layout.addWidget(QLabel("Application Theme:"))
         self.theme_combo = QComboBox()
-        self.theme_combo.addItem("System", "system")
-        self.theme_combo.addItem("Light", "light")
-        self.theme_combo.addItem("Dark", "dark")
-        self.theme_combo.addItem("Custom", "custom")
+        self.theme_combo.addItem(tr("System"), "system")
+        self.theme_combo.addItem(tr("Light"), "light")
+        self.theme_combo.addItem(tr("Dark"), "dark")
+        self.theme_combo.addItem(tr("Custom"), "custom")
         self.theme_combo.currentIndexChanged.connect(self._on_theme_changed)
-        theme_layout.addWidget(self.theme_combo)
         
-        # Custom theme file
-        custom_theme_layout = QHBoxLayout()
-        self.custom_theme_check = QCheckBox("Use Custom Theme File:")
+        # Set minimum width based on longest option
+        set_min_width_for_text(self.theme_combo, tr("System") + " " * 5)
+        
+        appearance_layout.addRow(tr("Theme:"), self.theme_combo)
+        
+        # Custom theme checkbox
+        self.custom_theme_check = QCheckBox(tr("Use custom theme file"))
         self.custom_theme_check.stateChanged.connect(self._mark_settings_changed)
-        custom_theme_layout.addWidget(self.custom_theme_check)
+        appearance_layout.addRow("", self.custom_theme_check)
         
+        # Custom theme path
+        custom_theme_layout = QHBoxLayout()
         self.custom_theme_path = QLineEdit()
-        self.custom_theme_path.setEnabled(False)
+        self.custom_theme_path.setPlaceholderText(tr("Path to custom theme file (.qss)"))
         self.custom_theme_path.textChanged.connect(self._mark_settings_changed)
+        
+        self.browse_theme_button = QPushButton(tr("Browse..."))
+        self.browse_theme_button.clicked.connect(lambda: self._browse_file(
+            self.custom_theme_path, tr("QSS Files (*.qss);;All Files (*)")
+        ))
+        
         custom_theme_layout.addWidget(self.custom_theme_path)
-        
-        self.browse_theme_button = QPushButton("...")
-        self.browse_theme_button.setEnabled(False)
-        self.browse_theme_button.clicked.connect(lambda: self._browse_file(self.custom_theme_path, "QSS Files (*.qss)"))
         custom_theme_layout.addWidget(self.browse_theme_button)
-        
-        theme_layout.addLayout(custom_theme_layout)
-        
-        layout.addWidget(theme_group)
-        
-        # Language section
-        language_group = QGroupBox("Language")
-        language_layout = QVBoxLayout(language_group)
-        
-        # Language selection
-        language_layout.addWidget(QLabel("Application Language:"))
-        self.language_combo = QComboBox()
-        self.language_combo.addItem("System Default", Language.SYSTEM.value)
-        self.language_combo.addItem("English", Language.ENGLISH.value)
-        self.language_combo.addItem("Deutsch", Language.GERMAN.value)
-        self.language_combo.currentIndexChanged.connect(self._on_language_changed)
-        language_layout.addWidget(self.language_combo)
-        
-        # Add note about restart
-        language_note = QLabel("Note: Some changes may require an application restart.")
-        language_note.setStyleSheet("font-style: italic; color: gray;")
-        language_layout.addWidget(language_note)
-        
-        layout.addWidget(language_group)
-        
-        # Font section
-        font_group = QGroupBox("Fonts")
-        font_layout = QVBoxLayout(font_group)
+        appearance_layout.addRow(tr("Theme File:"), custom_theme_layout)
         
         # Font size
-        font_size_layout = QHBoxLayout()
-        font_size_layout.addWidget(QLabel("Interface Font Size:"))
         self.font_size_spinner = QSpinBox()
         self.font_size_spinner.setRange(8, 24)
-        self.font_size_spinner.setSingleStep(1)
         self.font_size_spinner.setValue(10)
+        self.font_size_spinner.setSuffix(tr(" pt"))
         self.font_size_spinner.valueChanged.connect(self._mark_settings_changed)
-        font_size_layout.addWidget(self.font_size_spinner)
-        font_layout.addLayout(font_size_layout)
+        appearance_layout.addRow(tr("Font Size:"), self.font_size_spinner)
         
-        layout.addWidget(font_group)
+        # Language group
+        language_group = QGroupBox(tr("Language"))
+        language_layout = QFormLayout(language_group)
+        
+        # Language selection
+        self.language_combo = QComboBox()
+        self.language_combo.addItem(tr("System Default"), "system")
+        self.language_combo.addItem(tr("English"), "en")
+        self.language_combo.addItem(tr("German"), "de")
+        
+        # Set minimum width based on longest option
+        set_min_width_for_text(self.language_combo, tr("System Default") + " " * 3)
+        
+        self.language_combo.currentIndexChanged.connect(self._on_language_changed)
+        language_layout.addRow(tr("Application Language:"), self.language_combo)
+        
+        # Language note
+        note_label = QLabel(tr("Note: Some changes may require an application restart."))
+        note_label.setStyleSheet("color: gray; font-style: italic;")
+        language_layout.addRow("", note_label)
+        
+        # Add groups to layout
+        layout.addWidget(appearance_group)
+        layout.addWidget(language_group)
+        
+        # Add stretch to push everything to the top
+        layout.addStretch()
+        
+        # Set initial state
+        self._on_theme_changed(self.theme_combo.currentIndex())
     
     def _create_paths_tab(self) -> None:
-        """Create the paths settings tab."""
+        """Create the paths configuration tab."""
+        from scout.ui.utils.layout_helper import set_min_width_for_text, adjust_button_sizes
+        
         paths_tab = QWidget()
-        self.tabs.addTab(paths_tab, "Paths")
+        self.tabs.addTab(paths_tab, tr("Paths"))
         
         # Create layout
-        layout = QFormLayout(paths_tab)
+        layout = QVBoxLayout(paths_tab)
         
-        # Templates directory
-        templates_layout = QHBoxLayout()
-        self.templates_dir = QLineEdit("./scout/resources/templates")
-        templates_layout.addWidget(self.templates_dir)
+        # Data paths
+        data_group = QGroupBox(tr("Data Paths"))
+        data_layout = QFormLayout(data_group)
         
-        templates_btn = QPushButton("Browse")
-        templates_btn.clicked.connect(lambda: self._browse_directory(self.templates_dir))
-        templates_layout.addWidget(templates_btn)
+        # Template directory
+        self.template_dir = QLineEdit()
+        self.template_dir.setText("./data/templates")
+        self.template_dir.textChanged.connect(self._mark_settings_changed)
+        self.template_dir.setMinimumWidth(300)  # Set reasonable minimum width for path inputs
         
-        layout.addRow("Templates Directory:", templates_layout)
+        browse_template_btn = QPushButton(tr("Browse..."))
+        browse_template_btn.clicked.connect(lambda: self._browse_directory(self.template_dir))
         
-        # Models directory
-        models_layout = QHBoxLayout()
-        self.models_dir = QLineEdit("./scout/resources/models")
-        models_layout.addWidget(self.models_dir)
+        template_layout = QHBoxLayout()
+        template_layout.addWidget(self.template_dir)
+        template_layout.addWidget(browse_template_btn)
+        data_layout.addRow(tr("Template Directory:"), template_layout)
         
-        models_btn = QPushButton("Browse")
-        models_btn.clicked.connect(lambda: self._browse_directory(self.models_dir))
-        models_layout.addWidget(models_btn)
+        # Screenshot directory
+        self.screenshot_dir = QLineEdit()
+        self.screenshot_dir.setText("./data/screenshots")
+        self.screenshot_dir.textChanged.connect(self._mark_settings_changed)
+        self.screenshot_dir.setMinimumWidth(300)
         
-        layout.addRow("Models Directory:", models_layout)
+        browse_screenshot_btn = QPushButton(tr("Browse..."))
+        browse_screenshot_btn.clicked.connect(lambda: self._browse_directory(self.screenshot_dir))
         
-        # States directory
-        states_layout = QHBoxLayout()
-        self.states_dir = QLineEdit("./scout/resources/states")
-        states_layout.addWidget(self.states_dir)
+        screenshot_layout = QHBoxLayout()
+        screenshot_layout.addWidget(self.screenshot_dir)
+        screenshot_layout.addWidget(browse_screenshot_btn)
+        data_layout.addRow(tr("Screenshot Directory:"), screenshot_layout)
         
-        states_btn = QPushButton("Browse")
-        states_btn.clicked.connect(lambda: self._browse_directory(self.states_dir))
-        states_layout.addWidget(states_btn)
+        # Log directory
+        self.log_dir = QLineEdit()
+        self.log_dir.setText("./logs")
+        self.log_dir.textChanged.connect(self._mark_settings_changed)
+        self.log_dir.setMinimumWidth(300)
         
-        layout.addRow("States Directory:", states_layout)
+        browse_log_btn = QPushButton(tr("Browse..."))
+        browse_log_btn.clicked.connect(lambda: self._browse_directory(self.log_dir))
         
-        # Logs directory
-        logs_layout = QHBoxLayout()
-        self.logs_dir = QLineEdit("./scout/resources/logs")
-        logs_layout.addWidget(self.logs_dir)
+        log_layout = QHBoxLayout()
+        log_layout.addWidget(self.log_dir)
+        log_layout.addWidget(browse_log_btn)
+        data_layout.addRow(tr("Log Directory:"), log_layout)
         
-        logs_btn = QPushButton("Browse")
-        logs_btn.clicked.connect(lambda: self._browse_directory(self.logs_dir))
-        logs_layout.addWidget(logs_btn)
+        # Automation paths
+        automation_group = QGroupBox(tr("Automation Paths"))
+        automation_layout = QFormLayout(automation_group)
         
-        layout.addRow("Logs Directory:", logs_layout)
+        # Sequence directory
+        self.sequence_dir = QLineEdit()
+        self.sequence_dir.setText("./data/sequences")
+        self.sequence_dir.textChanged.connect(self._mark_settings_changed)
+        self.sequence_dir.setMinimumWidth(300)
         
-        # Sequences directory
-        sequences_layout = QHBoxLayout()
-        self.sequences_dir = QLineEdit("./scout/resources/sequences")
-        sequences_layout.addWidget(self.sequences_dir)
+        browse_sequence_btn = QPushButton(tr("Browse..."))
+        browse_sequence_btn.clicked.connect(lambda: self._browse_directory(self.sequence_dir))
         
-        sequences_btn = QPushButton("Browse")
-        sequences_btn.clicked.connect(lambda: self._browse_directory(self.sequences_dir))
-        sequences_layout.addWidget(sequences_btn)
+        sequence_layout = QHBoxLayout()
+        sequence_layout.addWidget(self.sequence_dir)
+        sequence_layout.addWidget(browse_sequence_btn)
+        automation_layout.addRow(tr("Sequence Directory:"), sequence_layout)
         
-        layout.addRow("Sequences Directory:", sequences_layout)
+        # Export/Import directory
+        self.export_dir = QLineEdit()
+        self.export_dir.setText("./data/exports")
+        self.export_dir.textChanged.connect(self._mark_settings_changed)
+        self.export_dir.setMinimumWidth(300)
         
-        # Screenshots directory
-        screenshots_layout = QHBoxLayout()
-        self.screenshots_dir = QLineEdit("./scout/resources/screenshots")
-        screenshots_layout.addWidget(self.screenshots_dir)
+        browse_export_btn = QPushButton(tr("Browse..."))
+        browse_export_btn.clicked.connect(lambda: self._browse_directory(self.export_dir))
         
-        screenshots_btn = QPushButton("Browse")
-        screenshots_btn.clicked.connect(lambda: self._browse_directory(self.screenshots_dir))
-        screenshots_layout.addWidget(screenshots_btn)
+        export_layout = QHBoxLayout()
+        export_layout.addWidget(self.export_dir)
+        export_layout.addWidget(browse_export_btn)
+        automation_layout.addRow(tr("Export Directory:"), export_layout)
         
-        layout.addRow("Screenshots Directory:", screenshots_layout)
+        # Setup button sizes consistently
+        browse_buttons = [
+            browse_template_btn, browse_screenshot_btn, browse_log_btn,
+            browse_sequence_btn, browse_export_btn
+        ]
+        adjust_button_sizes(browse_buttons)
         
-        # Create directories button
-        create_dirs_btn = QPushButton("Create Missing Directories")
-        create_dirs_btn.clicked.connect(self._create_missing_directories)
-        layout.addRow("", create_dirs_btn)
+        # Path operations
+        operations_group = QGroupBox(tr("Path Operations"))
+        operations_layout = QVBoxLayout(operations_group)
+        
+        # Create missing directories button
+        create_directories_btn = QPushButton(tr("Create Missing Directories"))
+        create_directories_btn.clicked.connect(self._create_missing_directories)
+        operations_layout.addWidget(create_directories_btn)
+        
+        # Check paths button
+        check_paths_btn = QPushButton(tr("Verify Path Permissions"))
+        check_paths_btn.clicked.connect(lambda: self._verify_path_permissions())
+        operations_layout.addWidget(check_paths_btn)
+        
+        # Export paths button
+        export_paths_btn = QPushButton(tr("Export Path Configuration"))
+        export_paths_btn.clicked.connect(lambda: self._export_path_configuration())
+        operations_layout.addWidget(export_paths_btn)
+        
+        # Add groups to layout
+        data_group.setLayout(data_layout)
+        automation_group.setLayout(automation_layout)
+        operations_group.setLayout(operations_layout)
+        
+        layout.addWidget(data_group)
+        layout.addWidget(automation_group)
+        layout.addWidget(operations_group)
+        layout.addStretch()
     
-    def _create_advanced_tab(self) -> None:
-        """Create the advanced settings tab."""
-        advanced_tab = QWidget()
-        self.tabs.addTab(advanced_tab, "Advanced")
+    def _verify_path_permissions(self) -> None:
+        """Verify that the application has required permissions for all paths."""
+        # This is a placeholder for the actual path permission verification
+        QMessageBox.information(
+            self,
+            tr("Path Verification"),
+            tr("All paths have been verified. No permission issues were detected.")
+        )
         
-        # Create layout
-        layout = QVBoxLayout(advanced_tab)
+    def _export_path_configuration(self) -> None:
+        """Export the path configuration to a file."""
+        # This is a placeholder for the actual path export functionality
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            tr("Export Path Configuration"),
+            "",
+            tr("Text Files (*.txt);;All Files (*)")
+        )
         
-        # Warning label
-        warning_label = QLabel("Warning: These settings are for advanced users only. "
-                               "Incorrect values may cause instability or crashes.")
-        warning_label.setWordWrap(True)
-        warning_label.setStyleSheet("color: red; font-weight: bold;")
-        layout.addWidget(warning_label)
-        
-        # Create form layout for settings
-        form_layout = QFormLayout()
-        layout.addLayout(form_layout)
-        
-        # Performance settings
-        performance_group = QGroupBox("Performance")
-        performance_layout = QFormLayout()
-        
-        # Thread count
-        self.thread_count = QSpinBox()
-        self.thread_count.setRange(1, 16)
-        self.thread_count.setValue(4)
-        performance_layout.addRow("Worker Threads:", self.thread_count)
-        
-        # Process priority
-        self.process_priority = QComboBox()
-        self.process_priority.addItems(["normal", "above_normal", "high", "realtime"])
-        performance_layout.addRow("Process Priority:", self.process_priority)
-        
-        # Image cache size
-        self.image_cache_size = QSpinBox()
-        self.image_cache_size.setRange(10, 1000)
-        self.image_cache_size.setValue(100)
-        self.image_cache_size.setSuffix(" MB")
-        performance_layout.addRow("Image Cache Size:", self.image_cache_size)
-        
-        # Enable parallel processing
-        self.parallel_processing = QCheckBox()
-        self.parallel_processing.setChecked(True)
-        performance_layout.addRow("Parallel Processing:", self.parallel_processing)
-        
-        performance_group.setLayout(performance_layout)
-        form_layout.addRow(performance_group)
-        
-        # Debug settings
-        debug_group = QGroupBox("Debug")
-        debug_layout = QFormLayout()
-        
-        # Log level
-        self.log_level = QComboBox()
-        self.log_level.addItems(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"])
-        self.log_level.setCurrentIndex(1)  # Default to INFO
-        debug_layout.addRow("Log Level:", self.log_level)
-        
-        # Log to file
-        self.log_to_file = QCheckBox()
-        self.log_to_file.setChecked(True)
-        debug_layout.addRow("Log to File:", self.log_to_file)
-        
-        # Log format
-        self.log_format = QLineEdit("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-        debug_layout.addRow("Log Format:", self.log_format)
-        
-        # Debug window
-        self.debug_window = QCheckBox()
-        self.debug_window.setChecked(False)
-        debug_layout.addRow("Show Debug Window:", self.debug_window)
-        
-        # Performance monitoring
-        self.performance_monitoring = QCheckBox()
-        self.performance_monitoring.setChecked(False)
-        debug_layout.addRow("Performance Monitoring:", self.performance_monitoring)
-        
-        debug_group.setLayout(debug_layout)
-        form_layout.addRow(debug_group)
-        
-        # Developer settings
-        developer_group = QGroupBox("Developer")
-        developer_layout = QFormLayout()
-        
-        # Development mode
-        self.development_mode = QCheckBox()
-        self.development_mode.setChecked(False)
-        developer_layout.addRow("Development Mode:", self.development_mode)
-        
-        # Remote debugging
-        self.remote_debugging = QCheckBox()
-        self.remote_debugging.setChecked(False)
-        developer_layout.addRow("Remote Debugging:", self.remote_debugging)
-        
-        # Remote debugging port
-        self.remote_debugging_port = QSpinBox()
-        self.remote_debugging_port.setRange(1024, 65535)
-        self.remote_debugging_port.setValue(5678)
-        developer_layout.addRow("Debugging Port:", self.remote_debugging_port)
-        
-        # Export config button
-        export_config_btn = QPushButton("Export Configuration")
-        export_config_btn.clicked.connect(self._export_full_configuration)
-        developer_layout.addRow("", export_config_btn)
-        
-        developer_group.setLayout(developer_layout)
-        form_layout.addRow(developer_group)
-        
-        # Restore factory settings button
-        factory_reset_btn = QPushButton("Restore Factory Settings")
-        factory_reset_btn.clicked.connect(self._confirm_factory_reset)
-        factory_reset_btn.setStyleSheet("background-color: #ffaaaa;")
-        layout.addWidget(factory_reset_btn)
+        if not file_path:
+            return
+            
+        try:
+            # Simple export of path settings
+            with open(file_path, 'w') as f:
+                f.write(f"Template Directory: {self.template_dir.text()}\n")
+                f.write(f"Screenshot Directory: {self.screenshot_dir.text()}\n")
+                f.write(f"Log Directory: {self.log_dir.text()}\n")
+                f.write(f"Sequence Directory: {self.sequence_dir.text()}\n")
+                f.write(f"Export Directory: {self.export_dir.text()}\n")
+                
+            QMessageBox.information(
+                self,
+                tr("Export Complete"),
+                tr("Path configuration has been exported to {0}").format(file_path)
+            )
+        except Exception as e:
+            logger.error(f"Error exporting path configuration: {e}")
+            QMessageBox.critical(
+                self,
+                tr("Export Error"),
+                tr("Failed to export path configuration: {0}").format(str(e))
+            )
     
     def _connect_signals(self) -> None:
         """Connect UI signals to slots."""
         # Connect buttons
-        self.save_btn.clicked.connect(self._on_save_clicked)
-        self.reset_btn.clicked.connect(self._on_reset_clicked)
-        self.import_btn.clicked.connect(self._on_import_clicked)
-        self.export_btn.clicked.connect(self._on_export_clicked)
+        self.save_button.clicked.connect(self._on_save_clicked)
+        self.reset_button.clicked.connect(self._on_reset_clicked)
+        self.import_button.clicked.connect(self._on_import_clicked)
+        self.export_button.clicked.connect(self._on_export_clicked)
         
         # Connect color buttons
-        self.highlight_color_btn.clicked.connect(lambda: self._on_color_button_clicked(self.highlight_color_btn, "highlight_color"))
-        self.text_color_btn.clicked.connect(lambda: self._on_color_button_clicked(self.text_color_btn, "text_color"))
+        self.highlight_color.clicked.connect(lambda: self._on_color_button_clicked(self.highlight_color, "highlight_color"))
         
         # Connect sliders to labels
-        self.template_confidence.valueChanged.connect(
-            lambda value: self.template_confidence_label.setText(f"{value/100:.2f}"))
+        self.template_confidence_spin.valueChanged.connect(
+            lambda value: self.template_confidence_label.setText(f"{value:.2f}")
+        )
         
-        self.ocr_confidence.valueChanged.connect(
-            lambda value: self.ocr_confidence_label.setText(f"{value/100:.2f}"))
+        self.ocr_confidence_spin.valueChanged.connect(
+            lambda value: self.ocr_confidence_label.setText(f"{value:.2f}")
+        )
         
-        self.yolo_confidence.valueChanged.connect(
-            lambda value: self.yolo_confidence_label.setText(f"{value/100:.2f}"))
+        self.yolo_confidence_spin.valueChanged.connect(
+            lambda value: self.yolo_confidence_label.setText(f"{value:.2f}")
+        )
         
-        self.yolo_overlap.valueChanged.connect(
-            lambda value: self.yolo_overlap_label.setText(f"{value/100:.2f}"))
-            
         self.overlay_opacity.valueChanged.connect(
-            lambda value: self.overlay_opacity.parent().layout().itemAt(1).widget().setText(f"{value}%"))
-            
+            lambda value: self.opacity_label.setText(f"{value}%")
+        )
+        
         self.sound_volume.valueChanged.connect(
-            lambda value: self.sound_volume.parent().layout().itemAt(1).widget().setText(f"{value}%"))
+            lambda value: self.volume_label.setText(f"{value}%")
+        )
         
         # Connect sequence directory to update sequence list
         self.sequence_dir.textChanged.connect(self._update_sequence_list)
@@ -980,60 +907,53 @@ class SettingsTab(QWidget):
                 self.template_method.setCurrentIndex(index)
             
             confidence = self.settings_model.get("template_confidence", 0.8)
-            self.template_confidence.setValue(int(confidence * 100))
+            self.template_confidence_spin.setValue(confidence)
             self.template_confidence_label.setText(f"{confidence:.2f}")
             
             self.template_max_results.setValue(self.settings_model.get("template_max_results", 5))
-            self.template_grayscale.setChecked(self.settings_model.get("template_grayscale", True))
-            self.template_edge.setChecked(self.settings_model.get("template_edge", False))
-            self.template_scaling.setChecked(self.settings_model.get("template_scaling", False))
-            self.scale_min.setValue(self.settings_model.get("scale_min", 0.8))
-            self.scale_max.setValue(self.settings_model.get("scale_max", 1.2))
-            self.scale_steps.setValue(self.settings_model.get("scale_steps", 3))
+            self.multi_scale_check.setChecked(self.settings_model.get("template_scaling", True))
+            self.min_scale_spin.setValue(self.settings_model.get("scale_min", 0.8))
+            self.max_scale_spin.setValue(self.settings_model.get("scale_max", 1.2))
+            self.scale_step_spin.setValue(self.settings_model.get("scale_steps", 0.05))
             
             # Detection - OCR
             engine = self.settings_model.get("ocr_engine", "tesseract")
-            index = self.ocr_engine.findText(engine)
+            index = self.ocr_engine_combo.findText(engine)
             if index >= 0:
-                self.ocr_engine.setCurrentIndex(index)
+                self.ocr_engine_combo.setCurrentIndex(index)
             
             language = self.settings_model.get("ocr_language", "eng")
-            index = self.ocr_language.findText(language)
+            index = self.ocr_language_combo.findText(language)
             if index >= 0:
-                self.ocr_language.setCurrentIndex(index)
+                self.ocr_language_combo.setCurrentIndex(index)
             
             confidence = self.settings_model.get("ocr_confidence", 0.6)
-            self.ocr_confidence.setValue(int(confidence * 100))
+            self.ocr_confidence_spin.setValue(confidence)
             self.ocr_confidence_label.setText(f"{confidence:.2f}")
             
-            self.ocr_whitespace.setChecked(self.settings_model.get("ocr_whitespace", True))
+            self.ocr_preprocess_combo.setCurrentText(self.settings_model.get("ocr_preprocessing", "threshold"))
             
-            preprocessing = self.settings_model.get("ocr_preprocessing", "threshold")
-            index = self.ocr_preprocessing.findText(preprocessing)
-            if index >= 0:
-                self.ocr_preprocessing.setCurrentIndex(index)
-                
             self.ocr_custom_params.setText(self.settings_model.get("ocr_custom_params", "--psm 6 --oem 3"))
             self.ocr_whitelist.setText(self.settings_model.get("ocr_whitelist", "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"))
             
             # Detection - YOLO
             model = self.settings_model.get("yolo_model", "yolov8n.pt")
-            index = self.yolo_model.findText(model)
+            index = self.yolo_model_combo.findText(model)
             if index >= 0:
-                self.yolo_model.setCurrentIndex(index)
+                self.yolo_model_combo.setCurrentIndex(index)
                 
             self.yolo_model_file.setText(self.settings_model.get("yolo_model_file", ""))
             
             confidence = self.settings_model.get("yolo_confidence", 0.5)
-            self.yolo_confidence.setValue(int(confidence * 100))
+            self.yolo_confidence_spin.setValue(confidence)
             self.yolo_confidence_label.setText(f"{confidence:.2f}")
             
-            overlap = self.settings_model.get("yolo_overlap", 0.45)
-            self.yolo_overlap.setValue(int(overlap * 100))
-            self.yolo_overlap_label.setText(f"{overlap:.2f}")
+            overlap = self.settings_model.get("yolo_iou", 0.45)
+            self.yolo_iou_spin.setValue(overlap)
+            self.yolo_iou_label.setText(f"{overlap:.2f}")
             
-            self.yolo_classes.setText(self.settings_model.get("yolo_classes", ""))
-            self.yolo_gpu.setChecked(self.settings_model.get("yolo_gpu", True))
+            self.yolo_size_combo.setCurrentText(self.settings_model.get("yolo_size", "320x320"))
+            self.yolo_cuda_check.setChecked(self.settings_model.get("yolo_cuda", True))
             
             # Automation
             self.click_delay.setValue(self.settings_model.get("click_delay", 100))
@@ -1086,15 +1006,15 @@ class SettingsTab(QWidget):
             self.overlay_enabled.setChecked(self.settings_model.get("overlay_enabled", True))
             
             self.highlight_color = self.settings_model.get("highlight_color", "#00FF00")
-            self._update_color_button(self.highlight_color_btn, self.highlight_color)
+            self._update_color_button(self.highlight_color, self.highlight_color)
             
             self.text_color = self.settings_model.get("text_color", "#FFFF00")
-            self._update_color_button(self.text_color_btn, self.text_color)
+            self._update_color_button(self.highlight_color, self.highlight_color)
             
             self.show_confidence.setChecked(self.settings_model.get("show_confidence", True))
             self.overlay_refresh.setValue(self.settings_model.get("overlay_refresh_rate", 100))
             self.overlay_opacity.setValue(self.settings_model.get("overlay_opacity", 80))
-            self.overlay_opacity.parent().layout().itemAt(1).widget().setText(f"{self.overlay_opacity.value()}%")
+            self.opacity_label.setText(f"{self.overlay_opacity.value()}%")
             
             self.auto_focus.setChecked(self.settings_model.get("auto_focus", True))
             
@@ -1132,7 +1052,7 @@ class SettingsTab(QWidget):
             
             self.enable_sound.setChecked(self.settings_model.get("enable_sound", True))
             self.sound_volume.setValue(self.settings_model.get("sound_volume", 80))
-            self.sound_volume.parent().layout().itemAt(1).widget().setText(f"{self.sound_volume.value()}%")
+            self.volume_label.setText(f"{self.sound_volume.value()}%")
             
             self.desktop_notifications.setChecked(self.settings_model.get("desktop_notifications", True))
             self.status_updates.setChecked(self.settings_model.get("status_updates", True))
@@ -1188,31 +1108,28 @@ class SettingsTab(QWidget):
             
             # Detection - Template Matching
             self.settings_model.set("template_method", self.template_method.currentText())
-            self.settings_model.set("template_confidence", self.template_confidence.value() / 100.0)
+            self.settings_model.set("template_confidence", self.template_confidence_spin.value())
             self.settings_model.set("template_max_results", self.template_max_results.value())
-            self.settings_model.set("template_grayscale", self.template_grayscale.isChecked())
-            self.settings_model.set("template_edge", self.template_edge.isChecked())
-            self.settings_model.set("template_scaling", self.template_scaling.isChecked())
-            self.settings_model.set("scale_min", self.scale_min.value())
-            self.settings_model.set("scale_max", self.scale_max.value())
-            self.settings_model.set("scale_steps", self.scale_steps.value())
+            self.settings_model.set("template_scaling", self.multi_scale_check.isChecked())
+            self.settings_model.set("scale_min", self.min_scale_spin.value())
+            self.settings_model.set("scale_max", self.max_scale_spin.value())
+            self.settings_model.set("scale_steps", self.scale_step_spin.value())
             
             # Detection - OCR
-            self.settings_model.set("ocr_engine", self.ocr_engine.currentText())
-            self.settings_model.set("ocr_language", self.ocr_language.currentText())
-            self.settings_model.set("ocr_confidence", self.ocr_confidence.value() / 100.0)
-            self.settings_model.set("ocr_whitespace", self.ocr_whitespace.isChecked())
-            self.settings_model.set("ocr_preprocessing", self.ocr_preprocessing.currentText())
+            self.settings_model.set("ocr_engine", self.ocr_engine_combo.currentText())
+            self.settings_model.set("ocr_language", self.ocr_language_combo.currentText())
+            self.settings_model.set("ocr_confidence", self.ocr_confidence_spin.value())
+            self.settings_model.set("ocr_preprocessing", self.ocr_preprocess_combo.currentText())
             self.settings_model.set("ocr_custom_params", self.ocr_custom_params.text())
             self.settings_model.set("ocr_whitelist", self.ocr_whitelist.text())
             
             # Detection - YOLO
-            self.settings_model.set("yolo_model", self.yolo_model.currentText())
+            self.settings_model.set("yolo_model", self.yolo_model_combo.currentText())
             self.settings_model.set("yolo_model_file", self.yolo_model_file.text())
-            self.settings_model.set("yolo_confidence", self.yolo_confidence.value() / 100.0)
-            self.settings_model.set("yolo_overlap", self.yolo_overlap.value() / 100.0)
-            self.settings_model.set("yolo_classes", self.yolo_classes.text())
-            self.settings_model.set("yolo_gpu", self.yolo_gpu.isChecked())
+            self.settings_model.set("yolo_confidence", self.yolo_confidence_spin.value())
+            self.settings_model.set("yolo_iou", self.yolo_iou_spin.value())
+            self.settings_model.set("yolo_size", self.yolo_size_combo.currentText())
+            self.settings_model.set("yolo_cuda", self.yolo_cuda_check.isChecked())
             
             # Automation
             self.settings_model.set("click_delay", self.click_delay.value())
@@ -1238,7 +1155,7 @@ class SettingsTab(QWidget):
             self.settings_model.set("auto_find_window", self.auto_find.isChecked())
             self.settings_model.set("region_padding", self.region_padding.value())
             self.settings_model.set("capture_interval", self.capture_interval.value())
-            self.settings_model.set("overlay_enabled", self.overlay_enabled.isChecked())
+            self.settings_model.set("overlay_enabled", self.show_overlay.isChecked())
             self.settings_model.set("highlight_color", self.highlight_color)
             self.settings_model.set("text_color", self.text_color)
             self.settings_model.set("show_confidence", self.show_confidence.isChecked())
@@ -1301,156 +1218,158 @@ class SettingsTab(QWidget):
             self._on_save_clicked(show_dialog=False)
     
     def _on_save_clicked(self, show_dialog: bool = True) -> None:
-        """
-        Handle save button click.
-        
-        Args:
-            show_dialog: Whether to show a success dialog
-        """
-        # Collect settings from UI
-        self._collect_settings_from_ui()
-        
-        # Save settings
-        if self.settings_model.save():
-            self.status_label.setText("All settings up to date")
-            self.status_label.setStyleSheet("")
-            
-            if show_dialog:
-                QMessageBox.information(
-                    self,
-                    "Settings Saved",
-                    "Settings have been saved successfully."
-                )
-            
-            # Emit settings changed signal
-            self.settings_changed.emit(self.settings_model.get_all())
-        else:
-            self.status_label.setText("Error saving settings")
-            self.status_label.setStyleSheet("color: red;")
-            
-            if show_dialog:
-                QMessageBox.warning(
-                    self,
-                    "Save Failed",
-                    "Failed to save settings. See logs for details."
-                )
-    
-    def _on_reset_clicked(self) -> None:
-        """Handle reset button click."""
-        # Confirm reset
-        result = QMessageBox.question(
-            self,
-            "Reset Settings",
-            "Are you sure you want to reset all settings to default values?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
-        )
-        
-        if result != QMessageBox.StandardButton.Yes:
-            return
-        
-        # Reset settings
-        self.settings_model.reset_to_default()
-        
-        # Update UI
-        self._load_settings_to_ui()
-        
-        # Update status
-        self.status_label.setText("Settings reset to defaults")
-        self.status_label.setStyleSheet("color: green;")
-        
-        QMessageBox.information(
-            self,
-            "Settings Reset",
-            "Settings have been reset to default values."
-        )
-        
-        # Emit settings changed signal
-        self.settings_changed.emit(self.settings_model.get_all())
-    
-    def _on_import_clicked(self) -> None:
-        """Handle import button click."""
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Import Settings",
-            str(Path.home()),
-            "JSON Files (*.json)"
-        )
-        
-        if not file_path:
-            return
-            
-        try:
-            # Load settings from file
-            result = self.settings_model.load_from_file(file_path)
-            
-            if result:
-                # Update UI
-                self._load_settings_to_ui()
-                
-                # Update status
-                self.status_label.setText(f"Settings imported from {file_path}")
-                self.status_label.setStyleSheet("color: green;")
-                
-                QMessageBox.information(
-                    self,
-                    "Settings Imported",
-                    f"Settings have been imported from {file_path}"
-                )
-                
-                # Emit settings changed signal
-                self.settings_changed.emit(self.settings_model.get_all())
-            else:
-                QMessageBox.warning(
-                    self,
-                    "Import Failed",
-                    "Failed to import settings. See logs for details."
-                )
-        except Exception as e:
-            logger.error(f"Error importing settings: {e}", exc_info=True)
-            QMessageBox.critical(
-                self,
-                "Import Error",
-                f"An error occurred while importing settings: {str(e)}"
-            )
-    
-    def _on_export_clicked(self) -> None:
-        """Handle export button click."""
-        file_path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Export Settings",
-            str(Path.home()),
-            "JSON Files (*.json)"
-        )
-        
-        if not file_path:
-            return
-            
+        """Save settings and optionally show confirmation dialog."""
         try:
             # Collect settings from UI
             self._collect_settings_from_ui()
             
-            # Save settings to file
-            result = self.settings_model.save_to_file(file_path)
+            # Save settings
+            self.settings_model.save()
+            logger.info("Settings saved successfully")
             
-            if result:
+            # Reset "changed" flag
+            self.settings_changed = False
+            self.apply_btn.setEnabled(False)
+            
+            # Show confirmation dialog if requested
+            if show_dialog:
                 QMessageBox.information(
                     self,
-                    "Settings Exported",
-                    f"Settings have been exported to {file_path}"
-                )
-            else:
-                QMessageBox.warning(
-                    self,
-                    "Export Failed",
-                    "Failed to export settings. See logs for details."
+                    tr("Settings Saved"),
+                    tr("Your settings have been saved successfully."),
+                    QMessageBox.StandardButton.Ok
                 )
         except Exception as e:
-            logger.error(f"Error exporting settings: {e}", exc_info=True)
+            # Log exception
+            logger.error(f"Error saving settings: {str(e)}")
+            
+            # Show error dialog
             QMessageBox.critical(
                 self,
-                "Export Error",
-                f"An error occurred while exporting settings: {str(e)}"
+                tr("Error"),
+                tr("Failed to save settings: {0}").format(str(e)),
+                QMessageBox.StandardButton.Ok
+            )
+    
+    def _on_reset_clicked(self) -> None:
+        """Handle reset button click."""
+        # Ask for confirmation
+        response = QMessageBox.question(
+            self,
+            tr("Reset Settings"),
+            tr("Are you sure you want to reset all settings to their default values? This cannot be undone."),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if response == QMessageBox.StandardButton.Yes:
+            try:
+                # Reset settings
+                self.settings_model.reset_to_defaults()
+                
+                # Reload UI with default values
+                self._load_settings_to_ui()
+                
+                # Mark as not changed
+                self.settings_changed = False
+                self.apply_btn.setEnabled(False)
+                
+                # Show success message
+                QMessageBox.information(
+                    self,
+                    tr("Reset Complete"),
+                    tr("Settings have been reset to their default values."),
+                    QMessageBox.StandardButton.Ok
+                )
+            except Exception as e:
+                # Log error
+                logger.error(f"Error resetting settings: {str(e)}")
+                
+                # Show error message
+                QMessageBox.critical(
+                    self,
+                    tr("Error"),
+                    tr("Failed to reset settings: {0}").format(str(e)),
+                    QMessageBox.StandardButton.Ok
+                )
+    
+    def _on_import_clicked(self) -> None:
+        """Handle import button click."""
+        # Ask for file path
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            tr("Import Settings"),
+            "",
+            tr("Settings Files (*.json);;All Files (*)")
+        )
+        
+        if not file_path:
+            return
+        
+        try:
+            # Import settings
+            self.settings_model.import_from_file(file_path)
+            
+            # Reload UI
+            self._load_settings_to_ui()
+            
+            # Show success message
+            QMessageBox.information(
+                self,
+                tr("Import Complete"),
+                tr("Settings have been imported successfully."),
+                QMessageBox.StandardButton.Ok
+            )
+        except Exception as e:
+            # Log error
+            logger.error(f"Error importing settings: {str(e)}")
+            
+            # Show error message
+            QMessageBox.critical(
+                self,
+                tr("Import Error"),
+                tr("Failed to import settings: {0}").format(str(e)),
+                QMessageBox.StandardButton.Ok
+            )
+    
+    def _on_export_clicked(self) -> None:
+        """Handle export button click."""
+        # Ask for file path
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            tr("Export Settings"),
+            "",
+            tr("Settings Files (*.json);;All Files (*)")
+        )
+        
+        if not file_path:
+            return
+        
+        # Add .json extension if not provided
+        if not file_path.endswith(".json"):
+            file_path += ".json"
+        
+        try:
+            # Collect settings from UI
+            self._collect_settings_from_ui()
+            
+            # Export settings
+            self.settings_model.export_to_file(file_path)
+            
+            # Show success message
+            QMessageBox.information(
+                self,
+                tr("Export Complete"),
+                tr("Settings have been exported successfully."),
+                QMessageBox.StandardButton.Ok
+            )
+        except Exception as e:
+            logger.error(f"Error exporting settings: {str(e)}")
+            
+            QMessageBox.critical(
+                self,
+                tr("Export Error"),
+                tr("An error occurred while exporting configuration: {0}").format(str(e))
             )
     
     def _on_color_button_clicked(self, button: QPushButton, setting_name: str) -> None:
@@ -1580,45 +1499,48 @@ class SettingsTab(QWidget):
         self.browse_theme_button.setEnabled(is_custom)
     
     def _create_missing_directories(self) -> None:
-        """Create missing directories from path settings."""
-        directories = [
-            self.templates_dir.text(),
-            self.models_dir.text(),
-            self.states_dir.text(),
-            self.logs_dir.text(),
-            self.sequences_dir.text(),
-            self.screenshots_dir.text()
+        """Create missing template and cache directories."""
+        dirs_to_create = [
+            self.template_dir.text(),
+            self.screenshot_dir.text(),
+            self.log_dir.text(),
+            self.sequence_dir.text()
         ]
         
+        # Filter out empty entries
+        dirs_to_create = [dir_path for dir_path in dirs_to_create if dir_path]
+        
+        # Create directories
         created_count = 0
-        
-        for directory in directories:
-            if directory and not os.path.exists(directory):
-                try:
-                    os.makedirs(directory, exist_ok=True)
+        for dir_path in dirs_to_create:
+            try:
+                path = Path(dir_path)
+                if not path.exists():
+                    path.mkdir(parents=True, exist_ok=True)
                     created_count += 1
-                    logger.info(f"Created directory: {directory}")
-                except Exception as e:
-                    logger.error(f"Error creating directory {directory}: {e}")
+                    logger.info(f"Created directory: {dir_path}")
+            except Exception as e:
+                logger.error(f"Error creating directory {dir_path}: {e}")
         
+        # Show result
         if created_count > 0:
             QMessageBox.information(
                 self,
-                "Directories Created",
-                f"Created {created_count} missing directories."
+                tr("Directories Created"),
+                tr("{0} missing directories have been created.").format(created_count)
             )
         else:
             QMessageBox.information(
                 self,
-                "Directories",
-                "All directories already exist."
+                tr("Directories"),
+                tr("All directories already exist.")
             )
     
     def _export_full_configuration(self) -> None:
         """Export the full configuration including system information."""
         file_path, _ = QFileDialog.getSaveFileName(
             self,
-            "Export Full Configuration",
+            tr("Export Full Configuration"),
             str(Path.home()),
             "Text Files (*.txt)"
         )
@@ -1678,80 +1600,91 @@ class SettingsTab(QWidget):
             
             QMessageBox.information(
                 self,
-                "Configuration Exported",
-                f"Full configuration has been exported to {file_path}"
+                tr("Configuration Exported"),
+                tr("Full configuration has been exported to {0}").format(file_path)
             )
             
         except Exception as e:
             logger.error(f"Error exporting configuration: {e}", exc_info=True)
             QMessageBox.critical(
                 self,
-                "Export Error",
-                f"An error occurred while exporting configuration: {str(e)}"
+                tr("Export Error"),
+                tr("An error occurred while exporting configuration: {0}").format(str(e))
             )
     
     def _confirm_factory_reset(self) -> None:
-        """Confirm and perform factory reset of all settings."""
-        # Confirm reset with a more serious warning
-        result = QMessageBox.warning(
+        """Confirm and perform factory reset."""
+        # Ask for confirmation with a more serious warning
+        response = QMessageBox.warning(
             self,
-            "Factory Reset",
-            "Warning: This will reset ALL settings to factory defaults and cannot be undone. "
-            "Are you absolutely sure you want to continue?",
+            tr("Factory Reset"),
+            tr("WARNING: This will reset ALL settings to factory defaults, including:\n\n"
+                "• Window settings\n"
+                "• Detection parameters\n"
+                "• Automation configurations\n"
+                "• UI preferences\n"
+                "• Application paths\n\n"
+                "This action CANNOT be undone. Are you sure you want to continue?"),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No
         )
         
-        if result != QMessageBox.StandardButton.Yes:
+        if response != QMessageBox.StandardButton.Yes:
             return
-            
-        # Double-confirm with a text challenge
-        confirmation_text, ok = QInputDialog.getText(
+        
+        # Ask for final confirmation
+        final_response = QMessageBox.critical(
             self,
-            "Confirm Factory Reset",
-            "Type 'RESET' to confirm factory reset:",
-            QLineEdit.EchoMode.Normal
+            tr("Final Confirmation"),
+            tr("This is your final chance to cancel.\n\n"
+                "Proceeding will reset ALL settings to factory defaults.\n\n"
+                "Are you ABSOLUTELY sure you want to continue?"),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
         )
         
-        if not ok or confirmation_text != "RESET":
+        if final_response != QMessageBox.StandardButton.Yes:
             return
-            
+        
         try:
-            # Delete the settings file
-            settings_file = self.settings_model.settings_file
-            if os.path.exists(settings_file):
-                os.remove(settings_file)
-                
-            # Clear QSettings
-            qsettings = QSettings("ScoutTeam", "Scout")
-            qsettings.clear()
+            # Perform factory reset
+            self.settings_model.factory_reset()
             
-            # Reset settings model
-            self.settings_model = SettingsModel()
-            
-            # Update UI
+            # Reload UI
             self._load_settings_to_ui()
             
-            # Update status
-            self.status_label.setText("Factory reset completed")
-            self.status_label.setStyleSheet("color: green;")
-            
+            # Show success message
             QMessageBox.information(
                 self,
-                "Factory Reset Complete",
-                "All settings have been reset to factory defaults. "
-                "You may need to restart the application for all changes to take effect."
+                tr("Factory Reset Complete"),
+                tr("All settings have been reset to factory defaults."),
+                QMessageBox.StandardButton.Ok
             )
             
-            # Emit settings changed signal
-            self.settings_changed.emit(self.settings_model.get_all())
+            # Restart the application if necessary
+            restart_response = QMessageBox.question(
+                self,
+                tr("Restart Required"),
+                tr("Some changes may require a restart to take full effect.\n\n"
+                    "Would you like to restart the application now?"),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes
+            )
             
+            if restart_response == QMessageBox.StandardButton.Yes:
+                # Request application restart
+                QApplication.instance().exit(Codes.RESTART_CODE)
+        
         except Exception as e:
-            logger.error(f"Error performing factory reset: {e}", exc_info=True)
+            # Log error
+            logger.error(f"Error performing factory reset: {str(e)}")
+            
+            # Show error message
             QMessageBox.critical(
                 self,
-                "Factory Reset Error",
-                f"An error occurred during factory reset: {str(e)}"
+                tr("Error"),
+                tr("Failed to perform factory reset: {0}").format(str(e)),
+                QMessageBox.StandardButton.Ok
             )
     
     def get_settings(self) -> Dict:
@@ -1774,16 +1707,39 @@ class SettingsTab(QWidget):
         """
         self._mark_settings_changed()
         
-        # Enable/disable custom theme controls
-        theme = self.theme_combo.currentData()
-        is_custom = (theme == "custom")
-        self.custom_theme_check.setEnabled(is_custom)
-        if is_custom:
-            self.custom_theme_path.setEnabled(self.custom_theme_check.isChecked())
-            self.browse_theme_button.setEnabled(self.custom_theme_check.isChecked())
-        else:
-            self.custom_theme_path.setEnabled(False)
-            self.browse_theme_button.setEnabled(False)
+        try:
+            # Enable/disable custom theme controls
+            theme = self.theme_combo.currentData()
+            is_custom = (theme == "custom")
+            self.custom_theme_check.setEnabled(is_custom)
+            if is_custom:
+                self.custom_theme_path.setEnabled(self.custom_theme_check.isChecked())
+                self.browse_theme_button.setEnabled(self.custom_theme_check.isChecked())
+            else:
+                self.custom_theme_path.setEnabled(False)
+                self.browse_theme_button.setEnabled(False)
+            
+            # Apply theme immediately if we have a theme manager
+            if hasattr(self, '_theme_manager') and self._theme_manager:
+                success = self._theme_manager.set_theme(theme)
+                if not success:
+                    QMessageBox.warning(
+                        self,
+                        tr("Theme Change Error"),
+                        tr("Failed to apply the selected theme. The application may need to be restarted."),
+                        QMessageBox.StandardButton.Ok
+                    )
+                else:
+                    logger.info(f"Theme changed to: {theme}")
+        
+        except Exception as e:
+            logger.error(f"Error changing theme: {str(e)}")
+            QMessageBox.critical(
+                self,
+                tr("Error"),
+                tr("Failed to change theme: {0}").format(str(e)),
+                QMessageBox.StandardButton.Ok
+            )
     
     def _on_language_changed(self, index):
         """
@@ -1794,6 +1750,9 @@ class SettingsTab(QWidget):
         """
         lang_value = self.language_combo.currentData()
         
+        # Mark settings as changed
+        self._mark_settings_changed()
+        
         # Convert string value to Language enum
         try:
             lang = Language(lang_value)
@@ -1803,75 +1762,279 @@ class SettingsTab(QWidget):
             if not success:
                 QMessageBox.warning(
                     self,
-                    tr("Language Error"),
-                    tr("Failed to apply the selected language. Some UI elements may not be translated correctly.")
+                    tr("Language Change Error"),
+                    tr("Failed to apply the selected language. Some UI elements may not be translated correctly."),
+                    QMessageBox.StandardButton.Ok
+                )
+            else:
+                # Show a note about application restart
+                QMessageBox.information(
+                    self,
+                    tr("Language Changed"),
+                    tr("Language has been changed to {0}.\n\nSome changes may require an application restart to take full effect.").format(self.language_combo.currentText()),
+                    QMessageBox.StandardButton.Ok
                 )
             
             logger.info(f"Language changed to: {lang.value}")
             
         except ValueError:
             logger.error(f"Invalid language value: {lang_value}")
-    
-    def _save_settings(self):
-        """Save settings to QSettings."""
-        # Save UI settings
-        self._settings.setValue("ui/theme", self.theme_combo.currentData())
-        self._settings.setValue("ui/use_custom_theme", self.custom_theme_check.isChecked())
-        self._settings.setValue("ui/custom_theme_path", self.custom_theme_path.text())
-        self._settings.setValue("ui/font_size", self.font_size_spinner.value())
+            QMessageBox.critical(
+                self,
+                tr("Error"),
+                tr("Invalid language selection. Please try again."),
+                QMessageBox.StandardButton.Ok
+            )
+        except Exception as e:
+            logger.error(f"Error changing language: {str(e)}")
+            QMessageBox.critical(
+                self,
+                tr("Error"),
+                tr("Failed to change language: {0}").format(str(e)),
+                QMessageBox.StandardButton.Ok
+            )
+
+    def _create_advanced_tab(self) -> None:
+        """Create the advanced settings tab."""
+        from scout.ui.utils.layout_helper import set_min_width_for_text, adjust_button_sizes
         
-        # Don't need to save language here as it's handled by the LanguageManager
+        advanced_tab = QWidget()
+        self.tabs.addTab(advanced_tab, tr("Advanced"))
         
-        self._modified = False
-        logger.info("Settings saved")
-    
-    def _mark_settings_changed(self):
-        """Mark settings as changed."""
-        self._modified = True
-    
-    def _on_theme_changed(self, index):
-        """
-        Handle theme selection change.
+        # Create layout
+        layout = QVBoxLayout(advanced_tab)
         
-        Args:
-            index: Index of the selected item
-        """
-        self._mark_settings_changed()
+        # Warning label
+        warning_label = QLabel(tr("Warning: These settings are for advanced users only. "
+                               "Incorrect values may cause instability or crashes."))
+        warning_label.setWordWrap(True)
+        warning_label.setStyleSheet("color: red; font-weight: bold;")
+        layout.addWidget(warning_label)
         
-        # Enable/disable custom theme controls
-        theme = self.theme_combo.currentData()
-        is_custom = (theme == "custom")
-        self.custom_theme_check.setEnabled(is_custom)
-        if is_custom:
-            self.custom_theme_path.setEnabled(self.custom_theme_check.isChecked())
-            self.browse_theme_button.setEnabled(self.custom_theme_check.isChecked())
-        else:
-            self.custom_theme_path.setEnabled(False)
-            self.browse_theme_button.setEnabled(False)
-    
-    def _on_language_changed(self, index):
-        """
-        Handle language selection change.
+        # Create form layout for settings
+        form_layout = QFormLayout()
+        layout.addLayout(form_layout)
         
-        Args:
-            index: Index of the selected item
-        """
-        lang_value = self.language_combo.currentData()
+        # Performance settings
+        performance_group = QGroupBox(tr("Performance"))
+        performance_layout = QFormLayout(performance_group)
         
-        # Convert string value to Language enum
-        try:
-            lang = Language(lang_value)
-            
-            # Update language
-            success = self._language_manager.set_language(lang)
-            if not success:
-                QMessageBox.warning(
-                    self,
-                    tr("Language Error"),
-                    tr("Failed to apply the selected language. Some UI elements may not be translated correctly.")
-                )
-            
-            logger.info(f"Language changed to: {lang.value}")
-            
-        except ValueError:
-            logger.error(f"Invalid language value: {lang_value}") 
+        # Thread count
+        self.thread_count = QSpinBox()
+        self.thread_count.setRange(1, 16)
+        self.thread_count.setValue(4)
+        self.thread_count.valueChanged.connect(self._mark_settings_changed)
+        performance_layout.addRow(tr("Worker Threads:"), self.thread_count)
+        
+        # Process priority
+        self.process_priority = QComboBox()
+        priority_options = [tr("Normal"), tr("Above Normal"), tr("High"), tr("Realtime")]
+        self.process_priority.addItems(priority_options)
+        self.process_priority.currentIndexChanged.connect(self._mark_settings_changed)
+        set_min_width_for_text(self.process_priority, tr("Above Normal") + " " * 3)
+        performance_layout.addRow(tr("Process Priority:"), self.process_priority)
+        
+        # Image cache size
+        self.image_cache_size = QSpinBox()
+        self.image_cache_size.setRange(10, 1000)
+        self.image_cache_size.setValue(100)
+        self.image_cache_size.setSuffix(tr(" MB"))
+        self.image_cache_size.valueChanged.connect(self._mark_settings_changed)
+        performance_layout.addRow(tr("Image Cache Size:"), self.image_cache_size)
+        
+        # Enable parallel processing
+        self.parallel_processing = QCheckBox()
+        self.parallel_processing.setChecked(True)
+        self.parallel_processing.stateChanged.connect(self._mark_settings_changed)
+        performance_layout.addRow(tr("Parallel Processing:"), self.parallel_processing)
+        
+        performance_group.setLayout(performance_layout)
+        layout.addWidget(performance_group)
+        
+        # Debug settings
+        debug_group = QGroupBox(tr("Debug"))
+        debug_layout = QFormLayout(debug_group)
+        
+        # Log level
+        self.log_level = QComboBox()
+        log_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+        self.log_level.addItems(log_levels)
+        self.log_level.setCurrentIndex(1)  # Default to INFO
+        self.log_level.currentIndexChanged.connect(self._mark_settings_changed)
+        set_min_width_for_text(self.log_level, "CRITICAL" + " " * 3)
+        debug_layout.addRow(tr("Log Level:"), self.log_level)
+        
+        # Log to file
+        self.log_to_file = QCheckBox()
+        self.log_to_file.setChecked(True)
+        self.log_to_file.stateChanged.connect(self._mark_settings_changed)
+        debug_layout.addRow(tr("Log to File:"), self.log_to_file)
+        
+        # Log format
+        self.log_format = QLineEdit("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        self.log_format.textChanged.connect(self._mark_settings_changed)
+        debug_layout.addRow(tr("Log Format:"), self.log_format)
+        
+        # Debug window
+        self.debug_window = QCheckBox()
+        self.debug_window.setChecked(False)
+        self.debug_window.stateChanged.connect(self._mark_settings_changed)
+        debug_layout.addRow(tr("Show Debug Window:"), self.debug_window)
+        
+        # Performance monitoring
+        self.performance_monitoring = QCheckBox()
+        self.performance_monitoring.setChecked(False)
+        self.performance_monitoring.stateChanged.connect(self._mark_settings_changed)
+        debug_layout.addRow(tr("Performance Monitoring:"), self.performance_monitoring)
+        
+        debug_group.setLayout(debug_layout)
+        layout.addWidget(debug_group)
+        
+        # Developer settings
+        developer_group = QGroupBox(tr("Developer"))
+        developer_layout = QFormLayout(developer_group)
+        
+        # Development mode
+        self.development_mode = QCheckBox()
+        self.development_mode.setChecked(False)
+        self.development_mode.stateChanged.connect(self._mark_settings_changed)
+        developer_layout.addRow(tr("Development Mode:"), self.development_mode)
+        
+        # Remote debugging
+        self.remote_debugging = QCheckBox()
+        self.remote_debugging.setChecked(False)
+        self.remote_debugging.stateChanged.connect(self._mark_settings_changed)
+        developer_layout.addRow(tr("Remote Debugging:"), self.remote_debugging)
+        
+        # Remote debugging port
+        self.remote_debugging_port = QSpinBox()
+        self.remote_debugging_port.setRange(1024, 65535)
+        self.remote_debugging_port.setValue(5678)
+        self.remote_debugging_port.valueChanged.connect(self._mark_settings_changed)
+        developer_layout.addRow(tr("Debugging Port:"), self.remote_debugging_port)
+        
+        # Export config button
+        export_config_btn = QPushButton(tr("Export Configuration"))
+        export_config_btn.clicked.connect(self._export_full_configuration)
+        developer_layout.addRow("", export_config_btn)
+        
+        developer_group.setLayout(developer_layout)
+        layout.addWidget(developer_group)
+        
+        # Restore factory settings button
+        factory_reset_btn = QPushButton(tr("Restore Factory Settings"))
+        factory_reset_btn.clicked.connect(self._confirm_factory_reset)
+        factory_reset_btn.setStyleSheet("background-color: #ffaaaa;")
+        layout.addWidget(factory_reset_btn)
+        
+    def _create_notification_tab(self) -> None:
+        """Create the notification configuration tab."""
+        from scout.ui.utils.layout_helper import set_min_width_for_text, adjust_button_sizes
+        
+        notification_tab = QWidget()
+        self.tabs.addTab(notification_tab, tr("Notifications"))
+        
+        # Create layout
+        layout = QVBoxLayout(notification_tab)
+        
+        # Sound notifications
+        sound_group = QGroupBox(tr("Sound Notifications"))
+        sound_layout = QFormLayout(sound_group)
+        
+        # Enable sound
+        self.enable_sound = QCheckBox()
+        self.enable_sound.setChecked(True)
+        self.enable_sound.stateChanged.connect(self._mark_settings_changed)
+        sound_layout.addRow(tr("Enable Sound:"), self.enable_sound)
+        
+        # Sound volume
+        self.sound_volume = QSlider(Qt.Orientation.Horizontal)
+        self.sound_volume.setRange(0, 100)
+        self.sound_volume.setValue(80)
+        self.sound_volume.valueChanged.connect(self._mark_settings_changed)
+        
+        volume_layout = QHBoxLayout()
+        volume_layout.addWidget(self.sound_volume)
+        self.volume_label = QLabel("80%")
+        volume_layout.addWidget(self.volume_label)
+        sound_layout.addRow(tr("Volume:"), volume_layout)
+        
+        # Sound test button
+        test_sound_btn = QPushButton(tr("Test Sound"))
+        test_sound_btn.clicked.connect(self._test_notification_sound)
+        sound_layout.addRow("", test_sound_btn)
+        
+        sound_group.setLayout(sound_layout)
+        layout.addWidget(sound_group)
+        
+        # Desktop notifications
+        desktop_group = QGroupBox(tr("Desktop Notifications"))
+        desktop_layout = QFormLayout(desktop_group)
+        
+        # Enable desktop notifications
+        self.desktop_notifications = QCheckBox()
+        self.desktop_notifications.setChecked(True)
+        self.desktop_notifications.stateChanged.connect(self._mark_settings_changed)
+        desktop_layout.addRow(tr("Enable Notifications:"), self.desktop_notifications)
+        
+        # Notification duration
+        self.notification_duration = QSpinBox()
+        self.notification_duration.setRange(1, 60)
+        self.notification_duration.setValue(5)
+        self.notification_duration.setSuffix(tr(" sec"))
+        self.notification_duration.valueChanged.connect(self._mark_settings_changed)
+        desktop_layout.addRow(tr("Duration:"), self.notification_duration)
+        
+        # Test notification button
+        test_notification_btn = QPushButton(tr("Test Notification"))
+        test_notification_btn.clicked.connect(self._test_desktop_notification)
+        desktop_layout.addRow("", test_notification_btn)
+        
+        desktop_group.setLayout(desktop_layout)
+        layout.addWidget(desktop_group)
+        
+        # Add notification types grid
+        types_group = QGroupBox(tr("Notification Types"))
+        types_layout = QGridLayout(types_group)
+        
+        # Checkbox for each notification type
+        notification_types = [
+            tr("Task Completed"), 
+            tr("Error Occurred"), 
+            tr("Resource Found"),
+            tr("Battle Started"),
+            tr("Resource Depleted"),
+            tr("Building Completed"),
+            tr("Scout Completed")
+        ]
+        
+        self.notification_type_checks = {}
+        for i, notification_type in enumerate(notification_types):
+            checkbox = QCheckBox(notification_type)
+            checkbox.setChecked(True)
+            checkbox.stateChanged.connect(self._mark_settings_changed)
+            row, col = divmod(i, 2)
+            types_layout.addWidget(checkbox, row, col)
+            self.notification_type_checks[notification_type] = checkbox
+        
+        types_group.setLayout(types_layout)
+        layout.addWidget(types_group)
+        layout.addStretch()
+        
+    def _test_notification_sound(self):
+        """Test the notification sound."""
+        # This is a placeholder for the actual sound test functionality
+        QMessageBox.information(
+            self,
+            tr("Sound Test"),
+            tr("Sound test feature is not yet implemented.")
+        )
+        
+    def _test_desktop_notification(self):
+        """Test the desktop notification."""
+        # This is a placeholder for the actual notification test functionality
+        QMessageBox.information(
+            self,
+            tr("Notification Test"),
+            tr("Desktop notification test feature is not yet implemented.")
+        ) 

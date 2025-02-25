@@ -17,6 +17,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 
 from scout.core.game.game_service_interface import GameServiceInterface
 from scout.ui.widgets.game_state_visualization_widget import GameStateVisualizationWidget
+from scout.ui.utils.language_manager import tr
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -68,7 +69,7 @@ class GameStateTab(QWidget):
         toolbar = QToolBar()
         
         # Refresh button
-        self.refresh_btn = QPushButton("Refresh")
+        self.refresh_btn = QPushButton(tr("Refresh"))
         self.refresh_btn.setIcon(QIcon.fromTheme("view-refresh"))
         toolbar.addWidget(self.refresh_btn)
         
@@ -76,8 +77,8 @@ class GameStateTab(QWidget):
         toolbar.addSeparator()
         
         # Connection status
-        toolbar.addWidget(QLabel("Connection Status:"))
-        self.status_label = QLabel("Disconnected")
+        toolbar.addWidget(QLabel(tr("Connection Status:")))
+        self.status_label = QLabel(tr("Disconnected"))
         self.status_label.setStyleSheet("color: red;")
         toolbar.addWidget(self.status_label)
         
@@ -132,10 +133,10 @@ class GameStateTab(QWidget):
         self._is_connected = is_connected
         
         if is_connected:
-            self.status_label.setText("Connected")
+            self.status_label.setText(tr("Connected"))
             self.status_label.setStyleSheet("color: green;")
         else:
-            self.status_label.setText("Disconnected")
+            self.status_label.setText(tr("Disconnected"))
             self.status_label.setStyleSheet("color: red;")
     
     def set_game_data(self, game_data: Dict[str, Any]) -> None:
@@ -150,4 +151,4 @@ class GameStateTab(QWidget):
     def on_tab_activated(self) -> None:
         """Handle tab activation."""
         # Refresh game state when tab becomes active
-        self._refresh_game_state() 
+        self._refresh_game_state()

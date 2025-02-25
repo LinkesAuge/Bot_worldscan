@@ -339,9 +339,14 @@ class DetectionTab(QWidget):
     
     def run_detection(self) -> None:
         """Run detection with the current settings."""
-        # First check if we can find the game window
-        if not self.window_service.find_window():
-            QMessageBox.warning(self, "Error", "Could not find game window")
+        # Check if we have a window
+        if not self.window_service.has_window():
+            QMessageBox.warning(self, tr("Error"), tr("Could not find game window"))
+            return
+        
+        # Check if at least one template is selected
+        if not self.template_list.get_selected_templates():
+            QMessageBox.warning(self, tr("Error"), tr("No templates selected"))
             return
         
         # Get detection parameters based on current strategy
@@ -399,8 +404,8 @@ class DetectionTab(QWidget):
             self.detection_requested.emit(self._current_strategy, params)
             
         except Exception as e:
-            logger.error(f"Error running detection: {e}")
-            QMessageBox.critical(self, "Error", f"Detection failed: {str(e)}")
+            logger.error(f"Detection error: {e}", exc_info=True)
+            QMessageBox.critical(self, tr("Error"), tr("Detection failed: {0}").format(str(e)))
     
     def _get_detection_params(self) -> Dict[str, Any]:
         """

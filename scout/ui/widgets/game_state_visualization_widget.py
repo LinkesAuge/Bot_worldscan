@@ -21,7 +21,7 @@ from PyQt6.QtWidgets import (
     QScrollArea, QFrame, QTableWidget, QTableWidgetItem, QSplitter,
     QHeaderView, QComboBox, QMessageBox, QGroupBox, QRadioButton,
     QButtonGroup, QSlider, QTabWidget, QGridLayout, QTreeWidget,
-    QTreeWidgetItem, QProgressBar, QStackedWidget, QToolBar
+    QTreeWidgetItem, QProgressBar, QStackedWidget, QToolBar, QCheckBox
 )
 from PyQt6.QtGui import (
     QImage, QPixmap, QPainter, QPen, QColor, QBrush, QFont,
@@ -33,6 +33,7 @@ from PyQt6.QtCore import (
 )
 
 from scout.core.game.game_service_interface import GameServiceInterface
+from scout.ui.utils.language_manager import tr
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -75,21 +76,21 @@ class ResourcesView(QWidget):
         main_layout = QVBoxLayout(self)
         
         # Create resource grid
-        self.resources_group = QGroupBox("Resources")
+        self.resources_group = QGroupBox(tr("Resources"))
         resources_layout = QGridLayout(self.resources_group)
         
         # Headers
-        resources_layout.addWidget(QLabel("Resource"), 0, 0)
-        resources_layout.addWidget(QLabel("Amount"), 0, 1)
-        resources_layout.addWidget(QLabel("Production"), 0, 2)
-        resources_layout.addWidget(QLabel("Trend"), 0, 3)
+        resources_layout.addWidget(QLabel(tr("Resource")), 0, 0)
+        resources_layout.addWidget(QLabel(tr("Amount")), 0, 1)
+        resources_layout.addWidget(QLabel(tr("Production")), 0, 2)
+        resources_layout.addWidget(QLabel(tr("Trend")), 0, 3)
         
         # Set up grid for standard resources
         self.resource_labels = {}
         self.production_labels = {}
         self.trend_indicators = {}
         
-        standard_resources = ["Gold", "Food", "Wood", "Stone", "Iron"]
+        standard_resources = [tr("Gold"), tr("Food"), tr("Wood"), tr("Stone"), tr("Iron")]
         
         for i, resource_name in enumerate(standard_resources):
             # Resource name
@@ -99,67 +100,57 @@ class ResourcesView(QWidget):
             amount_label = QLabel("0")
             amount_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             resources_layout.addWidget(amount_label, i + 1, 1)
-            self.resource_labels[resource_name.lower()] = amount_label
+            self.resource_labels[resource_name] = amount_label
             
-            # Production rate
-            production_label = QLabel("0/h")
+            # Resource production
+            production_label = QLabel("+0/h")
             production_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             resources_layout.addWidget(production_label, i + 1, 2)
-            self.production_labels[resource_name.lower()] = production_label
+            self.production_labels[resource_name] = production_label
             
-            # Trend indicator (will be a custom widget)
-            trend_indicator = QLabel("↑")
-            trend_indicator.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            resources_layout.addWidget(trend_indicator, i + 1, 3)
-            self.trend_indicators[resource_name.lower()] = trend_indicator
+            # Trend indicator
+            trend_label = QLabel("→")
+            trend_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            resources_layout.addWidget(trend_label, i + 1, 3)
+            self.trend_indicators[resource_name] = trend_label
         
+        # Add resource grid to main layout
         main_layout.addWidget(self.resources_group)
         
-        # Add resource history graph
-        history_group = QGroupBox("Resource History")
-        history_layout = QVBoxLayout(history_group)
+        # Create chart container
+        chart_group = QGroupBox(tr("Resource Trends"))
+        chart_layout = QVBoxLayout(chart_group)
         
-        # Set up matplotlib for resource history graph
-        import matplotlib
-        matplotlib.use('Qt5Agg')  # Use Qt5Agg backend for PyQt6 compatibility
-        from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-        from matplotlib.figure import Figure
+        # Create toolbar for chart
+        chart_toolbar = QHBoxLayout()
         
-        # Create figure and canvas
-        self.figure = Figure(figsize=(5, 4), dpi=100)
-        self.canvas = FigureCanvas(self.figure)
-        self.canvas.setMinimumHeight(200)
+        # Chart type selector
+        chart_toolbar.addWidget(QLabel(tr("View:")))
+        self.chart_type = QComboBox()
+        self.chart_type.addItems([tr("All Resources"), tr("Gold"), tr("Food"), tr("Wood"), tr("Stone"), tr("Iron")])
+        self.chart_type.currentIndexChanged.connect(self._update_chart)
+        chart_toolbar.addWidget(self.chart_type)
         
-        # Create axes for plotting
-        self.axes = self.figure.add_subplot(111)
-        self.axes.set_title('Resource History')
-        self.axes.set_xlabel('Time')
-        self.axes.set_ylabel('Amount')
+        # Time range selector
+        chart_toolbar.addWidget(QLabel(tr("Time Range:")))
+        self.time_range = QComboBox()
+        self.time_range.addItems([tr("Last Hour"), tr("Last 24 Hours"), tr("Last Week")])
+        self.time_range.currentIndexChanged.connect(self._update_chart)
+        chart_toolbar.addWidget(self.time_range)
         
-        # Add chart to layout
-        history_layout.addWidget(self.canvas)
+        chart_layout.addLayout(chart_toolbar)
         
-        # Add control panel for the chart
-        control_layout = QHBoxLayout()
+        # Add placeholder for chart
+        self.chart_label = QLabel(tr("No resource data available"))
+        self.chart_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.chart_label.setFixedHeight(200)
+        self.chart_label.setStyleSheet("background-color: #f0f0f0; border: 1px solid #ccc;")
+        chart_layout.addWidget(self.chart_label)
         
-        # Resource selection for chart
-        self.chart_resource_combo = QComboBox()
-        self.chart_resource_combo.addItems(standard_resources)
-        self.chart_resource_combo.currentIndexChanged.connect(self._update_chart)
-        control_layout.addWidget(QLabel("Resource:"))
-        control_layout.addWidget(self.chart_resource_combo)
+        # Add chart to main layout
+        main_layout.addWidget(chart_group)
         
-        # Time range for chart
-        self.chart_timerange_combo = QComboBox()
-        self.chart_timerange_combo.addItems(["Last 10 minutes", "Last hour", "Last day", "All"])
-        self.chart_timerange_combo.currentIndexChanged.connect(self._update_chart)
-        control_layout.addWidget(QLabel("Time Range:"))
-        control_layout.addWidget(self.chart_timerange_combo)
-        
-        history_layout.addLayout(control_layout)
-        main_layout.addWidget(history_group)
-        
-        # Add stretcher to keep widgets at top
+        # Add spacer to push everything up
         main_layout.addStretch()
     
     def _update_resources(self) -> None:
@@ -227,20 +218,20 @@ class ResourcesView(QWidget):
                 return
             
             # Get selected resource
-            resource_name = self.chart_resource_combo.currentText().lower()
+            resource_name = self.chart_type.currentText()
             
             # Get selected time range
-            time_range = self.chart_timerange_combo.currentText()
+            time_range = self.time_range.currentText()
             
             # Determine how many data points to show
-            if time_range == "Last 10 minutes":
-                cutoff_time = datetime.now() - timedelta(minutes=10)
-                start_idx = next((i for i, t in enumerate(self._timestamps) if t >= cutoff_time), 0)
-            elif time_range == "Last hour":
+            if time_range == tr("Last Hour"):
                 cutoff_time = datetime.now() - timedelta(hours=1)
                 start_idx = next((i for i, t in enumerate(self._timestamps) if t >= cutoff_time), 0)
-            elif time_range == "Last day":
+            elif time_range == tr("Last 24 Hours"):
                 cutoff_time = datetime.now() - timedelta(days=1)
+                start_idx = next((i for i, t in enumerate(self._timestamps) if t >= cutoff_time), 0)
+            elif time_range == tr("Last Week"):
+                cutoff_time = datetime.now() - timedelta(days=7)
                 start_idx = next((i for i, t in enumerate(self._timestamps) if t >= cutoff_time), 0)
             else:  # All
                 start_idx = 0
@@ -363,52 +354,139 @@ class MapView(QWidget):
         
         self.game_state_service = game_state_service
         
-        # Initialize state
-        self._map_entities = {}
-        self._selected_entity_id = None
-        self._map_size = (1000, 1000)  # Default map size
-        self._view_center = QPointF(500, 500)  # Center view at map center
-        self._zoom_level = 1.0
+        # Initialize map state
+        self._map_data = {}
+        self._entities = {}
+        self._territory = []
+        self._selected_entity = None
+        
+        # View transformation
+        self._offset_x = 0
+        self._offset_y = 0
+        self._scale = 1.0
         self._drag_start = None
         
-        # Configure widget
-        self.setMinimumSize(400, 400)
-        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)  # To receive key events
-        self.setMouseTracking(True)  # To receive mouse move events
-        
-        # Configure colors and styles
+        # Set up styles
         self._setup_styles()
         
-        # Start update timer
-        self._update_timer = QTimer(self)
-        self._update_timer.timeout.connect(self._update_map_data)
-        self._update_timer.start(10000)  # Update every 10 seconds
+        # Create UI layout
+        self._create_ui()
+        
+        # Enable mouse tracking
+        self.setMouseTracking(True)
+        
+        # Set focus policy to receive key events
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
     
     def _setup_styles(self) -> None:
-        """Set up colors and styles for map rendering."""
-        self._colors = {
-            "background": QColor(30, 30, 50),  # Dark blue-gray
-            "grid": QColor(50, 50, 70, 128),  # Light blue-gray, semi-transparent
-            "territory": QColor(0, 100, 0, 50),  # Dark green, very transparent
-            "own_city": QColor(0, 200, 0),  # Bright green
-            "enemy_city": QColor(200, 0, 0),  # Bright red
-            "resource_node": QColor(200, 200, 0),  # Yellow
-            "army": QColor(0, 100, 200),  # Blue
-            "enemy_army": QColor(200, 50, 50),  # Red
-            "selection": QColor(255, 255, 255, 180),  # White, semi-transparent
-            "text": QColor(255, 255, 255),  # White
-            "grid_text": QColor(150, 150, 170, 128)  # Light gray, semi-transparent
+        """Set up styles for map drawing."""
+        # Entity colors
+        self.entity_colors = {
+            'city': QColor(0, 0, 255, 180),      # Blue
+            'village': QColor(0, 128, 0, 180),   # Green
+            'resource': QColor(255, 165, 0, 180), # Orange
+            'army': QColor(255, 0, 0, 180),      # Red
+            'npc': QColor(128, 128, 128, 180),   # Gray
+            'player': QColor(255, 255, 0, 180),  # Yellow
+            'ally': QColor(0, 255, 255, 180),    # Cyan
+            'enemy': QColor(255, 0, 255, 180),   # Magenta
+            'unknown': QColor(0, 0, 0, 180)      # Black
         }
         
-        self._entity_symbols = {
-            "city": "🏰",
-            "enemy_city": "🏯",
-            "resource_node": "🌲",
-            "mine": "⛏️",
-            "army": "⚔️",
-            "enemy_army": "☠️",
-            "camp": "⛺"
-        }
+        # Grid style
+        self.grid_pen = QPen(QColor(200, 200, 200, 100))
+        self.grid_pen.setWidth(1)
+        
+        # Territory style
+        self.territory_brush = QBrush(QColor(0, 200, 0, 50))
+        self.territory_pen = QPen(QColor(0, 100, 0, 150))
+        self.territory_pen.setWidth(2)
+        
+        # Selection style
+        self.selection_pen = QPen(QColor(255, 255, 0, 255))
+        self.selection_pen.setWidth(3)
+    
+    def _create_ui(self) -> None:
+        """Create the UI components."""
+        # Main layout
+        main_layout = QVBoxLayout(self)
+        
+        # Create map controls
+        controls_layout = QHBoxLayout()
+        
+        # Zoom controls
+        zoom_group = QGroupBox(tr("Zoom"))
+        zoom_layout = QHBoxLayout(zoom_group)
+        
+        self.zoom_out_btn = QPushButton("-")
+        self.zoom_out_btn.setFixedSize(30, 30)
+        self.zoom_out_btn.clicked.connect(lambda: self._zoom(-0.1))
+        zoom_layout.addWidget(self.zoom_out_btn)
+        
+        self.zoom_slider = QSlider(Qt.Orientation.Horizontal)
+        self.zoom_slider.setMinimum(50)
+        self.zoom_slider.setMaximum(200)
+        self.zoom_slider.setValue(100)
+        self.zoom_slider.valueChanged.connect(self._on_zoom_slider_changed)
+        zoom_layout.addWidget(self.zoom_slider)
+        
+        self.zoom_in_btn = QPushButton("+")
+        self.zoom_in_btn.setFixedSize(30, 30)
+        self.zoom_in_btn.clicked.connect(lambda: self._zoom(0.1))
+        zoom_layout.addWidget(self.zoom_in_btn)
+        
+        controls_layout.addWidget(zoom_group)
+        
+        # Filter controls
+        filter_group = QGroupBox(tr("Filters"))
+        filter_layout = QHBoxLayout(filter_group)
+        
+        self.show_cities_cb = QCheckBox(tr("Cities"))
+        self.show_cities_cb.setChecked(True)
+        self.show_cities_cb.stateChanged.connect(self.update)
+        filter_layout.addWidget(self.show_cities_cb)
+        
+        self.show_resources_cb = QCheckBox(tr("Resources"))
+        self.show_resources_cb.setChecked(True)
+        self.show_resources_cb.stateChanged.connect(self.update)
+        filter_layout.addWidget(self.show_resources_cb)
+        
+        self.show_armies_cb = QCheckBox(tr("Armies"))
+        self.show_armies_cb.setChecked(True)
+        self.show_armies_cb.stateChanged.connect(self.update)
+        filter_layout.addWidget(self.show_armies_cb)
+        
+        controls_layout.addWidget(filter_group)
+        
+        # Add controls to main layout
+        main_layout.addLayout(controls_layout)
+        
+        # Create info panel for selected entity
+        self.info_panel = QGroupBox(tr("Selection Info"))
+        info_layout = QGridLayout(self.info_panel)
+        
+        info_layout.addWidget(QLabel(tr("Type:")), 0, 0)
+        self.entity_type_label = QLabel("")
+        info_layout.addWidget(self.entity_type_label, 0, 1)
+        
+        info_layout.addWidget(QLabel(tr("Name:")), 1, 0)
+        self.entity_name_label = QLabel("")
+        info_layout.addWidget(self.entity_name_label, 1, 1)
+        
+        info_layout.addWidget(QLabel(tr("Coordinates:")), 2, 0)
+        self.entity_coords_label = QLabel("")
+        info_layout.addWidget(self.entity_coords_label, 2, 1)
+        
+        info_layout.addWidget(QLabel(tr("Details:")), 3, 0)
+        self.entity_details_label = QLabel("")
+        info_layout.addWidget(self.entity_details_label, 3, 1)
+        
+        # Add info panel to main layout
+        main_layout.addWidget(self.info_panel)
+        self.info_panel.setVisible(False)  # Hide initially
+        
+        # Set minimum size for map display
+        self.setMinimumSize(400, 300)
     
     def _update_map_data(self) -> None:
         """Update map data from the game state service."""
@@ -428,7 +506,7 @@ class MapView(QWidget):
             self._map_size = (map_width, map_height)
             
             # Store entity data
-            self._map_entities = entities
+            self._entities = entities
             
             # Force redraw
             self.update()
@@ -536,7 +614,7 @@ class MapView(QWidget):
         
         # Draw own territory as a circle around own cities
         own_cities = [
-            entity for entity in self._map_entities.values()
+            entity for entity in self._entities.values()
             if entity.get('type') == 'city' and entity.get('owner') == 'player'
         ]
         
@@ -558,7 +636,7 @@ class MapView(QWidget):
             painter: QPainter instance
         """
         # Skip if no entities
-        if not self._map_entities:
+        if not self._entities:
             return
         
         # Set up font for entity symbols
@@ -566,7 +644,7 @@ class MapView(QWidget):
         painter.setFont(QFont("Arial", font_size))
         
         # Draw each entity
-        for entity_id, entity in self._map_entities.items():
+        for entity_id, entity in self._entities.items():
             entity_type = entity.get('type', 'unknown')
             x = entity.get('x', 0)
             y = entity.get('y', 0)
@@ -630,8 +708,8 @@ class MapView(QWidget):
         painter.drawText(10, 40, coord_text)
         
         # Draw info about selection if any
-        if self._selected_entity_id and self._selected_entity_id in self._map_entities:
-            entity = self._map_entities[self._selected_entity_id]
+        if self._selected_entity_id and self._selected_entity_id in self._entities:
+            entity = self._entities[self._selected_entity_id]
             entity_type = entity.get('type', 'unknown')
             name = entity.get('name', f"{entity_type.capitalize()} {self._selected_entity_id}")
             
@@ -653,7 +731,7 @@ class MapView(QWidget):
             if entity_id:
                 # Select entity
                 self._selected_entity_id = entity_id
-                self.entity_selected.emit(self._map_entities[entity_id])
+                self.entity_selected.emit(self._entities[entity_id])
                 self.update()
             else:
                 # Deselect
@@ -799,7 +877,7 @@ class MapView(QWidget):
         radius = 15 / self._zoom_level
         
         # Check each entity
-        for entity_id, entity in self._map_entities.items():
+        for entity_id, entity in self._entities.items():
             entity_x = entity.get('x', 0)
             entity_y = entity.get('y', 0)
             
@@ -817,10 +895,10 @@ class MapView(QWidget):
 
 class BuildingsView(QWidget):
     """
-    Widget for visualizing buildings and their status.
+    Widget for visualizing game buildings.
     
-    Displays buildings, their levels, upgrade status,
-    and production information.
+    Displays a list of buildings with their types, levels,
+    and current status.
     """
     
     def __init__(self, game_state_service: GameServiceInterface):
@@ -850,84 +928,163 @@ class BuildingsView(QWidget):
         # Main layout
         main_layout = QVBoxLayout(self)
         
-        # Create buildings tree
-        self.buildings_tree = QTreeWidget()
-        self.buildings_tree.setHeaderLabels(["Building", "Level", "Status", "Production"])
-        self.buildings_tree.setColumnWidth(0, 150)
-        self.buildings_tree.setColumnWidth(1, 50)
-        self.buildings_tree.setColumnWidth(2, 150)
+        # Create buildings table
+        self.buildings_table = QTableWidget()
+        self.buildings_table.setColumnCount(5)
+        self.buildings_table.setHorizontalHeaderLabels([
+            tr("Name"), tr("Type"), tr("Level"), tr("Status"), tr("Actions")
+        ])
+        self.buildings_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        main_layout.addWidget(self.buildings_table)
         
-        main_layout.addWidget(self.buildings_tree)
+        # Create filter controls
+        filter_layout = QHBoxLayout()
+        
+        filter_layout.addWidget(QLabel(tr("Filter:")))
+        
+        self.filter_combo = QComboBox()
+        self.filter_combo.addItems([tr("All"), tr("Military"), tr("Economic"), tr("Infrastructure")])
+        self.filter_combo.currentIndexChanged.connect(self._update_buildings)
+        filter_layout.addWidget(self.filter_combo)
+        
+        filter_layout.addStretch()
+        
+        # Sort options
+        filter_layout.addWidget(QLabel(tr("Sort by:")))
+        
+        self.sort_combo = QComboBox()
+        self.sort_combo.addItems([tr("Name"), tr("Type"), tr("Level")])
+        self.sort_combo.currentIndexChanged.connect(self._update_buildings)
+        filter_layout.addWidget(self.sort_combo)
+        
+        main_layout.addLayout(filter_layout)
     
     def _update_buildings(self) -> None:
-        """Update buildings data from the game state service."""
+        """Update the buildings table with current data."""
         try:
-            # Get current game state
-            game_state = self.game_state_service.get_game_state()
-            if not game_state:
+            # Get buildings data
+            buildings_data = self.game_state_service.get_buildings()
+            
+            if not buildings_data:
+                # No data available
+                self._buildings = {}
+                self.buildings_table.setRowCount(0)
                 return
             
-            # Get buildings
-            buildings = game_state.get('buildings', {})
+            # Store buildings data
+            self._buildings = buildings_data
             
-            # Store for later use
-            self._buildings = buildings
+            # Get filter and sort options
+            filter_option = self.filter_combo.currentText()
+            sort_option = self.sort_combo.currentText()
             
-            # Clear tree
-            self.buildings_tree.clear()
+            # Filter buildings
+            filtered_buildings = []
+            for building_id, building in buildings_data.items():
+                if filter_option == tr("All"):
+                    filtered_buildings.append((building_id, building))
+                elif filter_option == tr("Military") and building.get("category") == "military":
+                    filtered_buildings.append((building_id, building))
+                elif filter_option == tr("Economic") and building.get("category") == "economic":
+                    filtered_buildings.append((building_id, building))
+                elif filter_option == tr("Infrastructure") and building.get("category") == "infrastructure":
+                    filtered_buildings.append((building_id, building))
             
-            # Group buildings by type
-            building_types = defaultdict(list)
-            for building_id, building in buildings.items():
-                building_type = building.get('type', 'unknown')
-                building_types[building_type].append((building_id, building))
+            # Sort buildings
+            if sort_option == tr("Name"):
+                filtered_buildings.sort(key=lambda b: b[1].get("name", ""))
+            elif sort_option == tr("Type"):
+                filtered_buildings.sort(key=lambda b: b[1].get("type", ""))
+            elif sort_option == tr("Level"):
+                filtered_buildings.sort(key=lambda b: b[1].get("level", 0), reverse=True)
             
-            # Add buildings to tree
-            for building_type, buildings_list in building_types.items():
-                # Create type group
-                type_item = QTreeWidgetItem(self.buildings_tree, [building_type.capitalize(), "", "", ""])
-                type_item.setExpanded(True)
+            # Update table
+            self.buildings_table.setRowCount(len(filtered_buildings))
+            
+            for row, (building_id, building) in enumerate(filtered_buildings):
+                # Name
+                name_item = QTableWidgetItem(building.get("name", f"Building {building_id}"))
+                self.buildings_table.setItem(row, 0, name_item)
                 
-                # Add buildings of this type
-                for building_id, building in buildings_list:
-                    # Get building info
-                    level = building.get('level', 0)
-                    status = building.get('status', 'idle')
-                    production_type = building.get('production_type', '')
-                    production_amount = building.get('production_amount', 0)
-                    
-                    # Format production text
-                    if production_type and production_amount:
-                        production_text = f"{production_type}: {production_amount}/h"
-                    else:
-                        production_text = ""
-                    
-                    # Create building item
-                    name = building.get('name', f"{building_type.capitalize()} {building_id}")
-                    building_item = QTreeWidgetItem(type_item, [
-                        name,
-                        str(level),
-                        status.capitalize(),
-                        production_text
-                    ])
-                    
-                    # Set status color
-                    if status == 'upgrading':
-                        building_item.setForeground(2, QColor(0, 150, 0))  # Green
-                    elif status == 'producing':
-                        building_item.setForeground(2, QColor(0, 0, 150))  # Blue
-                    elif status == 'damaged':
-                        building_item.setForeground(2, QColor(150, 0, 0))  # Red
+                # Type
+                type_item = QTableWidgetItem(building.get("type", "Unknown"))
+                self.buildings_table.setItem(row, 1, type_item)
+                
+                # Level
+                level_item = QTableWidgetItem(str(building.get("level", 0)))
+                self.buildings_table.setItem(row, 2, level_item)
+                
+                # Status
+                status = building.get("status", "idle")
+                status_item = QTableWidgetItem(status)
+                
+                # Color code status
+                if status == "upgrading":
+                    status_item.setBackground(QBrush(QColor(0, 200, 0)))  # Green
+                elif status == "constructing":
+                    status_item.setBackground(QBrush(QColor(0, 0, 200)))  # Blue
+                elif status == "damaged":
+                    status_item.setBackground(QBrush(QColor(200, 0, 0)))  # Red
+                
+                self.buildings_table.setItem(row, 3, status_item)
+                
+                # Actions button
+                actions_btn = QPushButton(tr("Details"))
+                actions_btn.setProperty("building_id", building_id)
+                actions_btn.clicked.connect(self._on_details_clicked)
+                self.buildings_table.setCellWidget(row, 4, actions_btn)
             
         except Exception as e:
-            logger.error(f"Error updating buildings: {e}")
+            logger.error(f"Error updating buildings view: {e}")
+    
+    def _on_details_clicked(self) -> None:
+        """Handle building details button click."""
+        # Get building ID from sender
+        sender = self.sender()
+        building_id = sender.property("building_id")
+        
+        if building_id in self._buildings:
+            # Show building details
+            building = self._buildings[building_id]
+            
+            details = QMessageBox()
+            details.setWindowTitle(tr("Building Details"))
+            details.setText(f"{building.get('name', 'Building')}")
+            
+            # Build details message
+            details_text = f"""
+            <b>{tr("Type")}:</b> {building.get('type', tr('Unknown'))}<br>
+            <b>{tr("Level")}:</b> {building.get('level', 0)}<br>
+            <b>{tr("Status")}:</b> {building.get('status', tr('Idle'))}<br>
+            <b>{tr("Health")}:</b> {building.get('health', 100)}%<br>
+            """
+            
+            # Add production info if available
+            if "production" in building:
+                details_text += f"<b>{tr('Production')}:</b><br>"
+                for resource, amount in building["production"].items():
+                    details_text += f"- {resource}: {amount}/h<br>"
+            
+            details.setInformativeText(details_text)
+            details.setStandardButtons(QMessageBox.StandardButton.Ok)
+            details.exec()
+    
+    def refresh(self) -> None:
+        """Refresh the buildings view."""
+        self._update_buildings()
+    
+    def update_data(self, buildings_data: Dict) -> None:
+        """Update with new buildings data."""
+        self._buildings = buildings_data
+        self._update_buildings()
 
 
 class ArmyView(QWidget):
     """
-    Widget for visualizing army units and their status.
+    Widget for visualizing army units and groups.
     
-    Displays units, their stats, locations, and status.
+    Displays a hierarchical view of army units organized by 
+    groups, showing their status, strength, and movement.
     """
     
     def __init__(self, game_state_service: GameServiceInterface):
@@ -957,146 +1114,176 @@ class ArmyView(QWidget):
         # Main layout
         main_layout = QVBoxLayout(self)
         
-        # Create tabs for different views
-        self._tabs = QTabWidget()
-        main_layout.addWidget(self._tabs)
+        # Create tab widget for different views
+        self.tabs = QTabWidget()
+        main_layout.addWidget(self.tabs)
         
-        # Units tab
-        units_tab = QWidget()
-        units_layout = QVBoxLayout(units_tab)
+        # Create units table view
+        self.units_widget = QWidget()
+        units_layout = QVBoxLayout(self.units_widget)
         
-        # Create units table
+        # Units filter
+        units_filter_layout = QHBoxLayout()
+        
+        units_filter_layout.addWidget(QLabel(tr("Filter Units:")))
+        
+        self.units_filter = QComboBox()
+        self.units_filter.addItems([tr("All"), tr("Infantry"), tr("Cavalry"), tr("Ranged"), tr("Siege")])
+        self.units_filter.currentIndexChanged.connect(self._update_units_table)
+        units_filter_layout.addWidget(self.units_filter)
+        
+        units_filter_layout.addStretch()
+        
+        units_layout.addLayout(units_filter_layout)
+        
+        # Units table
         self.units_table = QTableWidget()
-        self.units_table.setColumnCount(6)
+        self.units_table.setColumnCount(4)
         self.units_table.setHorizontalHeaderLabels([
-            "Type", "Count", "Attack", "Defense", "Health", "Status"
+            tr("Unit Type"), tr("Count"), tr("Status"), tr("Location")
         ])
-        
-        # Configure table
-        self.units_table.horizontalHeader().setSectionResizeMode(
-            0, QHeaderView.ResizeMode.ResizeToContents)
-        self.units_table.horizontalHeader().setSectionResizeMode(
-            1, QHeaderView.ResizeMode.ResizeToContents)
-        self.units_table.horizontalHeader().setSectionResizeMode(
-            2, QHeaderView.ResizeMode.ResizeToContents)
-        self.units_table.horizontalHeader().setSectionResizeMode(
-            3, QHeaderView.ResizeMode.ResizeToContents)
-        self.units_table.horizontalHeader().setSectionResizeMode(
-            4, QHeaderView.ResizeMode.ResizeToContents)
-        self.units_table.horizontalHeader().setSectionResizeMode(
-            5, QHeaderView.ResizeMode.Stretch)
-        
+        self.units_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         units_layout.addWidget(self.units_table)
         
-        self._tabs.addTab(units_tab, "Units")
+        # Add units tab
+        self.tabs.addTab(self.units_widget, tr("Units"))
         
-        # Armies tab
-        armies_tab = QWidget()
-        armies_layout = QVBoxLayout(armies_tab)
+        # Create armies hierarchical view
+        self.armies_widget = QWidget()
+        armies_layout = QVBoxLayout(self.armies_widget)
         
-        # Create armies tree
+        # Armies tree
         self.armies_tree = QTreeWidget()
         self.armies_tree.setHeaderLabels([
-            "Army", "Status", "Units", "Location"
+            tr("Army/Group"), tr("Status"), tr("Strength"), tr("Location")
         ])
-        
+        self.armies_tree.setColumnWidth(0, 150)
+        self.armies_tree.setAlternatingRowColors(True)
         armies_layout.addWidget(self.armies_tree)
         
-        self._tabs.addTab(armies_tab, "Armies")
+        # Add armies tab
+        self.tabs.addTab(self.armies_widget, tr("Armies"))
+        
+        # Create movement map view
+        self.movement_widget = QWidget()
+        movement_layout = QVBoxLayout(self.movement_widget)
+        
+        # Map placeholder
+        self.movement_map = QLabel(tr("Army movement map will be displayed here"))
+        self.movement_map.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.movement_map.setStyleSheet("background-color: #f0f0f0; border: 1px solid #ccc;")
+        self.movement_map.setMinimumHeight(300)
+        movement_layout.addWidget(self.movement_map)
+        
+        # Add movement tab
+        self.tabs.addTab(self.movement_widget, tr("Movement"))
     
     def _update_armies(self) -> None:
-        """Update armies data from the game state service."""
+        """Update army data from the game state service."""
         try:
-            # Get current game state
-            game_state = self.game_state_service.get_game_state()
-            if not game_state:
+            # Get armies data
+            armies_data = self.game_state_service.get_armies()
+            
+            if not armies_data:
+                # Clear and return if no data
+                self.units_table.setRowCount(0)
+                self.armies_tree.clear()
+                self._armies = {}
                 return
             
-            # Get armies
-            armies = game_state.get('armies', {})
-            
-            # Store for later use
-            self._armies = armies
+            # Store armies data
+            self._armies = armies_data
             
             # Update units table
-            self._update_units_table(armies)
+            self._update_units_table(armies_data)
             
             # Update armies tree
-            self._update_armies_tree(armies)
+            self._update_armies_tree(armies_data)
             
         except Exception as e:
-            logger.error(f"Error updating armies: {e}")
+            logger.error(f"Error updating armies view: {e}")
     
     def _update_units_table(self, armies: Dict) -> None:
         """
-        Update the units table with aggregated unit data.
+        Update the units table.
         
         Args:
-            armies: Armies data
+            armies: Army data dictionary
         """
-        # Aggregate units across all armies
-        unit_totals = defaultdict(int)
-        unit_stats = {}
+        # Get filter
+        unit_filter = self.units_filter.currentText()
         
+        # Aggregate units by type
+        units_by_type = defaultdict(int)
+        unit_status = {}
+        unit_location = {}
+        
+        # Process all armies
         for army_id, army in armies.items():
-            units = army.get('units', {})
+            # Skip if not an army with units
+            if not army.get('units'):
+                continue
             
-            for unit_type, unit_data in units.items():
-                count = unit_data.get('count', 0)
-                unit_totals[unit_type] += count
+            # Process each unit type
+            for unit_type, count in army['units'].items():
+                # Apply filter
+                unit_category = unit_type.split('_')[0] if '_' in unit_type else 'infantry'
                 
-                # Store stats (use the last one seen for each unit type)
-                if unit_type not in unit_stats:
-                    unit_stats[unit_type] = {
-                        'attack': unit_data.get('attack', 0),
-                        'defense': unit_data.get('defense', 0),
-                        'health': unit_data.get('health', 0),
-                        'status': unit_data.get('status', 'ready')
-                    }
+                if unit_filter == tr("All") or \
+                   (unit_filter == tr("Infantry") and unit_category == 'infantry') or \
+                   (unit_filter == tr("Cavalry") and unit_category == 'cavalry') or \
+                   (unit_filter == tr("Ranged") and unit_category == 'ranged') or \
+                   (unit_filter == tr("Siege") and unit_category == 'siege'):
+                    # Count units
+                    units_by_type[unit_type] += count
+                    
+                    # Track status and location
+                    unit_status[unit_type] = army.get('status', tr('Idle'))
+                    unit_location[unit_type] = f"{army.get('x', 0)}, {army.get('y', 0)}"
         
         # Update table
-        self.units_table.setRowCount(len(unit_totals))
+        self.units_table.setRowCount(len(units_by_type))
         
-        for i, (unit_type, count) in enumerate(unit_totals.items()):
+        for row, (unit_type, count) in enumerate(sorted(units_by_type.items())):
             # Unit type
-            self.units_table.setItem(i, 0, QTableWidgetItem(unit_type.capitalize()))
+            type_item = QTableWidgetItem(unit_type.replace('_', ' ').title())
+            self.units_table.setItem(row, 0, type_item)
             
             # Count
-            self.units_table.setItem(i, 1, QTableWidgetItem(str(count)))
+            count_item = QTableWidgetItem(str(count))
+            self.units_table.setItem(row, 1, count_item)
             
-            # Stats
-            if unit_type in unit_stats:
-                stats = unit_stats[unit_type]
-                
-                self.units_table.setItem(i, 2, QTableWidgetItem(str(stats['attack'])))
-                self.units_table.setItem(i, 3, QTableWidgetItem(str(stats['defense'])))
-                self.units_table.setItem(i, 4, QTableWidgetItem(str(stats['health'])))
-                
-                status_item = QTableWidgetItem(stats['status'].capitalize())
-                
-                # Set status color
-                if stats['status'] == 'ready':
-                    status_item.setForeground(QColor(0, 150, 0))  # Green
-                elif stats['status'] == 'marching':
-                    status_item.setForeground(QColor(0, 0, 150))  # Blue
-                elif stats['status'] == 'fighting':
-                    status_item.setForeground(QColor(150, 0, 0))  # Red
-                elif stats['status'] == 'returning':
-                    status_item.setForeground(QColor(150, 150, 0))  # Yellow
-                
-                self.units_table.setItem(i, 5, status_item)
+            # Status
+            status_item = QTableWidgetItem(unit_status.get(unit_type, ''))
+            
+            # Color code by status
+            status = unit_status.get(unit_type, '')
+            if status == 'marching':
+                status_item.setBackground(QBrush(QColor(0, 0, 200)))  # Blue
+                status_item.setForeground(QBrush(QColor(255, 255, 255)))  # White text
+            elif status == 'fighting':
+                status_item.setBackground(QBrush(QColor(200, 0, 0)))  # Red
+                status_item.setForeground(QBrush(QColor(255, 255, 255)))  # White text
+            
+            self.units_table.setItem(row, 2, status_item)
+            
+            # Location
+            location_item = QTableWidgetItem(unit_location.get(unit_type, ''))
+            self.units_table.setItem(row, 3, location_item)
     
     def _update_armies_tree(self, armies: Dict) -> None:
         """
-        Update the armies tree with army data.
+        Update the armies tree.
         
         Args:
-            armies: Armies data
+            armies: Army data dictionary
         """
         # Clear tree
         self.armies_tree.clear()
         
-        # Add each army
+        # Group armies by status
+        status_groups = defaultdict(list)
+        
         for army_id, army in armies.items():
             # Get army info
             name = army.get('name', f"Army {army_id}")
@@ -1104,68 +1291,46 @@ class ArmyView(QWidget):
             units = army.get('units', {})
             location = army.get('location', {})
             
-            # Format units text
-            total_units = sum(unit.get('count', 0) for unit in units.values())
-            units_text = f"{total_units} units"
-            
-            # Format location text
-            x = location.get('x', 0)
-            y = location.get('y', 0)
-            location_text = f"({x}, {y})"
-            
-            # Create army item
-            army_item = QTreeWidgetItem(self.armies_tree, [
-                name,
-                status.capitalize(),
-                units_text,
-                location_text
-            ])
-            
-            # Set status color
-            if status == 'idle':
-                army_item.setForeground(1, QColor(150, 150, 150))  # Gray
-            elif status == 'marching':
-                army_item.setForeground(1, QColor(0, 0, 150))  # Blue
-            elif status == 'fighting':
-                army_item.setForeground(1, QColor(150, 0, 0))  # Red
-            elif status == 'returning':
-                army_item.setForeground(1, QColor(150, 150, 0))  # Yellow
-            
-            # Add units as children
-            for unit_type, unit_data in units.items():
-                count = unit_data.get('count', 0)
-                unit_status = unit_data.get('status', 'ready')
-                health_percent = unit_data.get('health_percent', 100)
-                attack = unit_data.get('attack', 0)
-                defense = unit_data.get('defense', 0)
+            # Add armies in this status group
+            for army_id, army in army_list:
+                # Calculate strength
+                total_units = sum(army.get('units', {}).values())
                 
-                # Create unit item
-                unit_item = QTreeWidgetItem(army_item, [
-                    unit_type.capitalize(),
-                    unit_status.capitalize(),
-                    f"{count} units",
-                    f"A:{attack} D:{defense} H:{health_percent}%"
+                # Format location
+                location = f"{army.get('x', 0)}, {army.get('y', 0)}"
+                
+                # Create army item
+                army_name = army.get('name', f"{tr('Army')} {army_id}")
+                army_item = QTreeWidgetItem(status_item, [
+                    army_name,
+                    tr(army.get('activity', '')),
+                    str(total_units),
+                    location
                 ])
                 
-                # Set unit status color
-                if unit_status == 'ready':
-                    unit_item.setForeground(1, QColor(0, 150, 0))  # Green
-                elif unit_status == 'marching':
-                    unit_item.setForeground(1, QColor(0, 0, 150))  # Blue
-                elif unit_status == 'fighting':
-                    unit_item.setForeground(1, QColor(150, 0, 0))  # Red
-                elif unit_status == 'wounded':
-                    unit_item.setForeground(1, QColor(150, 75, 0))  # Orange
-                
-                # Set health color based on percentage
-                if health_percent < 25:
-                    unit_item.setForeground(3, QColor(255, 0, 0))  # Red
-                elif health_percent < 50:
-                    unit_item.setForeground(3, QColor(255, 165, 0))  # Orange
-                elif health_percent < 75:
-                    unit_item.setForeground(3, QColor(255, 255, 0))  # Yellow
-                else:
-                    unit_item.setForeground(3, QColor(0, 255, 0))  # Green
+                # Add units as children
+                for unit_type, count in sorted(army.get('units', {}).items()):
+                    unit_name = unit_type.replace('_', ' ').title()
+                    QTreeWidgetItem(army_item, [
+                        f"{unit_name}",
+                        "",
+                        str(count),
+                        ""
+                    ])
+    
+    def refresh(self) -> None:
+        """Refresh the army view."""
+        self._update_armies()
+    
+    def update_data(self, armies_data: Dict) -> None:
+        """
+        Update with new army data.
+        
+        Args:
+            armies_data: Army data dictionary
+        """
+        self._armies = armies_data
+        self._update_armies()
 
 
 class GameStateVisualizationWidget(QWidget):
@@ -1206,19 +1371,19 @@ class GameStateVisualizationWidget(QWidget):
         
         # Create resources view
         self._resources_view = ResourcesView(self.game_state_service)
-        self._tabs.addTab(self._resources_view, "Resources")
+        self._tabs.addTab(self._resources_view, tr("Resources"))
         
         # Create map view
         self._map_view = MapView(self.game_state_service)
-        self._tabs.addTab(self._map_view, "Map")
+        self._tabs.addTab(self._map_view, tr("Map"))
         
         # Create buildings view
         self._buildings_view = BuildingsView(self.game_state_service)
-        self._tabs.addTab(self._buildings_view, "Buildings")
+        self._tabs.addTab(self._buildings_view, tr("Buildings"))
         
         # Create army view
         self._army_view = ArmyView(self.game_state_service)
-        self._tabs.addTab(self._army_view, "Army")
+        self._tabs.addTab(self._army_view, tr("Army"))
         
         # Connect tab changed signal
         self._tabs.currentChanged.connect(self._on_tab_changed)

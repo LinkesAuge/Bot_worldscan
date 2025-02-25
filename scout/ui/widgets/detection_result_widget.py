@@ -23,6 +23,7 @@ from PyQt6.QtGui import (
 from PyQt6.QtCore import Qt, pyqtSignal, QRect, QSize, QPoint
 
 from scout.core.window.window_service_interface import WindowServiceInterface
+from scout.ui.utils.language_manager import tr
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -648,14 +649,14 @@ class DetectionResultWidget(QWidget):
         
         # Create export options
         export_options = QComboBox()
-        export_options.addItem("CSV", "csv")
-        export_options.addItem("JSON", "json")
-        export_options.addItem("Image with Annotations", "image")
+        export_options.addItem(tr("CSV"), "csv")
+        export_options.addItem(tr("JSON"), "json")
+        export_options.addItem(tr("Image with Annotations"), "image")
         
         # Create message box with options
         msg_box = QMessageBox(self)
-        msg_box.setWindowTitle("Export Results")
-        msg_box.setText("Choose export format:")
+        msg_box.setWindowTitle(tr("Export Results"))
+        msg_box.setText(tr("Choose export format:"))
         msg_box.setIcon(QMessageBox.Icon.Question)
         
         # Add options to layout
@@ -663,8 +664,8 @@ class DetectionResultWidget(QWidget):
         layout.addWidget(export_options, 1, 1)
         
         # Add buttons
-        msg_box.addButton("Export", QMessageBox.ButtonRole.AcceptRole)
-        msg_box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+        msg_box.addButton(tr("Export"), QMessageBox.ButtonRole.AcceptRole)
+        msg_box.addButton(tr("Cancel"), QMessageBox.ButtonRole.RejectRole)
         
         # Show dialog
         result = msg_box.exec()
@@ -686,8 +687,8 @@ class DetectionResultWidget(QWidget):
         
         QMessageBox.information(
             self,
-            "Export",
-            f"Export as {export_type} not yet implemented."
+            tr("Export"),
+            tr("Export as {0} not yet implemented.").format(export_type)
         )
     
     def _on_click_clicked(self) -> None:
@@ -713,6 +714,6 @@ class DetectionResultWidget(QWidget):
             
             QMessageBox.information(
                 self,
-                "Click",
-                f"Click at position ({x}, {y}) is not yet implemented."
+                tr("Click"),
+                tr("Click at position ({0}, {1}) is not yet implemented.").format(x, y)
             ) 

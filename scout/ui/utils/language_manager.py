@@ -38,15 +38,22 @@ class LanguageManager:
     at runtime.
     """
     
-    # Default translation paths
-    TRANSLATIONS_DIR = Path("scout/translations")
+    # Default translation paths - note this will be resolved to absolute path at runtime
+    TRANSLATIONS_DIR = "scout/translations"
     
     def __init__(self):
         """Initialize the language manager."""
+        # Resolve translations directory to absolute path
+        script_dir = Path(__file__).absolute().parent.parent.parent.parent
+        self.translations_dir = script_dir / self.TRANSLATIONS_DIR
+        
         # Create necessary directories
-        if not self.TRANSLATIONS_DIR.exists():
-            self.TRANSLATIONS_DIR.mkdir(parents=True)
-            logger.info(f"Created translations directory: {self.TRANSLATIONS_DIR}")
+        if not self.translations_dir.exists():
+            self.translations_dir.mkdir(parents=True)
+            logger.info(f"Created translations directory: {self.translations_dir}")
+        
+        # For debugging
+        logger.info(f"Using translations directory: {self.translations_dir}")
         
         # Initialize translators
         self._application_translator = QTranslator()
@@ -160,12 +167,31 @@ class LanguageManager:
             # Install application translations
             self._application_translator = QTranslator()
             if self._current_language != Language.ENGLISH:  # English is the base language
-                translation_file = self.TRANSLATIONS_DIR / f"scout_{locale.name()}"
-                if self._application_translator.load(str(translation_file)):
-                    app.installTranslator(self._application_translator)
-                    logger.info(f"Loaded application translations for {locale.name()}")
-                else:
-                    logger.warning(f"Failed to load application translations for {locale.name()}")
+                # Try with different file name patterns
+                translation_paths = [
+                    # Full locale name (e.g., de_DE)
+                    self.translations_dir / f"scout_{locale.name()}",
+                    # Language and country separated (e.g., de-DE)
+                    self.translations_dir / f"scout_{locale.language()}_{locale.country()}",
+                    # Just language code (e.g., de)
+                    self.translations_dir / f"scout_{self._current_language.value}",
+                    # Language code with country code from TS file
+                    self.translations_dir / f"scout_{'de_DE' if self._current_language == Language.GERMAN else 'en_US'}"
+                ]
+                
+                # Try each path
+                loaded = False
+                for path in translation_paths:
+                    logger.debug(f"Trying to load translation from: {path}")
+                    if self._application_translator.load(str(path)):
+                        app.installTranslator(self._application_translator)
+                        logger.info(f"Loaded application translations from: {path}")
+                        loaded = True
+                        break
+                
+                # Log failure if no translation was loaded
+                if not loaded:
+                    logger.warning(f"Failed to load application translations for {self._current_language.value}")
                     # We don't return False here since we may be missing translations
                     # but want to continue with partial translation
             

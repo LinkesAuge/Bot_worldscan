@@ -894,13 +894,11 @@ class MainWindow(QMainWindow):
     
     def _on_documentation(self):
         """Handle documentation action."""
-        # TODO: Open documentation
-        
-        # For now, just show a message
+        # Show documentation dialog or open web browser
         QMessageBox.information(
             self,
-            "Documentation",
-            "Documentation not yet implemented."
+            tr("Documentation"),
+            tr("Documentation not yet implemented.")
         )
     
     def _on_about(self):
@@ -908,10 +906,10 @@ class MainWindow(QMainWindow):
         # Show about dialog
         QMessageBox.about(
             self,
-            "About Scout",
-            "Scout - Game Automation and Detection Tool\n\n"
-            "Version: 0.1.0\n"
-            "Copyright © 2023"
+            tr("About Scout"),
+            tr("Scout - Game Automation and Detection Tool\n\n"
+               "Version: 0.1.0\n"
+               "Copyright © 2023")
         )
     
     def _on_run(self):

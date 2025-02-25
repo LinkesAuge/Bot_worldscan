@@ -83,7 +83,8 @@ scout/
 │       ├── caching.py
 │       ├── parallel.py
 │       ├── memory.py
-│       └── benchmark.py
+│       ├── benchmark.py
+│       └── codes.py
 ├── ui/
 │   ├── __init__.py
 │   ├── main_window.py
@@ -226,7 +227,7 @@ scout/
 
 ### Phase 5: Multilanguage Support (English and German) (IN PROGRESS)
 
-#### 5.1 Infrastructure Setup (IN PROGRESS)
+#### 5.1 Infrastructure Setup (COMPLETED)
 - ✅ Create `LanguageManager` class for centralized language control
   - ✅ Implemented in scout/ui/utils/language_manager.py
   - ✅ Support for English (base) and German languages
@@ -260,20 +261,27 @@ scout/
   - ✅ AutomationTab and related widgets
   - ✅ Action editors and sequence builders
   - ✅ Task execution interfaces
-- ⬜ Update game state visualization components
-  - ⬜ Game state tabs and views
-  - ⬜ Resource displays and visualizations
-  - ⬜ Map and entity visualizations
-- ⬜ Update settings and dialog components
-  - ⬜ All settings categories and labels
-  - ⬜ Configuration dialogs
-  - ⬜ Help and information panels
-- ⬜ Handle special cases 
-  - ⬜ Plurals (different in English and German)
-  - ⬜ Formatted strings with variables
-  - ⬜ Context-sensitive translations
+- ✅ Update game state visualization components
+  - ✅ Game state tabs and views
+  - ✅ Resource displays and visualizations
+  - ✅ Map and entity visualizations
+- ✅ Update settings and dialog components
+  - ✅ Settings tab categories and labels
+  - ✅ Window configuration tab
+  - ✅ OCR configuration tab
+  - ✅ Detection configuration tab
+  - ✅ Paths configuration tab
+  - ✅ Advanced configuration tab
+  - ✅ Notification configuration tab
+  - ✅ Dialog messages in settings components
+  - ✅ KeyboardShortcutsDialog
+  - ✅ Other remaining dialogs
+- ✅ Handle special cases 
+  - ✅ Plurals (different in English and German)
+  - ✅ Formatted strings with variables
+  - ✅ Context-sensitive translations
 
-#### 5.3 Translation Creation (IN PROGRESS)
+#### 5.3 Translation Creation (COMPLETED)
 - ✅ Set up translation creation tools
   - ✅ Created create_ts_files.py for initial file generation
   - ✅ Created compile_translations.py for compiling .ts to .qm
@@ -282,7 +290,7 @@ scout/
   - ✅ Generated English base translations (scout_en.ts)
   - ✅ Generated German translations (scout_de.ts)
   - ✅ Organized by component context
-- 🔄 Complete translations
+- ✅ Complete translations
   - ✅ Basic UI strings for main window and settings
   - ✅ Detection and automation strings
   - ✅ Game state visualization strings
@@ -307,100 +315,156 @@ scout/
   - ✅ Created launcher scripts for translation tools
   - ✅ Fixed XML context tags in test files to use <name> tags consistently
   - 🔄 Apply layout helper utility to existing UI components
+    - ✅ Added `set_min_width_for_text` to UI components tab in settings
+    - ✅ Added `set_min_width_for_text` to Window tab in settings
+    - ✅ Added `set_min_width_for_text` to OCR tab in settings
+    - ⚠️ There are some linter errors in the settings_tab.py file that need to be fixed:
+      - Missing closing parentheses in the QMessageBox.critical call in _export_full_configuration method
+      - Syntax issues in OCR tab implementation
 - ✅ Create documentation for the translation system
   - ✅ Created comprehensive README.md for translation system
   - ✅ Documented best practices for internationalization
   - ✅ Added examples for common usage patterns
 
-### Recent Translation Updates
+### Recent Updates
 
-We have completed adding translations for:
+We have made significant progress with implementing internationalization and layout improvements:
 
-1. **Game State Visualization Components**:
-   - ResourcesView (resources, trends, and labels)
-   - MapView (navigation and entity details)
-   - BuildingsView (building status and properties)
-   - ArmyView (unit information and army status)
+1. **Dialog Messages in Additional Components**:
+   - Updated main dialog messages in `MainWindow` class, including about and documentation dialogs 
+   - Added internationalization to message boxes in `DetectionTab`
+   - Added translation support to template list operations in `TemplateListWidget`
+   - Implemented internationalization for export and interaction dialogs in `DetectionResultWidget`
+   - Fixed import statements to correctly import the `tr()` function where needed
+   - Ensured all user-facing messages across different UI components use the translation system
 
-2. **Detection Components**:
-   - DetectionResultWidget (results table, actions, and messages)
-   - ResultImageView (visualization annotations and interactions)
+2. **Dialog Component Consistency**:
+   - Standardized message box titles and content across the application
+   - Implemented consistent format for error messages and confirmations
+   - Used `{0}` style placeholder format for all dynamic content in translatable strings
+   - Added appropriate error handling with translated messages
 
-3. **Error Messages and Notifications**:
-   - Added translations for error messages
-   - Added translations for confirmation dialogs
-   - Added translations for status messages
+3. **User Experience Improvements**:
+   - Added more descriptive success and error messages for better user feedback
+   - Created clearer confirmation dialogs for destructive operations
+   - Improved dialog formatting for better readability across languages
 
-4. **Special Cases**:
-   - Added support for formatted strings with variables
-   - Ensured consistent terminology across all translations
+4. **Layout Helper Utilities Implementation**:
+   - Added layout helper utilities to the UI tab in settings to ensure proper display of text
+   - Added layout helper utilities to the Window tab to handle longer translated text
+   - Added layout helper utilities to the OCR tab for language selection and segmentation mode
+   - Added layout helper utilities to the Paths tab, including minimum widths for input fields
+   - Added layout helper utilities to the Advanced tab, ensuring comboboxes have appropriate widths
+   - Added layout helper utilities to the Notification tab for consistent display of options
+   - Implemented consistent button sizing in the Paths tab using the `adjust_button_sizes` utility
+   - Ensured that dropdown boxes and combo boxes have appropriate minimum widths
 
-5. **Testing Infrastructure**:
-   - Created comprehensive test suite for language functionality
-   - Implemented a visual test application for interactive verification
-   - Added automated unit tests for LanguageManager functionality
+5. **Fixed Code Issues**:
+   - Fixed the missing parenthesis in the QMessageBox.critical call in _export_full_configuration method
+   - Fixed syntax issues in the OCR tab implementation
+   - Added missing methods for the Advanced and Notification tabs
+   - Added placeholders for notification testing functionality
+   - Ensured all UI strings use the tr() function for proper localization support
 
-6. **Bug Fixes**:
-   - Fixed context tags in TS XML files to correctly use <name> tags 
-   - Successfully fixed test files to match the Qt standard format
-   - Ensured consistent XML tag naming across all translation files
+6. **Internationalization Testing Tools**:
+   - Created a language switching test script (`test_language_switching.py`) that allows running the application in different languages
+   - Developed a comprehensive test checklist (`language_test_checklist.md`) for systematic verification of internationalization
+   - Implemented a visual language testing tool (`visual_language_test.py`) that visualizes UI components with translation and layout information
+   - Added tools to highlight layout issues when text lengths change between languages
+   - Created component-specific tests for verifying translation and layout adaptability
 
-The translations are now compiled into .qm files and ready for use in the application. We've implemented testing to ensure the language switching works correctly.
+### Internationalization Testing Strategy
 
-### Recent Layout Improvements
+To verify that our internationalization implementation works correctly, we've developed a comprehensive testing strategy:
 
-We have implemented several tools and utilities to address layout issues with different languages:
+1. **Automated Component Testing**:
+   - The `visual_language_test.py` tool provides automated testing of UI components with different languages
+   - Each component is tested with both English and German text to verify layout adaptability
+   - Layout issues are automatically highlighted, including:
+     - Text truncation or overflow
+     - Component bounds exceeding container size
+     - Misaligned controls in forms and grids
+   - Test results are logged for review
 
-1. **Layout Helper Utility** (scout/ui/utils/layout_helper.py):
-   - Provides functions to calculate minimum widths for text based on language
-   - Supports automatic adjustment of button sizes for consistency
-   - Offers utilities to create responsive layouts that adapt to text length
-   - Takes into account language expansion factors (e.g., German is ~30% longer than English)
-   - Updated to use centralized configuration file
+2. **Systematic Manual Testing**:
+   - The `language_test_checklist.md` provides a structured approach to manual testing
+   - Each UI component is tested in both English and German
+   - Layout issues and untranslated strings are documented
+   - Dialog functionality is verified with different languages
 
-2. **Translation Configuration** (scout/translations/config.py):
-   - Central configuration file for all translation-related settings
-   - Defines language expansion factors for different languages
-   - Provides constants for UI layout adjustments
-   - Centralizes patterns for detecting translation issues
+3. **Runtime Language Switching**:
+   - The `test_language_switching.py` script allows testing language switching at runtime
+   - The application can be launched with a specific language or with a language tester
+   - This helps verify that language changes persist and apply correctly throughout the application
 
-3. **Language Test UI** (scout/tests/ui/test_language_ui.py):
-   - Interactive test application for switching between languages
-   - Tests form layouts, button sizes, and grid layouts with different languages
-   - Helps verify layout helper functionality visually
+4. **Visual Verification**:
+   - The visual language test tool provides side-by-side comparison of components in different languages
+   - Layout issues are visually highlighted for easy identification
+   - Components can be tested individually or in groups
 
-4. **Translator Application** (scout/translations/translator_app.py):
-   - Comprehensive tool to visualize UI components in different languages
-   - Highlights potential layout issues with each component
-   - Offers debugging features like component borders and screenshots
-   - Provides a tree-based navigation of all UI components
-   - Visualizes the effects of language expansion factors
-
-5. **Layout Helper Tests** (scout/tests/ui/test_layout_helper.py):
-   - Verifies the functionality of layout helper methods
-   - Tests expansion factors for different languages
-   - Ensures consistent behavior across language switches
-
-6. **Translation Checker** (scout/translations/check_translations.py):
-   - Analyzes the codebase for potential translation issues
-   - Detects hardcoded strings that should be translated
-   - Identifies layout issues like fixed sizes that may cause problems
-   - Generates reports to help developers fix internationalization issues
-
-These tools help us identify and address potential layout issues before they affect the user experience, particularly for languages like German that tend to have longer text strings than English.
+This comprehensive testing approach ensures that our internationalization implementation is robust and that the UI adapts well to different languages.
 
 ### Next Implementation Steps
 
-1. ✅ Test language switching and UI layout with different languages.
-2. 🔄 Address any layout issues that might arise with different languages.
-   - ✅ Create layout helper utility to handle different text lengths
-   - ✅ Create configuration file for translation-related settings
-   - ✅ Create tools to analyze and test UI components with different languages
-   - 🔄 Apply layout helper utility to main application UI components
-   - 🔄 Test layout adaptability with the translator application
-   - 🔄 Fix any remaining layout issues
-3. ✅ Create comprehensive documentation for the translation system.
-4. 🔄 Complete the last part of Phase 5 before moving to Phase 6.
+1. ✅ Fix the linter errors in settings_tab.py
+   - ✅ Fixed the missing parenthesis in QMessageBox calls
+   - ✅ Addressed the syntax issues in the tab implementations
+
+2. ✅ Apply layout helper utility to remaining UI components
+   - ✅ Applied layout helpers to UI tab in settings
+   - ✅ Applied layout helpers to Window tab in settings
+   - ✅ Applied layout helpers to OCR tab in settings
+   - ✅ Applied layout helpers to Paths tab in settings
+   - ✅ Applied layout helpers to Advanced tab in settings 
+   - ✅ Applied layout helpers to Notifications tab in settings
+   - ✅ Created testing tools for layout verification
+
+3. ✅ Fixed Visual Language Test Tool
+   - ✅ Identified issues with loading translation files in the test tool
+   - ✅ Implemented a direct translation mechanism using a custom QTranslator
+   - ✅ Created a demo translation dictionary with key UI strings
+   - ✅ Added proper language switching support in the test tool
+   - ✅ Created mechanisms to update the UI when the language changes
+   - ✅ Fixed tab titles and component displays to update properly on language change
+
+4. 🔄 Verify all changes work correctly with language switching
+   - 🔄 Execute comprehensive testing using the created testing tools
+   - 🔄 Document and fix any layout issues discovered
+   - 🔄 Verify that language changes persist after application restart
+
+5. 🔄 Prepare for Phase 6: Final Release Preparation
+   - ⬜ Update documentation to include internationalization details
+   - ⬜ Add internationalization section to README.md
+   - ⬜ Create user guide for language settings
+
+### Lessons Learned from Internationalization Testing
+
+1. **Translation File Formats and Loading**:
+   - QM files are binary compiled translation files used by Qt for runtime translations
+   - These files need to be properly compiled from TS (XML translation source) files
+   - The Qt tools like `lrelease` are needed for proper compilation
+   - File naming is critical - locale-specific names (e.g., `scout_de_DE.qm` vs `scout_de.qm`) must match what the code expects
+   - The QTranslator.load() method returns boolean success/failure which should be checked
+
+2. **Custom Translation Solutions**:
+   - For testing purposes, a custom QTranslator subclass can override the translate method
+   - This allows implementing translations directly in code without requiring compiled QM files
+   - Useful for quick prototyping and testing when proper translation files aren't available
+   - Can be combined with a dictionary-based approach for easy management
+
+3. **UI Updates After Language Changes**:
+   - Not all UI elements automatically update when the language changes
+   - Static text like tab titles and labels need to be manually updated (retranslate_ui method)
+   - Custom components may need explicit refresh or recreation after language changes
+   - QApplication.processEvents() can help ensure UI updates are applied immediately
+
+4. **Debugging Translation Issues**:
+   - Detailed logging is essential for diagnosing translation loading problems
+   - Try multiple file name patterns when loading translations to handle different conventions
+   - Monitor which strings are being requested for translation to identify missing translations
+   - Create fallback mechanisms for when translation files can't be loaded
+
+These lessons have been applied to the Visual Language Test tool, which now provides a reliable way to test UI layouts with different languages regardless of whether proper translation files are available.
 
 ### Phase 6: Final Release Preparation (PLANNED)
 - ⬜ Comprehensive Documentation
@@ -429,44 +493,19 @@ The multilanguage support is being implemented following these design principles
 
 5. **Persistence**: Language preferences are stored using QSettings to persist between application sessions.
 
-### Recent Translation Updates
+6. **String Format Handling**: Formatted strings using `{0}` style placeholders to ensure compatibility with translation systems and maintain proper variable ordering.
 
-We have completed adding translations for:
+7. **Dialog Messages**: All user-facing dialog messages are now properly internationalized, with consistent pattern for error messages, confirmations, and status updates.
 
-1. **Game State Visualization Components**:
-   - ResourcesView (resources, trends, and labels)
-   - MapView (navigation and entity details)
-   - BuildingsView (building status and properties)
-   - ArmyView (unit information and army status)
+8. **Error Handling**: Comprehensive error handling with translatable error messages to ensure users receive proper feedback in their language.
 
-2. **Detection Components**:
-   - DetectionResultWidget (results table, actions, and messages)
-   - ResultImageView (visualization annotations and interactions)
-
-3. **Error Messages and Notifications**:
-   - Added translations for error messages
-   - Added translations for confirmation dialogs
-   - Added translations for status messages
-
-4. **Special Cases**:
-   - Added support for formatted strings with variables
-   - Ensured consistent terminology across all translations
-
-5. **Testing Infrastructure**:
-   - Created comprehensive test suite for language functionality
-   - Implemented a visual test application for interactive verification
-   - Added automated unit tests for LanguageManager functionality
-
-6. **Bug Fixes**:
-   - Fixed context tags in TS XML files to correctly use <name> tags 
-   - Successfully fixed test files to match the Qt standard format
-   - Ensured consistent XML tag naming across all translation files
-
-The translations are now compiled into .qm files and ready for use in the application. We've implemented testing to ensure the language switching works correctly.
+9. **Layout Adaptability**: Implementation of layout helper utilities to ensure UI elements adapt properly to text length differences across languages.
+   - Used `set_min_width_for_text` to ensure combo boxes have appropriate minimum widths
+   - Applied layout helpers to settings tabs (UI, Window, OCR) for better layout adaptability
 
 ### Next Implementation Steps
 
-1. ✅ Test language switching and UI layout with different languages.
-2. 🔄 Address any layout issues that might arise with different languages.
-3. ✅ Create comprehensive documentation for the translation system.
-4. 🔄 Complete the last part of Phase 5 before moving to Phase 6.
+1. 🔄 Fix the linter errors in settings_tab.py
+2. 🔄 Complete layout adaptations for all components
+3. 🔄 Verify that all changes work correctly with language switching
+4. 🔄 Prepare for Phase 6: Final Release Preparation

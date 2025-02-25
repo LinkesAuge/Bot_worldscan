@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QIcon, QPixmap, QImage, QAction
 from PyQt6.QtCore import Qt, pyqtSignal, QSize
+from scout.ui.utils.language_manager import tr
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -236,8 +237,8 @@ class TemplateListWidget(QWidget):
             logger.error(f"Error importing template from {source_path}: {e}")
             QMessageBox.critical(
                 self,
-                "Import Error",
-                f"Failed to import template: {e}"
+                tr("Import Error"),
+                tr("Failed to import template: {0}").format(str(e))
             )
     
     def _on_delete_clicked(self) -> None:
@@ -250,13 +251,13 @@ class TemplateListWidget(QWidget):
         
         # Confirm deletion
         if len(selected_items) == 1:
-            message = f"Are you sure you want to delete the template '{selected_items[0].text()}'?"
+            message = tr("Are you sure you want to delete the template '{0}'?").format(selected_items[0].text())
         else:
-            message = f"Are you sure you want to delete {len(selected_items)} templates?"
+            message = tr("Are you sure you want to delete {0} templates?").format(len(selected_items))
         
         confirm = QMessageBox.question(
             self,
-            "Confirm Delete",
+            tr("Confirm Delete"),
             message,
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
@@ -282,26 +283,16 @@ class TemplateListWidget(QWidget):
         Args:
             template_name: Name of the template to delete
         """
-        if template_name not in self._templates:
-            return
-        
         try:
             # Get template path
-            template_path = self._templates[template_name]
+            template_path = self.get_template_path(template_name)
+            if not template_path:
+                return
             
-            # Delete file
-            file_path = Path(template_path)
-            if file_path.exists():
-                file_path.unlink()
+            # Remove template file
+            os.remove(template_path)
             
-            # Remove from templates dict
-            del self._templates[template_name]
-            
-            # Remove from selected templates
-            if template_name in self._selected_templates:
-                self._selected_templates.remove(template_name)
-            
-            # Remove from list widget (find and remove the matching item)
+            # Remove item from list
             for i in range(self.template_list.count()):
                 item = self.template_list.item(i)
                 if item.text() == template_name:
@@ -310,27 +301,23 @@ class TemplateListWidget(QWidget):
             
             # Emit signal
             self.template_removed.emit(template_name)
+            self.templates_changed.emit()
             
             logger.info(f"Deleted template: {template_name}")
-        
+            
         except Exception as e:
             logger.error(f"Error deleting template {template_name}: {e}")
             QMessageBox.critical(
                 self,
-                "Delete Error",
-                f"Failed to delete template: {e}"
+                tr("Delete Error"),
+                tr("Failed to delete template: {0}").format(str(e))
             )
     
     def _on_selection_changed(self) -> None:
-        """Handle selection change in the template list."""
-        # Update button state
+        """Handle selection change."""
         selected_items = self.template_list.selectedItems()
-        self.delete_button.setEnabled(len(selected_items) > 0)
-        
-        # Update selected templates
-        self._selected_templates.clear()
-        for item in selected_items:
-            self._selected_templates.add(item.text())
+        if selected_items:
+            self.template_selected.emit(selected_items[0].text())
     
     def _on_context_menu(self, position) -> None:
         """
@@ -375,66 +362,61 @@ class TemplateListWidget(QWidget):
         Handle rename action.
         
         Args:
-            item: The list item to rename
+            item: List item to rename
         """
-        # Get current name
-        current_name = item.text()
+        old_name = item.text()
         
-        # Get original file path
-        file_path = Path(self._templates[current_name])
-        
-        # Prompt for new name
+        # Get new name from user
         from PyQt6.QtWidgets import QInputDialog
         new_name, ok = QInputDialog.getText(
             self,
-            "Rename Template",
-            "New name:",
-            text=current_name
+            tr("Rename Template"),
+            tr("Enter new template name:"),
+            text=old_name
         )
         
-        if not ok or not new_name or new_name == current_name:
+        if not ok or new_name == old_name or not new_name:
             return
         
-        # Check if new name already exists
-        if new_name in self._templates:
-            QMessageBox.warning(
-                self,
-                "Rename Error",
-                f"A template with the name '{new_name}' already exists."
-            )
-            return
+        # Check if name already exists
+        for i in range(self.template_list.count()):
+            if self.template_list.item(i).text() == new_name:
+                QMessageBox.warning(
+                    self,
+                    tr("Rename Error"),
+                    tr("A template with this name already exists.")
+                )
+                return
         
         try:
-            # Create new file path
-            new_file_path = file_path.with_stem(new_name)
-            
             # Rename file
-            file_path.rename(new_file_path)
+            old_path = self.get_template_path(old_name)
+            if old_path:
+                # Get directory and extension
+                directory = os.path.dirname(old_path)
+                ext = os.path.splitext(old_path)[1]
+                
+                # Create new path
+                new_path = os.path.join(directory, new_name + ext)
+                
+                # Rename file
+                os.rename(old_path, new_path)
+                
+                # Update item
+                item.setText(new_name)
+                item.setData(Qt.ItemDataRole.UserRole, new_path)
+                
+                # Emit signal
+                self.templates_changed.emit()
+                
+                logger.info(f"Renamed template: {old_name} -> {new_name}")
             
-            # Update templates dict
-            del self._templates[current_name]
-            self._templates[new_name] = str(new_file_path)
-            
-            # Update selected templates
-            if current_name in self._selected_templates:
-                self._selected_templates.remove(current_name)
-                self._selected_templates.add(new_name)
-            
-            # Update list item
-            item.setText(new_name)
-            item.setData(Qt.ItemDataRole.UserRole, str(new_file_path))
-            
-            # Signal change
-            self.templates_changed.emit()
-            
-            logger.info(f"Renamed template from '{current_name}' to '{new_name}'")
-        
         except Exception as e:
-            logger.error(f"Error renaming template {current_name}: {e}")
+            logger.error(f"Error renaming template {old_name} to {new_name}: {e}")
             QMessageBox.critical(
                 self,
-                "Rename Error",
-                f"Failed to rename template: {e}"
+                tr("Rename Error"),
+                tr("Failed to rename template: {0}").format(str(e))
             )
     
     def _on_view_clicked(self, item: QListWidgetItem) -> None:
@@ -442,30 +424,54 @@ class TemplateListWidget(QWidget):
         Handle view action.
         
         Args:
-            item: The list item to view
+            item: List item to view
         """
-        # Get template path
         template_path = item.data(Qt.ItemDataRole.UserRole)
         
-        # Open in external viewer (platform-dependent)
         try:
-            import os
-            import subprocess
-            import sys
+            # Load and display image
+            image = QImage(template_path)
             
-            if sys.platform == 'win32':
-                os.startfile(template_path)
-            elif sys.platform == 'darwin':  # macOS
-                subprocess.run(['open', template_path])
-            else:  # Linux
-                subprocess.run(['xdg-open', template_path])
+            if image.isNull():
+                QMessageBox.critical(
+                    self,
+                    tr("View Error"),
+                    tr("Failed to load template image.")
+                )
+                return
+            
+            # TODO: Display image in a proper viewer dialog
+            
+            # For now, just create a simple dialog
+            from PyQt6.QtWidgets import QDialog, QVBoxLayout
+            
+            dialog = QDialog(self)
+            dialog.setWindowTitle(tr("Template: {0}").format(item.text()))
+            
+            layout = QVBoxLayout(dialog)
+            
+            # Add image
+            label = QLabel()
+            pixmap = QPixmap.fromImage(image)
+            label.setPixmap(pixmap)
+            layout.addWidget(label)
+            
+            # Add info
+            info_label = QLabel(
+                tr("Size: {0}x{1}\nPath: {2}").format(
+                    image.width(), image.height(), template_path
+                )
+            )
+            layout.addWidget(info_label)
+            
+            dialog.exec()
         
         except Exception as e:
             logger.error(f"Error opening template for viewing: {e}")
             QMessageBox.critical(
                 self,
-                "View Error",
-                f"Failed to open template for viewing: {e}"
+                tr("View Error"),
+                tr("Failed to open template for viewing: {0}").format(str(e))
             )
     
     def _on_item_double_clicked(self, item: QListWidgetItem) -> None:
