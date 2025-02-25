@@ -1,428 +1,457 @@
 """
-GameService and AutomationService Integration Tests
+Game-Automation Integration Tests
 
-This module contains integration tests that verify the interaction between
-the GameService and AutomationService components.
+These tests verify that the Game Service and Automation Service
+components integrate correctly and work together properly.
 """
 
-import unittest
 import os
+import sys
+import unittest
+from unittest.mock import MagicMock, patch
 import tempfile
-import shutil
+from pathlib import Path
+import json
 import time
 import cv2
 import numpy as np
-from unittest.mock import MagicMock, patch
 
+# Add parent directory to path to allow running as standalone
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_dir = os.path.dirname(os.path.dirname(os.path.dirname(script_dir)))
+if project_dir not in sys.path:
+    sys.path.insert(0, project_dir)
+
+from scout.core.game.game_service import GameService
+from scout.core.game.game_state import GameState
+from scout.core.automation.automation_service import AutomationService
+from scout.core.automation.task import Task, TaskStatus
 from scout.core.events.event_bus import EventBus
 from scout.core.events.event_types import EventType
-from scout.core.window.window_service import WindowService
-from scout.core.detection.detection_service import DetectionService
-from scout.core.detection.strategies.template_strategy import TemplateMatchingStrategy
-from scout.core.game.game_service import GameService
-from scout.core.game.game_state import Coordinates, Resource
-from scout.core.automation.automation_service import AutomationService
-from scout.core.automation.task import TaskStatus
-from scout.core.automation.tasks.basic_tasks import ClickTask, WaitTask, DetectTask
-from scout.core.automation.tasks.game_tasks import NavigateToCoordinatesTask, CollectResourcesTask
-
-class MockActionsService:
-    """Mock implementation of an actions service for testing."""
-    
-    def __init__(self):
-        self.actions_log = []
-    
-    def click_at(self, x, y, relative_to_window=True, button='left', clicks=1):
-        """Log click actions."""
-        self.actions_log.append(('click', x, y, relative_to_window, button, clicks))
-        return True
-    
-    def drag_mouse(self, start_x, start_y, end_x, end_y, relative_to_window=True, duration=0.5):
-        """Log drag actions."""
-        self.actions_log.append(('drag', start_x, start_y, end_x, end_y, relative_to_window, duration))
-        return True
-    
-    def input_text(self, text):
-        """Log text input actions."""
-        self.actions_log.append(('input_text', text))
-        return True
-    
-    def get_actions(self):
-        """Get all logged actions."""
-        return self.actions_log
-    
-    def clear_log(self):
-        """Clear action log."""
-        self.actions_log = []
+from scout.core.services.service_locator import ServiceLocator
 
 
 class TestGameAutomationIntegration(unittest.TestCase):
-    """
-    Integration tests for GameService and AutomationService.
-    
-    These tests verify that:
-    1. AutomationService can execute tasks based on game state
-    2. Game-specific tasks can properly use game service information
-    3. Events flow correctly between components
-    """
-    
+    """Test the integration between GameService and AutomationService."""
+
     def setUp(self):
-        """Set up test fixture."""
-        # Create event bus
+        """Set up test environment before each test."""
+        # Create event bus for communication
         self.event_bus = EventBus()
         
-        # Set up event listener to track events
-        self.automation_events = []
-        self.game_events = []
-        self.event_bus.subscribe(EventType.AUTOMATION_TASK_COMPLETED, 
-                                 lambda e: self.automation_events.append(e))
-        self.event_bus.subscribe(EventType.GAME_STATE_CHANGED, 
-                                 lambda e: self.game_events.append(e))
+        # Create mock service locator
+        self.service_locator = MagicMock(spec=ServiceLocator)
+        self.service_locator.get_event_bus.return_value = self.event_bus
         
-        # Create temporary directory for templates and cache
-        self.temp_dir = tempfile.mkdtemp()
-        self.templates_dir = os.path.join(self.temp_dir, 'templates')
-        self.state_dir = os.path.join(self.temp_dir, 'state')
-        os.makedirs(self.templates_dir, exist_ok=True)
-        os.makedirs(self.state_dir, exist_ok=True)
-        
-        # Create test template images
-        self._create_test_templates()
-        
-        # Create mock services
-        self.window_service = self._create_mock_window_service()
-        self.detection_service = self._create_mock_detection_service()
-        self.game_service = self._create_mock_game_service()
-        self.actions_service = MockActionsService()
+        # Create game service
+        self.game_service = GameService(self.service_locator)
         
         # Create automation service
-        self.automation_service = AutomationService(self.event_bus)
+        self.automation_service = AutomationService(self.service_locator)
         
-        # Set up execution context for tasks
-        self.automation_service.set_execution_context({
-            'window_service': self.window_service,
-            'detection_service': self.detection_service,
-            'game_service': self.game_service,
-            'actions_service': self.actions_service
-        })
-    
+        # Mock service locator to return our services
+        self.service_locator.get_game_service.return_value = self.game_service
+        self.service_locator.get_automation_service.return_value = self.automation_service
+        
+        # Create temporary directory for test data
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.temp_path = Path(self.temp_dir.name)
+        
+        # Set up initial game state
+        self.setup_game_state()
+        
+        # Configure event listeners
+        self.received_events = []
+        self.event_bus.subscribe(EventType.GAME_STATE_UPDATED, self._on_event)
+        self.event_bus.subscribe(EventType.TASK_STARTED, self._on_event)
+        self.event_bus.subscribe(EventType.TASK_COMPLETED, self._on_event)
+        self.event_bus.subscribe(EventType.TASK_FAILED, self._on_event)
+
     def tearDown(self):
-        """Clean up after the test."""
-        # Remove temporary directory
-        shutil.rmtree(self.temp_dir)
-    
-    def _create_test_templates(self):
-        """Create test template images for detection."""
-        # Create resource template (gold coin)
-        gold_path = os.path.join(self.templates_dir, 'gold_resource.png')
-        gold_img = np.zeros((40, 40, 3), dtype=np.uint8)
-        gold_img[:, :] = [0, 215, 255]  # BGR for gold color
-        cv2.circle(gold_img, (20, 20), 15, (0, 165, 255), -1)  # Darker gold circle
-        cv2.imwrite(gold_path, gold_img)
+        """Clean up after each test."""
+        self.temp_dir.cleanup()
         
-        # Create resource collection button template
-        collect_path = os.path.join(self.templates_dir, 'collect_button.png')
-        collect_img = np.zeros((60, 100, 3), dtype=np.uint8)
-        collect_img[:, :] = [50, 50, 200]  # Red button
-        cv2.putText(collect_img, "Collect", (10, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        cv2.imwrite(collect_path, collect_img)
-    
-    def _create_mock_window_service(self):
-        """Create a mock window service."""
-        window_service = MagicMock(spec=WindowService)
-        window_service.find_window.return_value = True
-        window_service.get_window_position.return_value = (0, 0, 800, 600)
+    def _on_event(self, event):
+        """Store received events for verification."""
+        self.received_events.append(event)
+
+    def setup_game_state(self):
+        """Set up initial game state for testing."""
+        # Create initial game state
+        initial_state = GameState()
         
-        # Create a test screenshot with resource buttons
-        test_image = np.zeros((600, 800, 3), dtype=np.uint8)
+        # Add resources
+        initial_state.add_resource("gold", 1000)
+        initial_state.add_resource("wood", 500)
+        initial_state.add_resource("stone", 200)
         
-        # Add some resource collection buttons
-        for i in range(3):
-            button_img = np.zeros((60, 100, 3), dtype=np.uint8)
-            button_img[:, :] = [50, 50, 200]  # Red button
-            cv2.putText(button_img, "Collect", (10, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-            x_pos = 100 + i * 150
-            test_image[100:160, x_pos:x_pos+100] = button_img
+        # Add buildings
+        initial_state.add_building("townhall", {"type": "production", "level": 1, "position": {"x": 300, "y": 300}})
+        initial_state.add_building("barracks", {"type": "military", "level": 1, "position": {"x": 450, "y": 300}})
+        initial_state.add_building("mine", {"type": "resource", "level": 1, "position": {"x": 150, "y": 200}})
         
-        window_service.capture_screenshot.return_value = test_image
-        return window_service
-    
-    def _create_mock_detection_service(self):
-        """Create a mock detection service."""
-        detection_service = MagicMock(spec=DetectionService)
+        # Add units
+        initial_state.add_unit("worker", {"count": 5, "status": "idle"})
+        initial_state.add_unit("soldier", {"count": 2, "status": "idle"})
         
-        # Configure detect_template to return matching results
-        def mock_detect_template(**kwargs):
-            template_name = kwargs.get('template_name')
-            if template_name == 'collect_button':
-                # Return 3 resource buttons
-                return [
-                    {
-                        'template_name': 'collect_button',
-                        'confidence': 0.95,
-                        'x': 100, 'y': 100,
-                        'width': 100, 'height': 60
-                    },
-                    {
-                        'template_name': 'collect_button',
-                        'confidence': 0.93,
-                        'x': 250, 'y': 100,
-                        'width': 100, 'height': 60
-                    },
-                    {
-                        'template_name': 'collect_button',
-                        'confidence': 0.91,
-                        'x': 400, 'y': 100,
-                        'width': 100, 'height': 60
-                    }
-                ]
-            return []
+        # Set current position
+        initial_state.set_position("position", {"x": 500, "y": 500})
         
-        detection_service.detect_template.side_effect = mock_detect_template
+        # Set game state
+        self.game_service.set_game_state(initial_state)
+
+    def create_mock_task(self, name, action_type, duration=0.1, success=True):
+        """Create a mock task for testing."""
+        task = Task(name, action_type)
         
-        # Configure detect_text to return coordinate text
-        def mock_detect_text(**kwargs):
-            return [
-                {
-                    'text': 'K1 (123,456)',
-                    'confidence': 0.9,
-                    'x': 400, 'y': 30,
-                    'width': 120, 'height': 30
-                }
-            ]
+        # Add mock execute method
+        original_execute = task.execute
         
-        detection_service.detect_text.side_effect = mock_detect_text
+        def mock_execute(context=None):
+            if context is None:
+                context = {}
+            # Simulate task execution time
+            time.sleep(duration)
+            result = original_execute(context)
+            result.success = success
+            if success:
+                result.status = TaskStatus.COMPLETED
+            else:
+                result.status = TaskStatus.FAILED
+            return result
         
-        return detection_service
-    
-    def _create_mock_game_service(self):
-        """Create a mock game service with pre-defined state."""
-        game_service = MagicMock(spec=GameService)
+        task.execute = mock_execute
+        return task
+
+    def test_game_state_triggers_automation(self):
+        """
+        Test GA-INT-001: Game state triggers automation.
         
-        # Create game state
-        game_service.state = MagicMock()
-        game_service.state.current_position = Coordinates(1, 123, 456)
-        game_service.state.resources = {
-            'gold': Resource('gold', 10000, 20000),
-            'food': Resource('food', 5000, 10000)
-        }
+        Verify that automation sequence starts based on game state.
+        """
+        # Define a trigger condition based on game state
+        def resource_trigger_condition(game_state):
+            resources = {r["name"]: r["value"] for r in game_state["resources"]}
+            return resources.get("gold", 0) >= 1000
         
-        # Mock the convert screen to game coordinates method
-        game_service._screen_to_game_coords.return_value = Coordinates(1, 125, 458)
+        # Create a task sequence for the trigger
+        task_sequence = [
+            self.create_mock_task("Build Barracks", "build"),
+            self.create_mock_task("Train Soldiers", "train")
+        ]
         
-        return game_service
-    
-    def test_basic_click_task(self):
-        """Test that basic click task works with game coordinates."""
-        # Create a click task
-        click_task = ClickTask("test_click", 200, 150, relative_to_window=True)
-        
-        # Execute task synchronously
-        result = self.automation_service.execute_task_synchronously(click_task)
-        
-        # Verify task executed successfully
-        self.assertTrue(result)
-        self.assertEqual(click_task.status, TaskStatus.COMPLETED)
-        
-        # Check that the click was recorded by the actions service
-        actions = self.actions_service.get_actions()
-        self.assertEqual(len(actions), 1)
-        
-        action = actions[0]
-        self.assertEqual(action[0], 'click')
-        self.assertEqual(action[1], 200)  # x
-        self.assertEqual(action[2], 150)  # y
-    
-    def test_detect_task_with_game_service(self):
-        """Test that detect task works with game and detection services."""
-        # Create a detect task using template strategy
-        detect_task = DetectTask(
-            "test_detect",
-            strategy="template",
-            templates=["collect_button"],
-            confidence=0.8
+        # Register trigger with automation service
+        self.automation_service.register_trigger(
+            "resource_trigger",
+            resource_trigger_condition,
+            task_sequence
         )
         
-        # Execute task synchronously
-        result = self.automation_service.execute_task_synchronously(detect_task)
+        # Manually check triggers (in real app this would be on a timer)
+        self.automation_service.check_triggers(self.game_service.get_game_state())
         
-        # Verify task executed successfully
-        self.assertTrue(result)
-        self.assertEqual(detect_task.status, TaskStatus.COMPLETED)
+        # Allow time for tasks to execute
+        time.sleep(0.3)
         
-        # Check detection results
-        detection_results = detect_task.result
-        self.assertIsNotNone(detection_results)
-        self.assertEqual(len(detection_results), 3)  # 3 collect buttons
-    
-    def test_collect_resources_task(self):
-        """Test the collect resources game task."""
-        # Create a collection task
-        collect_task = CollectResourcesTask(
-            "test_collect",
-            resource_templates=["collect_button"],
-            max_collections=5
-        )
+        # Verify that tasks were executed
+        self.assertGreaterEqual(len(self.received_events), 2)
         
-        # Execute task synchronously
-        result = self.automation_service.execute_task_synchronously(collect_task)
+        # Check specific events
+        event_types = [e.type for e in self.received_events]
+        self.assertIn(EventType.TASK_STARTED, event_types)
+        self.assertIn(EventType.TASK_COMPLETED, event_types)
         
-        # Verify task executed successfully
-        self.assertTrue(result)
-        self.assertEqual(collect_task.status, TaskStatus.COMPLETED)
+        # Get task names from events
+        task_names = []
+        for event in self.received_events:
+            if event.type == EventType.TASK_STARTED and "task_name" in event.data:
+                task_names.append(event.data["task_name"])
         
-        # Check that clicks were recorded by the actions service
-        actions = self.actions_service.get_actions()
+        # Verify both tasks were started
+        self.assertIn("Build Barracks", task_names)
+        self.assertIn("Train Soldiers", task_names)
+
+    def test_automation_updates_game_state(self):
+        """
+        Test GA-INT-002: Automation updates game state.
         
-        # Should have 3 click actions (for each button) and wait actions in between
-        click_actions = [a for a in actions if a[0] == 'click']
-        self.assertEqual(len(click_actions), 3)
+        Verify that game state is updated after automation completes.
+        """
+        # Initial game state
+        initial_state = self.game_service.get_game_state()
         
-        # Verify result shows how many resources were collected
-        self.assertEqual(collect_task.result, 3)
-    
-    def test_task_execution_sequence(self):
-        """Test executing a sequence of tasks in order."""
-        # Create tasks
-        click_task = ClickTask("test_click", 200, 150)
-        wait_task = WaitTask("test_wait", 0.1)  # Short wait for testing
-        detect_task = DetectTask("test_detect", strategy="template", templates=["collect_button"])
+        # Create a task that will update game state
+        build_task = Task("Build Farm", "build")
         
-        # Add tasks to automation service
-        self.automation_service.add_task(click_task)
-        self.automation_service.add_task(wait_task)
-        self.automation_service.add_task(detect_task)
+        # Mock the execute method to update game state
+        def mock_execute(context=None):
+            # Update game state with new building
+            current_state = self.game_service.get_game_state()
+            new_state = GameState.from_dict(current_state)
+            new_state.add_building("farm", {"type": "food", "level": 1, "position": {"x": 400, "y": 400}})
+            
+            # Subtract resources used for building
+            for resource in new_state.get_resources():
+                if resource["name"] == "wood":
+                    resource["value"] -= 100
+                if resource["name"] == "stone":
+                    resource["value"] -= 50
+            
+            # Update game state
+            self.game_service.set_game_state(new_state)
+            
+            # Return success
+            result = Task.Result()
+            result.success = True
+            result.status = TaskStatus.COMPLETED
+            result.message = "Farm built successfully"
+            return result
         
-        # Start execution
-        self.automation_service.start_execution()
+        build_task.execute = mock_execute
         
-        # Wait for all tasks to complete
-        max_wait = 2.0  # seconds
-        start = time.time()
-        while (any(task.status != TaskStatus.COMPLETED for task in 
-                  [click_task, wait_task, detect_task]) and 
-               time.time() - start < max_wait):
-            time.sleep(0.1)
+        # Execute the task
+        self.automation_service.execute_task(build_task)
         
-        # Stop execution
-        self.automation_service.stop_execution()
+        # Verify game state was updated
+        updated_state = self.game_service.get_game_state()
         
-        # Verify all tasks completed
-        self.assertEqual(click_task.status, TaskStatus.COMPLETED)
-        self.assertEqual(wait_task.status, TaskStatus.COMPLETED)
-        self.assertEqual(detect_task.status, TaskStatus.COMPLETED)
+        # Check for new building
+        buildings = {b["name"]: b for b in updated_state["buildings"]}
+        self.assertIn("farm", buildings)
         
-        # Verify actions were recorded in the right order
-        actions = self.actions_service.get_actions()
-        self.assertEqual(actions[0][0], 'click')  # First action should be click
-    
-    def test_navigate_to_coordinates_task(self):
-        """Test the navigate to coordinates game task."""
-        # Create a navigate task
-        coords = Coordinates(1, 234, 567)
-        input_field_position = (400, 50)
+        # Check resources were deducted
+        resources = {r["name"]: r["value"] for r in updated_state["resources"]}
+        self.assertEqual(resources["wood"], 400)  # 500 - 100
+        self.assertEqual(resources["stone"], 150)  # 200 - 50
         
-        navigate_task = NavigateToCoordinatesTask(
-            "test_navigate",
-            coordinates=coords,
-            input_field_position=input_field_position
-        )
+        # Verify events were published
+        self.assertGreaterEqual(len(self.received_events), 2)
+        event_types = [e.type for e in self.received_events]
+        self.assertIn(EventType.GAME_STATE_UPDATED, event_types)
+        self.assertIn(EventType.TASK_COMPLETED, event_types)
+
+    def test_conditional_automation_based_on_state(self):
+        """
+        Test GA-INT-003: Conditional automation based on state.
         
-        # Execute task synchronously
-        result = self.automation_service.execute_task_synchronously(navigate_task)
+        Verify that automation sequence behaves differently based on game state.
+        """
+        # Create a conditional task that checks game state
+        conditional_task = Task("Conditional Resource Collection", "collect")
         
-        # Verify task executed successfully
-        self.assertTrue(result)
-        self.assertEqual(navigate_task.status, TaskStatus.COMPLETED)
+        # Define a decision function based on game state
+        def decide_collection_type(game_state):
+            resources = {r["name"]: r["value"] for r in game_state["resources"]}
+            
+            # If gold is low, collect gold
+            if resources.get("gold", 0) < 1500:
+                return "gold"
+            # If wood is low, collect wood
+            elif resources.get("wood", 0) < 1000:
+                return "wood"
+            # Otherwise, collect stone
+            else:
+                return "stone"
         
-        # Check that actions were recorded
-        actions = self.actions_service.get_actions()
+        # Mock the execute method to check game state and behave accordingly
+        def mock_execute(context=None):
+            # Get current game state
+            current_state = self.game_service.get_game_state()
+            
+            # Decide what to collect based on state
+            resource_type = decide_collection_type(current_state)
+            
+            # Update game state with collected resource
+            new_state = GameState.from_dict(current_state)
+            
+            # Add the collected resource
+            for resource in new_state.get_resources():
+                if resource["name"] == resource_type:
+                    resource["value"] += 100
+            
+            # Update game state
+            self.game_service.set_game_state(new_state)
+            
+            # Return result
+            result = Task.Result()
+            result.success = True
+            result.status = TaskStatus.COMPLETED
+            result.message = f"Collected 100 {resource_type}"
+            return result
         
-        # Should have click and text input actions
-        click_actions = [a for a in actions if a[0] == 'click']
-        text_actions = [a for a in actions if a[0] == 'input_text']
+        conditional_task.execute = mock_execute
         
-        self.assertEqual(len(click_actions), 1)
-        self.assertEqual(len(text_actions), 1)
+        # Execute the task in current state (gold should be collected)
+        self.automation_service.execute_task(conditional_task)
         
-        # Verify click position
-        self.assertEqual(click_actions[0][1], input_field_position[0])  # x
-        self.assertEqual(click_actions[0][2], input_field_position[1])  # y
+        # Verify gold was collected (initial gold was 1000)
+        updated_state = self.game_service.get_game_state()
+        resources = {r["name"]: r["value"] for r in updated_state["resources"]}
+        self.assertEqual(resources["gold"], 1100)  # 1000 + 100
         
-        # Verify text input
-        self.assertEqual(text_actions[0][1], f"{coords.x},{coords.y}")
-    
-    def test_task_dependencies(self):
-        """Test tasks with dependencies using game services."""
-        # Create tasks with dependencies
-        detect_task = DetectTask("detect_resources", strategy="template", templates=["collect_button"])
+        # Now modify state so wood would be collected next
+        modified_state = GameState.from_dict(updated_state)
+        for resource in modified_state.get_resources():
+            if resource["name"] == "gold":
+                resource["value"] = 2000  # High gold means wood should be collected next
         
-        # Create click task that depends on the detection result
-        click_task = ClickTask("click_first_resource", 0, 0)  # Will set coordinates later
-        click_task.add_dependency(detect_task)
+        # Update game state
+        self.game_service.set_game_state(modified_state)
         
-        # Add custom completion callback to the detect task to update click coordinates
-        def update_click_coordinates(task):
-            if task.result and len(task.result) > 0:
-                first_result = task.result[0]
-                x = first_result['x'] + first_result['width'] // 2
-                y = first_result['y'] + first_result['height'] // 2
-                click_task.params['x'] = x
-                click_task.params['y'] = y
+        # Clear events
+        self.received_events.clear()
         
-        detect_task.add_completion_callback(update_click_coordinates)
+        # Execute the task again
+        self.automation_service.execute_task(conditional_task)
         
-        # Add tasks to automation service
-        self.automation_service.add_task(detect_task)
-        self.automation_service.add_task(click_task)
+        # Verify wood was collected this time
+        updated_state = self.game_service.get_game_state()
+        resources = {r["name"]: r["value"] for r in updated_state["resources"]}
+        self.assertEqual(resources["wood"], 600)  # 500 + 100
         
-        # Start execution
-        self.automation_service.start_execution()
+        # Verify events were published
+        self.assertGreaterEqual(len(self.received_events), 2)
         
-        # Wait for all tasks to complete
-        max_wait = 2.0  # seconds
-        start = time.time()
-        while (any(task.status != TaskStatus.COMPLETED for task in [detect_task, click_task]) and 
-               time.time() - start < max_wait):
-            time.sleep(0.1)
+        # Find collection message
+        collection_message = None
+        for event in self.received_events:
+            if event.type == EventType.TASK_COMPLETED and "message" in event.data:
+                collection_message = event.data["message"]
+                break
         
-        # Stop execution
-        self.automation_service.stop_execution()
+        self.assertIsNotNone(collection_message)
+        self.assertIn("wood", collection_message.lower())
+
+    def test_automation_sequence_execution(self):
+        """
+        Test automation sequence execution.
         
-        # Verify all tasks completed
-        self.assertEqual(detect_task.status, TaskStatus.COMPLETED)
-        self.assertEqual(click_task.status, TaskStatus.COMPLETED)
+        Verify that multiple tasks can be executed in sequence.
+        """
+        # Create a sequence of tasks
+        task_sequence = [
+            self.create_mock_task("Collect Gold", "collect"),
+            self.create_mock_task("Build House", "build"),
+            self.create_mock_task("Train Worker", "train")
+        ]
         
-        # Verify actions were recorded in the right order
-        actions = self.actions_service.get_actions()
-        self.assertEqual(len(actions), 1)  # Should be one click
+        # Execute the sequence
+        self.automation_service.execute_sequence(task_sequence)
         
-        # Check click coordinates - should match the first detected resource
-        action = actions[0]
-        self.assertEqual(action[0], 'click')
-        self.assertEqual(action[1], 150)  # center x of first button
-        self.assertEqual(action[2], 130)  # center y of first button
-    
-    def test_event_propagation(self):
-        """Test event propagation between automation and game services."""
-        # Create task
-        detect_task = DetectTask("test_detect", strategy="template", templates=["collect_button"])
+        # Allow time for sequence to execute
+        time.sleep(0.5)
         
-        # Execute task synchronously
-        self.automation_service.execute_task_synchronously(detect_task)
+        # Verify all tasks were executed
+        self.assertGreaterEqual(len(self.received_events), 6)  # 3 starts and 3 completions
         
-        # Verify automation events were published
-        self.assertGreater(len(self.automation_events), 0)
+        # Check task starts and completions
+        task_starts = [e for e in self.received_events if e.type == EventType.TASK_STARTED]
+        task_completions = [e for e in self.received_events if e.type == EventType.TASK_COMPLETED]
         
-        # Extract the task name from the event
-        task_name = self.automation_events[0].data.get('task_name')
-        self.assertEqual(task_name, "test_detect")
+        self.assertEqual(len(task_starts), 3)
+        self.assertEqual(len(task_completions), 3)
         
-        # Verify the event contains the required data
-        self.assertIn('task_type', self.automation_events[0].data)
-        self.assertIn('task_status', self.automation_events[0].data)
-        self.assertIn('timestamp', self.automation_events[0].data)
+        # Check execution order
+        task_start_names = [e.data.get("task_name") for e in task_starts]
+        self.assertEqual(task_start_names, ["Collect Gold", "Build House", "Train Worker"])
+
+    def test_error_handling_in_automation(self):
+        """
+        Test error handling in automation.
+        
+        Verify that errors in tasks are properly handled.
+        """
+        # Create a sequence with a failing task
+        task_sequence = [
+            self.create_mock_task("Collect Gold", "collect"),
+            self.create_mock_task("Build House", "build", success=False),  # This task will fail
+            self.create_mock_task("Train Worker", "train")
+        ]
+        
+        # Execute the sequence with error handling
+        self.automation_service.execute_sequence(task_sequence, continue_on_error=False)
+        
+        # Allow time for execution
+        time.sleep(0.5)
+        
+        # Verify execution stopped at the failing task
+        task_starts = [e for e in self.received_events if e.type == EventType.TASK_STARTED]
+        task_completions = [e for e in self.received_events if e.type == EventType.TASK_COMPLETED]
+        task_failures = [e for e in self.received_events if e.type == EventType.TASK_FAILED]
+        
+        self.assertEqual(len(task_starts), 2)  # Only first two tasks should start
+        self.assertEqual(len(task_completions), 1)  # Only first task should complete
+        self.assertEqual(len(task_failures), 1)  # Second task should fail
+        
+        # Verify third task was not executed
+        task_start_names = [e.data.get("task_name") for e in task_starts]
+        self.assertIn("Collect Gold", task_start_names)
+        self.assertIn("Build House", task_start_names)
+        self.assertNotIn("Train Worker", task_start_names)
+        
+        # Now try with continue_on_error=True
+        self.received_events.clear()
+        
+        # Execute the sequence with error handling
+        self.automation_service.execute_sequence(task_sequence, continue_on_error=True)
+        
+        # Allow time for execution
+        time.sleep(0.5)
+        
+        # Verify all tasks were executed despite failure
+        task_starts = [e for e in self.received_events if e.type == EventType.TASK_STARTED]
+        task_completions = [e for e in self.received_events if e.type == EventType.TASK_COMPLETED]
+        task_failures = [e for e in self.received_events if e.type == EventType.TASK_FAILED]
+        
+        self.assertEqual(len(task_starts), 3)  # All tasks should start
+        self.assertEqual(len(task_completions), 2)  # First and third tasks should complete
+        self.assertEqual(len(task_failures), 1)  # Second task should fail
+        
+        # Verify third task was executed
+        task_start_names = [e.data.get("task_name") for e in task_starts]
+        self.assertIn("Train Worker", task_start_names)
+
+    def test_game_state_context_in_automation(self):
+        """
+        Test game state context in automation.
+        
+        Verify that tasks can access game state as context.
+        """
+        # Create a task that uses game state context
+        context_task = Task("Context-Aware Task", "context")
+        
+        # Track context received by the task
+        received_context = None
+        
+        # Mock the execute method
+        def mock_execute(context=None):
+            nonlocal received_context
+            received_context = context
+            
+            # Return success
+            result = Task.Result()
+            result.success = True
+            result.status = TaskStatus.COMPLETED
+            return result
+        
+        context_task.execute = mock_execute
+        
+        # Execute task with game state as context
+        game_state = self.game_service.get_game_state()
+        self.automation_service.execute_task(context_task, context=game_state)
+        
+        # Verify task received game state as context
+        self.assertIsNotNone(received_context)
+        self.assertIn("resources", received_context)
+        self.assertIn("buildings", received_context)
+        self.assertIn("units", received_context)
+        
+        # Verify context contains correct data
+        resources = {r["name"]: r["value"] for r in received_context["resources"]}
+        self.assertEqual(resources["gold"], 1000)
+        self.assertEqual(resources["wood"], 500)
+        self.assertEqual(resources["stone"], 200)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main() 

@@ -1,294 +1,498 @@
 """
-DetectionService and GameService Integration Tests
+Detection-Game Integration Tests
 
-This module contains integration tests that verify the interaction between
-the DetectionService and GameService components.
+These tests verify that the Detection Service and Game Service
+components integrate correctly and work together properly.
 """
 
-import unittest
 import os
+import sys
+import unittest
+from unittest.mock import MagicMock, patch
 import tempfile
+from pathlib import Path
 import json
-import shutil
 import cv2
 import numpy as np
-from unittest.mock import MagicMock, patch
 
+# Add parent directory to path to allow running as standalone
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_dir = os.path.dirname(os.path.dirname(os.path.dirname(script_dir)))
+if project_dir not in sys.path:
+    sys.path.insert(0, project_dir)
+
+from scout.core.detection.detection_service import DetectionService
+from scout.core.detection.strategies.template_strategy import TemplateStrategy
+from scout.core.game.game_service import GameService
+from scout.core.game.game_state import GameState
 from scout.core.events.event_bus import EventBus
 from scout.core.events.event_types import EventType
-from scout.core.window.window_service import WindowService
-from scout.core.detection.detection_service import DetectionService
-from scout.core.detection.strategies.template_strategy import TemplateMatchingStrategy
-from scout.core.detection.strategies.ocr_strategy import OCRStrategy
-from scout.core.game.game_service import GameService
-from scout.core.game.game_state import Coordinates
+from scout.core.services.service_locator import ServiceLocator
+
 
 class TestDetectionGameIntegration(unittest.TestCase):
-    """
-    Integration tests for DetectionService and GameService.
-    
-    These tests verify that:
-    1. GameService can use DetectionService to extract game information
-    2. GameService can correctly update game state based on detection results
-    3. Events are properly published between the components
-    """
-    
+    """Test the integration between DetectionService and GameService."""
+
     def setUp(self):
-        """Set up test fixture."""
-        # Create event bus
+        """Set up test environment before each test."""
+        # Create event bus for communication
         self.event_bus = EventBus()
         
-        # Set up event listener to track events
-        self.received_events = []
-        self.event_bus.subscribe(EventType.GAME_STATE_CHANGED, self._on_game_event)
+        # Create mock service locator
+        self.service_locator = MagicMock(spec=ServiceLocator)
+        self.service_locator.get_event_bus.return_value = self.event_bus
         
-        # Create temporary directory for templates and cache
-        self.temp_dir = tempfile.mkdtemp()
-        self.templates_dir = os.path.join(self.temp_dir, 'templates')
-        self.state_dir = os.path.join(self.temp_dir, 'state')
-        os.makedirs(self.templates_dir, exist_ok=True)
-        os.makedirs(self.state_dir, exist_ok=True)
-        
-        # Create test template images
-        self._create_test_templates()
-        
-        # Create a mock window service
-        self.window_service = self._create_mock_window_service()
-        
-        # Create detection service with strategies
-        self.detection_service = self._create_detection_service()
+        # Create detection service with template strategy
+        self.detection_service = DetectionService(self.service_locator)
+        self.detection_service.register_strategy("template", TemplateStrategy())
         
         # Create game service
-        self.game_service = GameService(
-            self.event_bus,
-            self.detection_service,
-            state_file_path=os.path.join(self.state_dir, 'game_state.json')
-        )
-    
+        self.game_service = GameService(self.service_locator)
+        
+        # Mock service locator to return our services
+        self.service_locator.get_detection_service.return_value = self.detection_service
+        self.service_locator.get_game_service.return_value = self.game_service
+        
+        # Create temporary directory for test images
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.temp_path = Path(self.temp_dir.name)
+        
+        # Create test images for resources and buildings
+        self.create_test_images()
+        
+        # Configure event listeners
+        self.received_events = []
+        self.event_bus.subscribe(EventType.GAME_STATE_UPDATED, self._on_event)
+        self.event_bus.subscribe(EventType.DETECTION_COMPLETED, self._on_event)
+
     def tearDown(self):
-        """Clean up after the test."""
-        # Remove temporary directory
-        shutil.rmtree(self.temp_dir)
+        """Clean up after each test."""
+        self.temp_dir.cleanup()
     
-    def _on_game_event(self, event):
-        """Store received game state events for later verification."""
+    def _on_event(self, event):
+        """Store received events for verification."""
         self.received_events.append(event)
-    
-    def _create_test_templates(self):
-        """Create test template images for detection."""
-        # Create resource template (gold coin)
-        gold_path = os.path.join(self.templates_dir, 'gold_resource.png')
-        gold_img = np.zeros((40, 40, 3), dtype=np.uint8)
-        gold_img[:, :] = [0, 215, 255]  # BGR for gold color
-        cv2.circle(gold_img, (20, 20), 15, (0, 165, 255), -1)  # Darker gold circle
-        cv2.imwrite(gold_path, gold_img)
+
+    def create_test_images(self):
+        """Create test images for resources and buildings."""
+        # Create a base game screen
+        self.game_screen = np.zeros((600, 800, 3), dtype=np.uint8)
         
-        # Create building template (castle)
-        castle_path = os.path.join(self.templates_dir, 'castle.png')
-        castle_img = np.zeros((60, 60, 3), dtype=np.uint8)
-        castle_img[:, :] = [90, 90, 90]  # Gray background
-        # Simple castle shape
-        cv2.rectangle(castle_img, (10, 30), (50, 59), (50, 50, 120), -1)  # Base
-        cv2.rectangle(castle_img, (20, 10), (40, 30), (50, 50, 120), -1)  # Top
-        cv2.imwrite(castle_path, castle_img)
-    
-    def _create_mock_window_service(self):
-        """Create a mock window service with test screenshots."""
-        window_service = WindowService(self.event_bus)
+        # Add resource icons
+        # Gold resource
+        cv2.rectangle(self.game_screen, (50, 50), (100, 70), (0, 215, 255), -1)  # Gold color (BGR)
+        cv2.putText(self.game_screen, "1000", (110, 65), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         
-        # Create a game screenshot with gold and castle
-        game_image = np.zeros((400, 600, 3), dtype=np.uint8)
+        # Wood resource
+        cv2.rectangle(self.game_screen, (50, 90), (100, 110), (42, 42, 165), -1)  # Brown color (BGR)
+        cv2.putText(self.game_screen, "500", (110, 105), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         
-        # Add gold resource at position (100, 100)
-        gold_region = game_image[100:140, 100:140]
-        gold_region[:, :] = [0, 215, 255]  # BGR for gold color
-        cv2.circle(gold_region, (20, 20), 15, (0, 165, 255), -1)
+        # Add building icons
+        # Town hall
+        cv2.rectangle(self.game_screen, (300, 300), (400, 350), (100, 100, 100), -1)
+        cv2.putText(self.game_screen, "Town Hall", (320, 330), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         
-        # Add castle at position (300, 200)
-        castle_region = game_image[200:260, 300:360]
-        castle_region[:, :] = [90, 90, 90]  # Gray background
-        cv2.rectangle(castle_region, (10, 30), (50, 59), (50, 50, 120), -1)
-        cv2.rectangle(castle_region, (20, 10), (40, 30), (50, 50, 120), -1)
+        # Barracks
+        cv2.rectangle(self.game_screen, (450, 300), (550, 350), (50, 50, 150), -1)
+        cv2.putText(self.game_screen, "Barracks", (470, 330), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         
-        # Add some text for OCR detection (coordinates)
-        cv2.putText(game_image, "K1 (123,456)", (400, 50), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        # Save the game screen
+        self.game_screen_path = self.temp_path / "game_screen.png"
+        cv2.imwrite(str(self.game_screen_path), self.game_screen)
         
-        # Add resource counter text
-        cv2.putText(game_image, "Gold: 10000/20000", (50, 350), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        # Create templates for resources
+        # Gold template
+        self.gold_template = self.game_screen[45:75, 45:105].copy()
+        self.gold_template_path = self.temp_path / "gold_template.png"
+        cv2.imwrite(str(self.gold_template_path), self.gold_template)
         
-        # Mock the window service methods
-        window_service.capture_screenshot = MagicMock(return_value=game_image)
-        window_service.find_window = MagicMock(return_value=True)
-        window_service.get_window_position = MagicMock(return_value=(0, 0, 600, 400))
+        # Wood template
+        self.wood_template = self.game_screen[85:115, 45:105].copy()
+        self.wood_template_path = self.temp_path / "wood_template.png"
+        cv2.imwrite(str(self.wood_template_path), self.wood_template)
         
-        return window_service
-    
-    def _create_detection_service(self):
-        """Create a detection service with test strategies."""
-        # Create detection service
-        detection_service = DetectionService(self.event_bus, self.window_service)
+        # Create templates for buildings
+        # Town hall template
+        self.townhall_template = self.game_screen[295:355, 295:405].copy()
+        self.townhall_template_path = self.temp_path / "townhall_template.png"
+        cv2.imwrite(str(self.townhall_template_path), self.townhall_template)
         
-        # Register template strategy
-        template_strategy = TemplateMatchingStrategy(templates_dir=self.templates_dir)
-        detection_service.register_strategy('template', template_strategy)
+        # Barracks template
+        self.barracks_template = self.game_screen[295:355, 445:555].copy()
+        self.barracks_template_path = self.temp_path / "barracks_template.png"
+        cv2.imwrite(str(self.barracks_template_path), self.barracks_template)
         
-        # Mock OCR strategy
-        ocr_strategy = MagicMock(spec=OCRStrategy)
+        # Create resource configuration file
+        self.resource_config = {
+            "resources": [
+                {
+                    "name": "gold",
+                    "template": str(self.gold_template_path),
+                    "value_offset": {"x": 60, "y": 15},
+                    "value_width": 50,
+                    "ocr_config": "--psm 7 -c tessedit_char_whitelist=0123456789"
+                },
+                {
+                    "name": "wood",
+                    "template": str(self.wood_template_path),
+                    "value_offset": {"x": 60, "y": 15},
+                    "value_width": 50,
+                    "ocr_config": "--psm 7 -c tessedit_char_whitelist=0123456789"
+                }
+            ]
+        }
         
-        # Configure OCR mock to return predefined results
-        def mock_detect(image, **kwargs):
-            # Convert image to text for testing
-            height, width = image.shape[:2]
+        self.resource_config_path = self.temp_path / "resource_config.json"
+        with open(self.resource_config_path, 'w') as f:
+            json.dump(self.resource_config, f)
+        
+        # Create building configuration file
+        self.building_config = {
+            "buildings": [
+                {
+                    "name": "townhall",
+                    "template": str(self.townhall_template_path),
+                    "type": "production",
+                    "level": 1
+                },
+                {
+                    "name": "barracks",
+                    "template": str(self.barracks_template_path),
+                    "type": "military",
+                    "level": 1
+                }
+            ]
+        }
+        
+        self.building_config_path = self.temp_path / "building_config.json"
+        with open(self.building_config_path, 'w') as f:
+            json.dump(self.building_config, f)
+
+    def test_resource_detection_to_game_state(self):
+        """
+        Test DG-INT-001: Resource detection to game state.
+        
+        Verify that detected resources appear in the game state.
+        """
+        # Mock OCR detection for resource values
+        with patch('scout.core.detection.strategies.ocr_strategy.OCRStrategy.detect') as mock_ocr:
+            # Configure mock OCR to return resource values
+            mock_ocr.side_effect = [
+                {"text": "1000", "confidence": 0.9},  # Gold value
+                {"text": "500", "confidence": 0.9}    # Wood value
+            ]
             
-            # Find text that looks like coordinates
-            if height > 100 and width > 350:
-                return [
-                    {
-                        'text': 'K1 (123,456)',
-                        'confidence': 0.9,
-                        'x': 400, 'y': 30,
-                        'width': 120, 'height': 30
-                    }
-                ]
-            # Find text that looks like resource counts
-            elif 300 <= height <= 400 and width >= 50:
-                return [
-                    {
-                        'text': 'Gold: 10000/20000',
-                        'confidence': 0.95,
-                        'x': 50, 'y': 350,
-                        'width': 150, 'height': 20
-                    }
-                ]
+            # Load resource configuration
+            with open(self.resource_config_path, 'r') as f:
+                resource_config = json.load(f)
+            
+            # Configure game service to use these resources
+            self.game_service.configure_resources(resource_config["resources"])
+            
+            # Run resource detection
+            detection_results = []
+            for resource in resource_config["resources"]:
+                # Detect the resource template
+                template_config = {
+                    "templates": [resource["template"]],
+                    "threshold": 0.7,
+                    "limit": 1,
+                    "visualize": False
+                }
+                
+                result = self.detection_service.detect(
+                    str(self.game_screen_path),
+                    strategy="template",
+                    config=template_config
+                )
+                
+                if "matches" in result and len(result["matches"]) > 0:
+                    match = result["matches"][0]
+                    detection_results.append({
+                        "resource": resource["name"],
+                        "match": match,
+                        "template": resource["template"],
+                        "value_offset": resource["value_offset"],
+                        "value_width": resource["value_width"]
+                    })
+            
+            # Update game state with detection results
+            self.game_service.update_resources(detection_results, str(self.game_screen_path))
+            
+            # Verify game state has been updated
+            game_state = self.game_service.get_game_state()
+            
+            # Check resources in game state
+            self.assertIn("resources", game_state)
+            self.assertEqual(len(game_state["resources"]), 2)
+            
+            # Check specific resource values
+            resources = {r["name"]: r["value"] for r in game_state["resources"]}
+            self.assertIn("gold", resources)
+            self.assertIn("wood", resources)
+            self.assertEqual(resources["gold"], 1000)
+            self.assertEqual(resources["wood"], 500)
+            
+            # Verify events were published
+            self.assertGreaterEqual(len(self.received_events), 1)
+            event_types = [e.type for e in self.received_events]
+            self.assertIn(EventType.GAME_STATE_UPDATED, event_types)
+
+    def test_building_detection_to_game_state(self):
+        """
+        Test DG-INT-002: Building detection to game state.
+        
+        Verify that detected buildings appear in the game state.
+        """
+        # Load building configuration
+        with open(self.building_config_path, 'r') as f:
+            building_config = json.load(f)
+        
+        # Configure game service to use these buildings
+        self.game_service.configure_buildings(building_config["buildings"])
+        
+        # Run building detection
+        detection_results = []
+        for building in building_config["buildings"]:
+            # Detect the building template
+            template_config = {
+                "templates": [building["template"]],
+                "threshold": 0.7,
+                "limit": 1,
+                "visualize": False
+            }
+            
+            result = self.detection_service.detect(
+                str(self.game_screen_path),
+                strategy="template",
+                config=template_config
+            )
+            
+            if "matches" in result and len(result["matches"]) > 0:
+                match = result["matches"][0]
+                detection_results.append({
+                    "building": building["name"],
+                    "match": match,
+                    "type": building["type"],
+                    "level": building["level"],
+                    "template": building["template"]
+                })
+        
+        # Update game state with detection results
+        self.game_service.update_buildings(detection_results, str(self.game_screen_path))
+        
+        # Verify game state has been updated
+        game_state = self.game_service.get_game_state()
+        
+        # Check buildings in game state
+        self.assertIn("buildings", game_state)
+        self.assertEqual(len(game_state["buildings"]), 2)
+        
+        # Check specific buildings
+        buildings = {b["name"]: b for b in game_state["buildings"]}
+        self.assertIn("townhall", buildings)
+        self.assertIn("barracks", buildings)
+        self.assertEqual(buildings["townhall"]["type"], "production")
+        self.assertEqual(buildings["barracks"]["type"], "military")
+        
+        # Verify events were published
+        self.assertGreaterEqual(len(self.received_events), 1)
+        event_types = [e.type for e in self.received_events]
+        self.assertIn(EventType.GAME_STATE_UPDATED, event_types)
+
+    def test_map_element_detection(self):
+        """
+        Test DG-INT-003: Map element detection.
+        
+        Verify that detected map elements appear in the game map view.
+        """
+        # Create a simple map with some elements
+        map_image = np.zeros((400, 400, 3), dtype=np.uint8)
+        
+        # Add some map elements
+        # Resource node
+        cv2.circle(map_image, (100, 100), 20, (0, 215, 255), -1)  # Gold resource
+        
+        # Enemy base
+        cv2.rectangle(map_image, (250, 250), (300, 300), (0, 0, 255), -1)  # Red for enemy
+        
+        # Friendly outpost
+        cv2.rectangle(map_image, (300, 100), (350, 150), (0, 255, 0), -1)  # Green for friendly
+        
+        # Save the map image
+        map_image_path = self.temp_path / "map_image.png"
+        cv2.imwrite(str(map_image_path), map_image)
+        
+        # Create templates for map elements
+        # Resource node template
+        resource_node_template = map_image[80:120, 80:120].copy()
+        resource_node_template_path = self.temp_path / "resource_node_template.png"
+        cv2.imwrite(str(resource_node_template_path), resource_node_template)
+        
+        # Enemy base template
+        enemy_base_template = map_image[245:305, 245:305].copy()
+        enemy_base_template_path = self.temp_path / "enemy_base_template.png"
+        cv2.imwrite(str(enemy_base_template_path), enemy_base_template)
+        
+        # Friendly outpost template
+        friendly_outpost_template = map_image[95:155, 295:355].copy()
+        friendly_outpost_template_path = self.temp_path / "friendly_outpost_template.png"
+        cv2.imwrite(str(friendly_outpost_template_path), friendly_outpost_template)
+        
+        # Define map elements configuration
+        map_elements_config = [
+            {
+                "name": "resource_node",
+                "template": str(resource_node_template_path),
+                "type": "resource",
+                "resource_type": "gold"
+            },
+            {
+                "name": "enemy_base",
+                "template": str(enemy_base_template_path),
+                "type": "enemy",
+                "threat_level": "high"
+            },
+            {
+                "name": "friendly_outpost",
+                "template": str(friendly_outpost_template_path),
+                "type": "friendly",
+                "unit_capacity": 10
+            }
+        ]
+        
+        # Configure game service for map elements
+        self.game_service.configure_map_elements(map_elements_config)
+        
+        # Run map element detection
+        detection_results = []
+        for element in map_elements_config:
+            # Detect the map element template
+            template_config = {
+                "templates": [element["template"]],
+                "threshold": 0.7,
+                "limit": 1,
+                "visualize": False
+            }
+            
+            result = self.detection_service.detect(
+                str(map_image_path),
+                strategy="template",
+                config=template_config
+            )
+            
+            if "matches" in result and len(result["matches"]) > 0:
+                match = result["matches"][0]
+                detection_results.append({
+                    "element": element["name"],
+                    "match": match,
+                    "type": element["type"],
+                    "template": element["template"],
+                    "properties": {k: v for k, v in element.items() 
+                                  if k not in ["name", "template", "type"]}
+                })
+        
+        # Update game state with map element detection results
+        self.game_service.update_map_elements(detection_results, str(map_image_path))
+        
+        # Verify game state has been updated
+        game_state = self.game_service.get_game_state()
+        
+        # Check map elements in game state
+        self.assertIn("map_elements", game_state)
+        self.assertEqual(len(game_state["map_elements"]), 3)
+        
+        # Check specific map elements
+        element_types = [e["type"] for e in game_state["map_elements"]]
+        self.assertIn("resource", element_types)
+        self.assertIn("enemy", element_types)
+        self.assertIn("friendly", element_types)
+        
+        # Verify properties were preserved
+        for element in game_state["map_elements"]:
+            if element["type"] == "resource":
+                self.assertEqual(element["properties"]["resource_type"], "gold")
+            elif element["type"] == "enemy":
+                self.assertEqual(element["properties"]["threat_level"], "high")
+            elif element["type"] == "friendly":
+                self.assertEqual(element["properties"]["unit_capacity"], 10)
+        
+        # Verify events were published
+        self.assertGreaterEqual(len(self.received_events), 1)
+        event_types = [e.type for e in self.received_events]
+        self.assertIn(EventType.GAME_STATE_UPDATED, event_types)
+
+    def test_game_state_influences_detection_parameters(self):
+        """
+        Test that game state can influence detection parameters.
+        
+        Verify that the game state can be used to adjust detection parameters.
+        """
+        # Initialize game state with specific values
+        initial_state = GameState()
+        initial_state.add_resource("gold", 1000)
+        initial_state.add_resource("wood", 500)
+        initial_state.add_building("townhall", {"type": "production", "level": 2})
+        
+        # Set initial game state
+        self.game_service.set_game_state(initial_state)
+        
+        # Define detection parameters based on game state
+        def get_detection_params(game_state):
+            # Example: Adjust detection threshold based on townhall level
+            townhall = next((b for b in game_state.get_buildings() if b["name"] == "townhall"), None)
+            
+            if townhall and townhall["level"] >= 2:
+                # Higher level townhall enables more precise detection
+                return {"threshold": 0.9, "multi_scale": True}
             else:
-                return []
-                
-        ocr_strategy.detect = mock_detect
-        ocr_strategy.get_name.return_value = 'OCR Strategy'
-        detection_service.register_strategy('ocr', ocr_strategy)
+                # Lower level uses more lenient settings
+                return {"threshold": 0.7, "multi_scale": False}
         
-        return detection_service
-    
-    def test_detect_and_update_coordinates(self):
-        """Test that GameService can update coordinates from detection results."""
-        # Call update method (this should trigger coordinate detection)
-        self.game_service.update_current_position()
+        # Get detection parameters based on current game state
+        current_state = self.game_service.get_game_state()
+        detection_params = get_detection_params(current_state)
         
-        # Verify game state was updated with the correct coordinates
-        self.assertIsNotNone(self.game_service.state.current_position)
-        self.assertEqual(self.game_service.state.current_position.kingdom, 1)
-        self.assertEqual(self.game_service.state.current_position.x, 123)
-        self.assertEqual(self.game_service.state.current_position.y, 456)
+        # Verify parameters are as expected for our initial state
+        self.assertEqual(detection_params["threshold"], 0.9)
+        self.assertTrue(detection_params["multi_scale"])
         
-        # Verify events were published
-        self.assertGreater(len(self.received_events), 0)
+        # Run detection with these parameters
+        template_config = {
+            "templates": [str(self.gold_template_path)],
+            "threshold": detection_params["threshold"],
+            "multi_scale": detection_params["multi_scale"],
+            "limit": 1,
+            "visualize": False
+        }
         
-        # Find the coordinates update event
-        coords_event = None
-        for event in self.received_events:
-            if 'coordinates' in event.data:
-                coords_event = event
-                break
-                
-        self.assertIsNotNone(coords_event)
-        self.assertEqual(coords_event.data['coordinates'], 'K1 (123,456)')
-    
-    def test_detect_and_update_resources(self):
-        """Test that GameService can update resources from detection results."""
-        # Call update method (this should trigger resource detection)
-        self.game_service.update_resources()
-        
-        # Verify game state was updated with the correct resources
-        resources = self.game_service.state.resources
-        self.assertIsNotNone(resources)
-        
-        # Check gold resource
-        gold = resources.get('gold')
-        self.assertIsNotNone(gold)
-        self.assertEqual(gold.amount, 10000)
-        self.assertEqual(gold.capacity, 20000)
-        
-        # Verify events were published
-        self.assertGreater(len(self.received_events), 0)
-        
-        # Find the resource update event
-        resource_event = None
-        for event in self.received_events:
-            if 'resources' in event.data:
-                resource_event = event
-                break
-                
-        self.assertIsNotNone(resource_event)
-    
-    def test_detect_buildings(self):
-        """Test that GameService can detect buildings on the map."""
-        # Call update method (this should trigger building detection)
-        self.game_service.update_buildings()
-        
-        # Verify game state was updated with the detected building
-        buildings = self.game_service.state.buildings
-        self.assertIsNotNone(buildings)
-        self.assertGreater(len(buildings), 0)
-        
-        # Find the castle building
-        castle = None
-        for building in buildings:
-            if 'castle' in building.name.lower():
-                castle = building
-                break
-                
-        self.assertIsNotNone(castle)
-        
-        # Verify events were published
-        self.assertGreater(len(self.received_events), 0)
-    
-    def test_save_and_load_state(self):
-        """Test that GameService can save and load state."""
-        # Update state with some test data
-        self.game_service.state.current_position = Coordinates(1, 123, 456)
-        self.game_service.update_resources()  # This will add resources
-        
-        # Save state
-        self.game_service.save_state()
-        
-        # Create a new game service instance
-        new_game_service = GameService(
-            self.event_bus,
-            self.detection_service,
-            state_file_path=os.path.join(self.state_dir, 'game_state.json')
+        result = self.detection_service.detect(
+            str(self.game_screen_path),
+            strategy="template",
+            config=template_config
         )
         
-        # Verify state was loaded correctly
-        self.assertEqual(new_game_service.state.current_position.kingdom, 1)
-        self.assertEqual(new_game_service.state.current_position.x, 123)
-        self.assertEqual(new_game_service.state.current_position.y, 456)
+        # Verify detection with these parameters works
+        self.assertIsNotNone(result)
+        self.assertIn("matches", result)
         
-        # Check resource
-        gold = new_game_service.state.resources.get('gold')
-        self.assertIsNotNone(gold)
-        self.assertEqual(gold.amount, 10000)
-    
-    def test_game_service_event_propagation(self):
-        """Test that events from detection service propagate to game service."""
-        # Subscribe to detection events
-        detection_events = []
-        self.event_bus.subscribe(EventType.DETECTION_COMPLETED, 
-                                lambda e: detection_events.append(e))
+        # Now change game state and verify parameters change
+        new_state = GameState()
+        new_state.add_resource("gold", 1000)
+        new_state.add_resource("wood", 500)
+        new_state.add_building("townhall", {"type": "production", "level": 1})  # Lower level
         
-        # Trigger detection through game service
-        self.game_service.update_current_position()
+        # Update game state
+        self.game_service.set_game_state(new_state)
         
-        # Verify both detection and game state events were published
-        self.assertGreater(len(detection_events), 0)
-        self.assertGreater(len(self.received_events), 0)
+        # Get new detection parameters
+        updated_state = self.game_service.get_game_state()
+        updated_params = get_detection_params(updated_state)
         
-        # Check event causality - game state event should happen after detection event
-        detection_time = detection_events[0].timestamp
-        game_time = self.received_events[0].timestamp
-        self.assertGreaterEqual(game_time, detection_time)
+        # Verify parameters changed
+        self.assertEqual(updated_params["threshold"], 0.7)
+        self.assertFalse(updated_params["multi_scale"])
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main() 

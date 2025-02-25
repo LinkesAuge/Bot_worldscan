@@ -43,6 +43,14 @@ The Automation module provides APIs for creating and executing automation sequen
 - [Task](automation/task.md)
 - [TaskTypes](automation/task_types.md)
 
+### Update Module
+
+The Update module provides APIs for checking for, downloading, and installing application updates.
+
+- [UpdaterModule](updater/index.md) - Overview of the update system
+- [UpdateChecker](updater/update_checker.md) - For checking and installing updates
+- [UpdateSettings](updater/update_settings.md) - For managing update preferences
+
 ### Service Locator
 
 The Service Locator provides a central registry for accessing core services.
@@ -75,6 +83,7 @@ Various utility APIs that provide helper functionality.
 - [ThemeManager](utils/theme_manager.md)
 - [ShortcutManager](utils/shortcut_manager.md)
 - [LayoutHelper](utils/layout_helper.md)
+- [Codes](utils/codes.md) - Application exit codes
 
 ## Using the API Documentation
 

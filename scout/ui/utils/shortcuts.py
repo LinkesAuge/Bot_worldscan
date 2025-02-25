@@ -7,6 +7,7 @@ and provides utilities for creating, registering, and documenting shortcuts.
 """
 
 import logging
+import sys
 from enum import Enum, auto
 from typing import Dict, List, Optional, Callable, Union, Tuple
 
@@ -357,3 +358,45 @@ def get_shortcut_manager() -> ShortcutManager:
     if _shortcut_manager is None:
         _shortcut_manager = ShortcutManager()
     return _shortcut_manager 
+
+def get_platform_specific_key_sequence(
+    win_shortcut: str,
+    mac_shortcut: str,
+    linux_shortcut: str
+) -> QKeySequence:
+    """
+    Create a platform-specific QKeySequence based on the current platform.
+    
+    This function allows creating different shortcuts for different platforms:
+    - Windows typically uses Ctrl for shortcuts
+    - macOS typically uses Command (⌘) for shortcuts 
+    - Linux typically uses Ctrl for shortcuts (similar to Windows)
+    
+    Args:
+        win_shortcut: Shortcut to use on Windows
+        mac_shortcut: Shortcut to use on macOS
+        linux_shortcut: Shortcut to use on Linux
+        
+    Returns:
+        Platform-appropriate QKeySequence
+    
+    Examples:
+        >>> # Create a "Save" shortcut (Ctrl+S on Windows/Linux, Cmd+S on macOS)
+        >>> save_shortcut = get_platform_specific_key_sequence("Ctrl+S", "Cmd+S", "Ctrl+S")
+        >>>
+        >>> # Create a "Quit" shortcut (Alt+F4 on Windows, Cmd+Q on macOS, Ctrl+Q on Linux)
+        >>> quit_shortcut = get_platform_specific_key_sequence("Alt+F4", "Cmd+Q", "Ctrl+Q")
+    """
+    platform = sys.platform
+    
+    if platform.startswith('win'):
+        return QKeySequence(win_shortcut)
+    elif platform.startswith('darwin'):
+        # Replace Cmd with the actual command key for macOS
+        # Qt automatically maps "Cmd" to the command key
+        return QKeySequence(mac_shortcut)
+    elif platform.startswith('linux'):
+        return QKeySequence(linux_shortcut)
+    else:
+        # Default to Windows shortcut for unknown platforms
+        return QKeySequence(win_shortcut) 
