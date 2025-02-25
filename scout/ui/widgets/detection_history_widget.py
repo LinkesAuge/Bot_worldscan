@@ -152,6 +152,29 @@ class DetectionHistoryWidget(QWidget):
         
         logger.debug(f"Added history entry: {detection_type}, {count} items, {duration_ms}ms")
     
+    def add_detection_result(self, results: List[Dict[str, Any]], strategy: str) -> None:
+        """
+        Add a new detection result to the history.
+        
+        Args:
+            results: List of detection results
+            strategy: Detection strategy used
+        """
+        # Create a history entry
+        entry = {
+            'timestamp': datetime.now(),
+            'strategy': strategy,
+            'count': len(results),
+            'results': results,
+            'execution_time': results[0].get('execution_time', 0) if results else 0
+        }
+        
+        # Add the entry
+        self.add_history_entry(entry)
+        
+        # Log entry
+        logger.debug(f"Added history entry: {strategy}, {len(results)} items, {entry['execution_time']}ms")
+    
     def clear_history(self) -> None:
         """Clear the detection history."""
         self._history_entries = []

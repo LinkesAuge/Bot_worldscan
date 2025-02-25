@@ -1,0 +1,524 @@
+2025-02-25 13:24:44,053 - debug - INFO - Starting Scout application in debug mode
+2025-02-25 13:24:44,157 - scout.core.utils.parallel - DEBUG - Initialized ParallelExecutor with 15 workers using threads
+2025-02-25 13:24:44,221 - debug - ERROR - Unexpected error: name 'List' is not defined
+2025-02-25 13:24:44,222 - debug - ERROR - Traceback (most recent call last):
+  File "D:\OneDrive\AI\Projekte\Bot_worldscan\debug_app.py", line 31, in main
+    from scout.ui.main_window import run_application
+  File "D:\OneDrive\AI\Projekte\Bot_worldscan\scout\ui\main_window.py", line 42, in <module>
+    from scout.core.window.window_service import WindowService
+  File "D:\OneDrive\AI\Projekte\Bot_worldscan\scout\core\window\window_service.py", line 72, in <module>
+    class WindowService(QObject, WindowServiceMixin):
+  File "D:\OneDrive\AI\Projekte\Bot_worldscan\scout\core\window\window_service.py", line 509, in WindowService
+    def draw_detection_results(self, painter: QPainter, results: List[Dict[str, Any]]) -> None:
+NameError: name 'List' is not defined
+
+2025-02-25 13:25:03,935 - debug - INFO - Starting Scout application in debug mode
+2025-02-25 13:25:04,036 - scout.core.utils.parallel - DEBUG - Initialized ParallelExecutor with 15 workers using threads
+2025-02-25 13:25:04,286 - scout.ui.utils.language_manager - INFO - Using translations directory: D:\OneDrive\AI\Projekte\Bot_worldscan\scout\translations
+2025-02-25 13:25:04,289 - scout.ui.utils.language_manager - DEBUG - Loaded language setting: en
+2025-02-25 13:25:04,307 - scout.ui.utils.language_manager - DEBUG - Using specified locale: en_US
+2025-02-25 13:25:04,310 - scout.ui.utils.language_manager - DEBUG - Loaded Qt translations for en_US
+2025-02-25 13:25:04,323 - scout.ui.utils.language_manager - INFO - Applied language: en_US
+2025-02-25 13:25:04,327 - scout.ui.utils.language_manager - INFO - LanguageManager initialized with language: en
+2025-02-25 13:25:04,382 - scout.core.window.window_service - DEBUG - Searching for window with title containing: 'Total Battle'
+2025-02-25 13:25:04,422 - scout.core.window.window_service - INFO - Found window: 'Total Battle Tips and Tricks| Everything You Need To Know About Troop Level Stacking | Arachne Swarm - YouTube – Mozilla Firefox' (hwnd: 66958)
+2025-02-25 13:25:04,443 - scout.core.window.window_service - DEBUG - Window metrics updated - DPI scale: 1.5, Client offset: (11, 11)
+2025-02-25 13:25:04,452 - scout.core.window.window_service - INFO - Window service initialized for window: 'Total Battle'
+2025-02-25 13:25:04,464 - scout.core.automation.automation_service - INFO - Automation service initialized
+2025-02-25 13:25:04,486 - scout.core.game.game_service - INFO - Game service initialized
+2025-02-25 13:25:04,491 - scout.ui.service_locator_ui - DEBUG - Registered service: WindowServiceInterface
+2025-02-25 13:25:04,509 - scout.ui.service_locator_ui - DEBUG - Registered service: DetectionServiceInterface
+2025-02-25 13:25:04,525 - scout.ui.service_locator_ui - DEBUG - Registered service: AutomationServiceInterface
+2025-02-25 13:25:04,551 - scout.ui.service_locator_ui - DEBUG - Registered service: GameServiceInterface
+2025-02-25 13:25:04,566 - scout.ui.main_window - INFO - Services initialized and registered
+2025-02-25 13:25:04,754 - scout.ui.widgets.control_panel_widget - DEBUG - Set control panel context to: default
+2025-02-25 13:25:04,761 - scout.ui.widgets.template_list_widget - INFO - Template list widget initialized with directory: scout\resources\templates
+2025-02-25 13:25:04,769 - scout.ui.widgets.detection_result_widget - INFO - Detection result widget initialized
+2025-02-25 13:25:04,772 - scout.ui.widgets.detection_history_widget - DEBUG - DetectionHistoryWidget initialized
+2025-02-25 13:25:04,773 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: ocr, 0 items, 0ms
+2025-02-25 13:25:04,775 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: yolo, 0 items, 0ms
+2025-02-25 13:25:04,775 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: template, 0 items, 0ms
+2025-02-25 13:25:04,776 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: ocr, 0 items, 0ms
+2025-02-25 13:25:04,776 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: ocr, 0 items, 0ms
+2025-02-25 13:25:04,777 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: ocr, 0 items, 0ms
+2025-02-25 13:25:04,778 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: yolo, 0 items, 0ms
+2025-02-25 13:25:04,778 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: ocr, 0 items, 0ms
+2025-02-25 13:25:04,779 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: ocr, 0 items, 0ms
+2025-02-25 13:25:04,779 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: template, 0 items, 0ms
+2025-02-25 13:25:04,779 - scout.ui.widgets.detection_history_widget - DEBUG - Loaded sample detection history data
+2025-02-25 13:25:04,781 - scout.ui.widgets.detection_heatmap_widget - DEBUG - DetectionHeatmapWidget initialized
+2025-02-25 13:25:04,790 - scout.ui.widgets.template_list_widget - INFO - Loaded 2 templates from scout\resources\templates
+2025-02-25 13:25:04,790 - scout.ui.views.detection_tab - INFO - Loaded 2 templates from scout\resources\templates
+2025-02-25 13:25:04,790 - scout.ui.views.detection_tab - INFO - Detection tab initialized
+2025-02-25 13:25:04,827 - scout.ui.views.automation_tab - DEBUG - Connected automation tab signals
+2025-02-25 13:25:04,828 - scout.ui.views.automation_tab - INFO - Automation tab initialized
+2025-02-25 13:25:04,833 - scout.ui.views.game_tab - INFO - Game state tab initialized
+2025-02-25 13:25:04,843 - scout.ui.models.settings_model - INFO - Loaded settings from C:\Users\schrd\.scout\settings.json
+2025-02-25 13:25:04,843 - scout.ui.models.settings_model - INFO - Settings model initialized
+2025-02-25 13:25:04,844 - scout.ui.views.settings_tab - INFO - Settings tab initialized
+2025-02-25 13:25:04,845 - scout.ui.widgets.control_panel_widget - DEBUG - Set control panel context to: detection
+2025-02-25 13:25:04,845 - scout.ui.main_window - DEBUG - Creating menu bar
+2025-02-25 13:25:04,847 - scout.ui.main_window - DEBUG - Menu bar created
+2025-02-25 13:25:04,859 - scout.ui.main_window - ERROR - Error connecting signals: 'WindowService' object has no attribute 'window_selected'
+2025-02-25 13:25:04,867 - scout.ui.main_window - INFO - Overlay view initialized
+2025-02-25 13:25:04,870 - scout.ui.main_window - INFO - Main window initialized
+2025-02-25 13:25:05,076 - scout.core.updater.settings - DEBUG - Loaded update settings: {'check_updates_on_startup': True, 'auto_download_updates': False, 'notify_on_update': True, 'last_check_time': '2025-02-25T13:09:16.279211', 'check_frequency_days': 1, 'update_channel': 'stable'}
+2025-02-25 13:25:05,076 - scout.ui.main_window - INFO - Checking for updates in background
+2025-02-25 13:25:06,370 - scout.core.updater.update_checker - ERROR - Unexpected error checking for updates: Expecting value: line 1 column 1 (char 0)
+2025-02-25 13:25:06,371 - scout.core.updater.settings - DEBUG - Update settings saved successfully
+2025-02-25 13:25:15,925 - scout.ui.widgets.template_list_widget - DEBUG - Selected templates: {'Crypt'}
+2025-02-25 13:25:19,614 - scout.ui.widgets.control_panel_widget - DEBUG - Action triggered: toggle_overlay, params: None
+2025-02-25 13:25:19,614 - scout.ui.main_window - DEBUG - Control panel action: toggle_overlay, params: None
+2025-02-25 13:25:20,697 - scout.ui.views.detection_tab - INFO - Running detection with strategy: template, params: {'confidence_threshold': 0.7, 'max_results': 10}
+2025-02-25 13:25:20,697 - scout.ui.views.detection_tab - ERROR - Detection error: 'DetectionService' object has no attribute 'run_template_detection'
+Traceback (most recent call last):
+  File "D:\OneDrive\AI\Projekte\Bot_worldscan\scout\ui\views\detection_tab.py", line 368, in run_detection
+    results = self.detection_service.run_template_detection(
+AttributeError: 'DetectionService' object has no attribute 'run_template_detection'
+2025-02-25 13:25:24,137 - scout.ui.widgets.template_list_widget - DEBUG - Selected templates: {'crypt_smallres_zoomedin'}
+2025-02-25 13:25:24,536 - scout.ui.widgets.template_list_widget - DEBUG - Selected templates: {'Crypt'}
+2025-02-25 13:25:26,155 - scout.ui.widgets.control_panel_widget - DEBUG - Action triggered: template_editor, params: None
+2025-02-25 13:25:26,156 - scout.ui.main_window - DEBUG - Control panel action: template_editor, params: None
+2025-02-25 13:25:28,786 - scout.ui.widgets.control_panel_widget - DEBUG - Action triggered: start, params: None
+2025-02-25 13:25:28,787 - scout.ui.main_window - DEBUG - Control panel action: start, params: None
+2025-02-25 13:25:28,787 - scout.ui.views.detection_tab - INFO - Running detection with strategy: template, params: {'confidence_threshold': 0.7, 'max_results': 10}
+2025-02-25 13:25:28,787 - scout.ui.views.detection_tab - ERROR - Detection error: 'DetectionService' object has no attribute 'run_template_detection'
+Traceback (most recent call last):
+  File "D:\OneDrive\AI\Projekte\Bot_worldscan\scout\ui\views\detection_tab.py", line 368, in run_detection
+    results = self.detection_service.run_template_detection(
+AttributeError: 'DetectionService' object has no attribute 'run_template_detection'
+2025-02-25 13:25:36,878 - scout.core.window.window_service - ERROR - Error getting window position: 'WindowService' object has no attribute 'event_bus'
+2025-02-25 13:25:40,719 - scout.ui.service_locator_ui - DEBUG - All services shut down
+2025-02-25 13:37:57,361 - debug - INFO - Starting Scout application in debug mode
+2025-02-25 13:37:57,468 - scout.core.utils.parallel - DEBUG - Initialized ParallelExecutor with 15 workers using threads
+2025-02-25 13:37:57,581 - scout.ui.utils.language_manager - INFO - Using translations directory: D:\OneDrive\AI\Projekte\Bot_worldscan\scout\translations
+2025-02-25 13:37:57,582 - scout.ui.utils.language_manager - DEBUG - Loaded language setting: en
+2025-02-25 13:37:57,593 - scout.ui.utils.language_manager - DEBUG - Using specified locale: en_US
+2025-02-25 13:37:57,593 - scout.ui.utils.language_manager - DEBUG - Loaded Qt translations for en_US
+2025-02-25 13:37:57,593 - scout.ui.utils.language_manager - INFO - Applied language: en_US
+2025-02-25 13:37:57,594 - scout.ui.utils.language_manager - INFO - LanguageManager initialized with language: en
+2025-02-25 13:37:57,624 - scout.core.window.window_service - DEBUG - Searching for window with title containing: 'Total Battle'
+2025-02-25 13:37:57,625 - scout.core.window.window_service - INFO - Found window: 'Total Battle' (hwnd: 7998862)
+2025-02-25 13:37:57,625 - scout.core.window.window_service - DEBUG - Window metrics updated - DPI scale: 1.5, Client offset: (11, 45)
+2025-02-25 13:37:57,626 - scout.core.window.window_service - INFO - Window service initialized for window: 'Total Battle'
+2025-02-25 13:37:57,626 - scout.core.automation.automation_service - INFO - Automation service initialized
+2025-02-25 13:37:57,626 - scout.core.game.game_service - INFO - Game service initialized
+2025-02-25 13:37:57,626 - scout.ui.service_locator_ui - DEBUG - Registered service: WindowServiceInterface
+2025-02-25 13:37:57,626 - scout.ui.service_locator_ui - DEBUG - Registered service: DetectionServiceInterface
+2025-02-25 13:37:57,627 - scout.ui.service_locator_ui - DEBUG - Registered service: AutomationServiceInterface
+2025-02-25 13:37:57,627 - scout.ui.service_locator_ui - DEBUG - Registered service: GameServiceInterface
+2025-02-25 13:37:57,627 - scout.ui.main_window - INFO - Services initialized and registered
+2025-02-25 13:37:57,754 - scout.ui.widgets.control_panel_widget - DEBUG - Set control panel context to: default
+2025-02-25 13:37:57,757 - scout.ui.widgets.template_list_widget - INFO - Template list widget initialized with directory: scout\resources\templates
+2025-02-25 13:37:57,759 - scout.ui.widgets.detection_result_widget - INFO - Detection result widget initialized
+2025-02-25 13:37:57,760 - scout.ui.widgets.detection_history_widget - DEBUG - DetectionHistoryWidget initialized
+2025-02-25 13:37:57,761 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: yolo, 0 items, 0ms
+2025-02-25 13:37:57,761 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: template, 0 items, 0ms
+2025-02-25 13:37:57,761 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: yolo, 0 items, 0ms
+2025-02-25 13:37:57,763 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: yolo, 0 items, 0ms
+2025-02-25 13:37:57,763 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: yolo, 0 items, 0ms
+2025-02-25 13:37:57,764 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: yolo, 0 items, 0ms
+2025-02-25 13:37:57,764 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: yolo, 0 items, 0ms
+2025-02-25 13:37:57,765 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: yolo, 0 items, 0ms
+2025-02-25 13:37:57,765 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: template, 0 items, 0ms
+2025-02-25 13:37:57,766 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: template, 0 items, 0ms
+2025-02-25 13:37:57,766 - scout.ui.widgets.detection_history_widget - DEBUG - Loaded sample detection history data
+2025-02-25 13:37:57,767 - scout.ui.widgets.detection_heatmap_widget - DEBUG - DetectionHeatmapWidget initialized
+2025-02-25 13:37:57,768 - scout.ui.widgets.template_list_widget - INFO - Loaded 2 templates from scout\resources\templates
+2025-02-25 13:37:57,769 - scout.ui.views.detection_tab - INFO - Loaded 2 templates from scout\resources\templates
+2025-02-25 13:37:57,769 - scout.ui.views.detection_tab - INFO - Detection tab initialized
+2025-02-25 13:37:57,774 - scout.ui.views.automation_tab - DEBUG - Connected automation tab signals
+2025-02-25 13:37:57,775 - scout.ui.views.automation_tab - INFO - Automation tab initialized
+2025-02-25 13:37:57,778 - scout.ui.views.game_tab - INFO - Game state tab initialized
+2025-02-25 13:37:57,778 - scout.ui.models.settings_model - INFO - Loaded settings from C:\Users\schrd\.scout\settings.json
+2025-02-25 13:37:57,778 - scout.ui.models.settings_model - INFO - Settings model initialized
+2025-02-25 13:37:57,779 - scout.ui.views.settings_tab - INFO - Settings tab initialized
+2025-02-25 13:37:57,779 - scout.ui.widgets.control_panel_widget - DEBUG - Set control panel context to: detection
+2025-02-25 13:37:57,779 - scout.ui.main_window - DEBUG - Creating menu bar
+2025-02-25 13:37:57,780 - scout.ui.main_window - DEBUG - Menu bar created
+2025-02-25 13:37:57,781 - scout.ui.main_window - ERROR - Error connecting signals: 'WindowService' object has no attribute 'window_selected'
+2025-02-25 13:37:57,783 - scout.ui.main_window - INFO - Overlay view initialized
+2025-02-25 13:37:57,783 - scout.ui.main_window - INFO - Main window initialized
+2025-02-25 13:37:57,840 - scout.core.updater.settings - DEBUG - Loaded update settings: {'check_updates_on_startup': True, 'auto_download_updates': False, 'notify_on_update': True, 'last_check_time': '2025-02-25T13:25:06.370049', 'check_frequency_days': 1, 'update_channel': 'stable'}
+2025-02-25 13:37:57,841 - scout.ui.main_window - INFO - Checking for updates in background
+2025-02-25 13:37:59,019 - scout.core.updater.update_checker - ERROR - Unexpected error checking for updates: Expecting value: line 1 column 1 (char 0)
+2025-02-25 13:37:59,021 - scout.core.updater.settings - DEBUG - Update settings saved successfully
+2025-02-25 13:38:32,061 - scout.ui.widgets.template_list_widget - DEBUG - Selected templates: {'Crypt'}
+2025-02-25 13:38:33,492 - scout.ui.widgets.control_panel_widget - DEBUG - Action triggered: ocr_detection, params: None
+2025-02-25 13:38:33,492 - scout.ui.main_window - DEBUG - Control panel action: ocr_detection, params: None
+2025-02-25 13:38:34,298 - scout.ui.widgets.control_panel_widget - DEBUG - Action triggered: ocr_detection, params: None
+2025-02-25 13:38:34,299 - scout.ui.main_window - DEBUG - Control panel action: ocr_detection, params: None
+2025-02-25 13:38:34,754 - scout.ui.widgets.control_panel_widget - DEBUG - Action triggered: toggle_overlay, params: None
+2025-02-25 13:38:34,754 - scout.ui.main_window - DEBUG - Control panel action: toggle_overlay, params: None
+2025-02-25 13:38:36,587 - scout.ui.views.detection_tab - INFO - Running detection with strategy: template, params: {'confidence_threshold': 0.7, 'max_results': 10}
+2025-02-25 13:38:36,587 - scout.core.detection.detection_service - ERROR - Template matching strategy not registered
+2025-02-25 13:38:36,587 - scout.ui.widgets.detection_result_widget - INFO - No detection results to display
+2025-02-25 13:38:36,604 - scout.ui.views.detection_tab - ERROR - Detection error: 'DetectionHistoryWidget' object has no attribute 'add_detection_result'
+Traceback (most recent call last):
+  File "D:\OneDrive\AI\Projekte\Bot_worldscan\scout\ui\views\detection_tab.py", line 398, in run_detection
+    self._history_widget.add_detection_result(results, self._current_strategy)
+AttributeError: 'DetectionHistoryWidget' object has no attribute 'add_detection_result'
+2025-02-25 13:38:41,770 - scout.ui.service_locator_ui - DEBUG - All services shut down
+2025-02-25 13:53:52,060 - debug - INFO - Starting Scout application in debug mode
+2025-02-25 13:53:52,596 - scout.core.utils.parallel - DEBUG - Initialized ParallelExecutor with 15 workers using threads
+2025-02-25 13:53:52,887 - scout.ui.utils.language_manager - INFO - Using translations directory: D:\OneDrive\AI\Projekte\Bot_worldscan\scout\translations
+2025-02-25 13:53:52,890 - scout.ui.utils.language_manager - DEBUG - Loaded language setting: en
+2025-02-25 13:53:52,907 - scout.ui.utils.language_manager - DEBUG - Using specified locale: en_US
+2025-02-25 13:53:52,908 - scout.ui.utils.language_manager - DEBUG - Loaded Qt translations for en_US
+2025-02-25 13:53:52,908 - scout.ui.utils.language_manager - INFO - Applied language: en_US
+2025-02-25 13:53:52,908 - scout.ui.utils.language_manager - INFO - LanguageManager initialized with language: en
+2025-02-25 13:53:52,951 - scout.core.window.window_service - DEBUG - Searching for window with title containing: 'Total Battle'
+2025-02-25 13:53:52,954 - scout.core.window.window_service - DEBUG - No matching windows found
+2025-02-25 13:53:52,954 - scout.core.window.window_service - INFO - Window service initialized for window: 'Total Battle'
+2025-02-25 13:53:52,954 - scout.core.automation.automation_service - INFO - Automation service initialized
+2025-02-25 13:53:52,954 - scout.core.game.game_service - INFO - Game service initialized
+2025-02-25 13:53:52,957 - scout.ui.main_window - ERROR - Error registering detection strategies: cannot import name 'TemplateStrategy' from 'scout.core.detection.strategies.template_strategy' (D:\OneDrive\AI\Projekte\Bot_worldscan\scout\core\detection\strategies\template_strategy.py)
+2025-02-25 13:53:52,957 - scout.ui.service_locator_ui - DEBUG - Registered service: WindowServiceInterface
+2025-02-25 13:53:52,957 - scout.ui.service_locator_ui - DEBUG - Registered service: DetectionServiceInterface
+2025-02-25 13:53:52,957 - scout.ui.service_locator_ui - DEBUG - Registered service: AutomationServiceInterface
+2025-02-25 13:53:52,958 - scout.ui.service_locator_ui - DEBUG - Registered service: GameServiceInterface
+2025-02-25 13:53:52,958 - scout.ui.main_window - INFO - Services initialized and registered
+2025-02-25 13:53:53,054 - scout.ui.widgets.control_panel_widget - DEBUG - Set control panel context to: default
+2025-02-25 13:53:53,069 - scout.ui.widgets.template_list_widget - INFO - Template list widget initialized with directory: scout\resources\templates
+2025-02-25 13:53:53,079 - scout.ui.widgets.detection_result_widget - INFO - Detection result widget initialized
+2025-02-25 13:53:53,080 - scout.ui.widgets.detection_history_widget - DEBUG - DetectionHistoryWidget initialized
+2025-02-25 13:53:53,082 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: ocr, 0 items, 0ms
+2025-02-25 13:53:53,083 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: yolo, 0 items, 0ms
+2025-02-25 13:53:53,083 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: ocr, 0 items, 0ms
+2025-02-25 13:53:53,084 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: template, 0 items, 0ms
+2025-02-25 13:53:53,084 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: template, 0 items, 0ms
+2025-02-25 13:53:53,085 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: template, 0 items, 0ms
+2025-02-25 13:53:53,085 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: yolo, 0 items, 0ms
+2025-02-25 13:53:53,086 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: yolo, 0 items, 0ms
+2025-02-25 13:53:53,087 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: ocr, 0 items, 0ms
+2025-02-25 13:53:53,087 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: yolo, 0 items, 0ms
+2025-02-25 13:53:53,088 - scout.ui.widgets.detection_history_widget - DEBUG - Loaded sample detection history data
+2025-02-25 13:53:53,094 - scout.ui.widgets.detection_heatmap_widget - DEBUG - DetectionHeatmapWidget initialized
+2025-02-25 13:53:53,099 - scout.ui.widgets.template_list_widget - INFO - Loaded 2 templates from scout\resources\templates
+2025-02-25 13:53:53,099 - scout.ui.views.detection_tab - INFO - Loaded 2 templates from scout\resources\templates
+2025-02-25 13:53:53,099 - scout.ui.views.detection_tab - INFO - Detection tab initialized
+2025-02-25 13:53:53,107 - scout.ui.views.automation_tab - DEBUG - Connected automation tab signals
+2025-02-25 13:53:53,108 - scout.ui.views.automation_tab - INFO - Automation tab initialized
+2025-02-25 13:53:53,110 - scout.ui.views.game_tab - INFO - Game state tab initialized
+2025-02-25 13:53:53,117 - scout.ui.models.settings_model - INFO - Loaded settings from C:\Users\schrd\.scout\settings.json
+2025-02-25 13:53:53,117 - scout.ui.models.settings_model - INFO - Settings model initialized
+2025-02-25 13:53:53,117 - scout.ui.views.settings_tab - INFO - Settings tab initialized
+2025-02-25 13:53:53,118 - scout.ui.widgets.control_panel_widget - DEBUG - Set control panel context to: detection
+2025-02-25 13:53:53,118 - scout.ui.main_window - DEBUG - Creating menu bar
+2025-02-25 13:53:53,120 - scout.ui.main_window - DEBUG - Menu bar created
+2025-02-25 13:53:53,123 - scout.ui.main_window - INFO - Overlay view initialized
+2025-02-25 13:53:53,123 - scout.ui.main_window - INFO - Main window initialized
+2025-02-25 13:53:53,189 - scout.core.updater.settings - DEBUG - Loaded update settings: {'check_updates_on_startup': True, 'auto_download_updates': False, 'notify_on_update': True, 'last_check_time': '2025-02-25T13:37:59.020058', 'check_frequency_days': 1, 'update_channel': 'stable'}
+2025-02-25 13:53:53,190 - scout.ui.main_window - INFO - Checking for updates in background
+2025-02-25 13:53:54,419 - scout.core.updater.update_checker - ERROR - Unexpected error checking for updates: Expecting value: line 1 column 1 (char 0)
+2025-02-25 13:53:54,421 - scout.core.updater.settings - DEBUG - Update settings saved successfully
+2025-02-25 13:54:50,123 - debug - INFO - Starting Scout application in debug mode
+2025-02-25 13:54:50,240 - scout.core.utils.parallel - DEBUG - Initialized ParallelExecutor with 15 workers using threads
+2025-02-25 13:54:50,356 - scout.ui.utils.language_manager - INFO - Using translations directory: D:\OneDrive\AI\Projekte\Bot_worldscan\scout\translations
+2025-02-25 13:54:50,357 - scout.ui.utils.language_manager - DEBUG - Loaded language setting: en
+2025-02-25 13:54:50,367 - scout.ui.utils.language_manager - DEBUG - Using specified locale: en_US
+2025-02-25 13:54:50,368 - scout.ui.utils.language_manager - DEBUG - Loaded Qt translations for en_US
+2025-02-25 13:54:50,368 - scout.ui.utils.language_manager - INFO - Applied language: en_US
+2025-02-25 13:54:50,368 - scout.ui.utils.language_manager - INFO - LanguageManager initialized with language: en
+2025-02-25 13:54:50,393 - scout.core.window.window_service - DEBUG - Searching for window with title containing: 'Total Battle'
+2025-02-25 13:54:50,394 - scout.core.window.window_service - INFO - Found window: 'Total Battle' (hwnd: 197180)
+2025-02-25 13:54:50,394 - scout.core.window.window_service - DEBUG - Window metrics updated - DPI scale: 1.5, Client offset: (0, 0)
+2025-02-25 13:54:50,394 - scout.core.window.window_service - INFO - Window service initialized for window: 'Total Battle'
+2025-02-25 13:54:50,394 - scout.core.automation.automation_service - INFO - Automation service initialized
+2025-02-25 13:54:50,394 - scout.core.game.game_service - INFO - Game service initialized
+2025-02-25 13:54:50,428 - scout.core.detection.strategies.template_strategy - DEBUG - Found 2 template files
+2025-02-25 13:54:50,441 - scout.core.detection.strategies.template_strategy - DEBUG - Loaded template 'Crypt': (32, 32, 3)
+2025-02-25 13:54:50,441 - scout.core.detection.strategies.template_strategy - DEBUG - Loaded template 'crypt_smallres_zoomedin': (32, 33, 3)
+2025-02-25 13:54:50,441 - scout.core.detection.strategies.template_strategy - DEBUG - Template matching strategy initialized with 2 templates
+2025-02-25 13:54:50,441 - scout.core.detection.detection_service - INFO - Registered detection strategy: template
+2025-02-25 13:54:50,781 - scout.core.detection.strategies.ocr_strategy - DEBUG - Tesseract version: 5.5.0.20241111
+2025-02-25 13:54:50,782 - scout.core.detection.strategies.ocr_strategy - DEBUG - OCR strategy initialized
+2025-02-25 13:54:50,782 - scout.core.detection.detection_service - INFO - Registered detection strategy: ocr
+2025-02-25 13:54:50,782 - debug - ERROR - Unexpected error: YOLOStrategy.__init__() missing 1 required positional argument: 'model_path'
+2025-02-25 13:54:50,783 - debug - ERROR - Traceback (most recent call last):
+  File "D:\OneDrive\AI\Projekte\Bot_worldscan\debug_app.py", line 32, in main
+    run_application()
+  File "D:\OneDrive\AI\Projekte\Bot_worldscan\scout\ui\main_window.py", line 1137, in run_application
+    main_window = MainWindow()
+  File "D:\OneDrive\AI\Projekte\Bot_worldscan\scout\ui\main_window.py", line 216, in __init__
+    self._initialize_services()
+  File "D:\OneDrive\AI\Projekte\Bot_worldscan\scout\ui\main_window.py", line 255, in _initialize_services
+    detection_service.register_strategy("yolo", YOLOStrategy())
+TypeError: YOLOStrategy.__init__() missing 1 required positional argument: 'model_path'
+
+2025-02-25 13:55:42,853 - debug - INFO - Starting Scout application in debug mode
+2025-02-25 13:55:42,956 - scout.core.utils.parallel - DEBUG - Initialized ParallelExecutor with 15 workers using threads
+2025-02-25 13:55:43,070 - scout.ui.utils.language_manager - INFO - Using translations directory: D:\OneDrive\AI\Projekte\Bot_worldscan\scout\translations
+2025-02-25 13:55:43,070 - scout.ui.utils.language_manager - DEBUG - Loaded language setting: en
+2025-02-25 13:55:43,084 - scout.ui.utils.language_manager - DEBUG - Using specified locale: en_US
+2025-02-25 13:55:43,085 - scout.ui.utils.language_manager - DEBUG - Loaded Qt translations for en_US
+2025-02-25 13:55:43,085 - scout.ui.utils.language_manager - INFO - Applied language: en_US
+2025-02-25 13:55:43,085 - scout.ui.utils.language_manager - INFO - LanguageManager initialized with language: en
+2025-02-25 13:55:43,120 - scout.core.window.window_service - DEBUG - Searching for window with title containing: 'Total Battle'
+2025-02-25 13:55:43,121 - scout.core.window.window_service - INFO - Found window: 'Total Battle' (hwnd: 197180)
+2025-02-25 13:55:43,122 - scout.core.window.window_service - DEBUG - Window metrics updated - DPI scale: 1.5, Client offset: (0, 0)
+2025-02-25 13:55:43,122 - scout.core.window.window_service - INFO - Window service initialized for window: 'Total Battle'
+2025-02-25 13:55:43,122 - scout.core.automation.automation_service - INFO - Automation service initialized
+2025-02-25 13:55:43,122 - scout.core.game.game_service - INFO - Game service initialized
+2025-02-25 13:55:43,140 - scout.core.detection.strategies.template_strategy - DEBUG - Found 2 template files
+2025-02-25 13:55:43,141 - scout.core.detection.strategies.template_strategy - DEBUG - Loaded template 'Crypt': (32, 32, 3)
+2025-02-25 13:55:43,142 - scout.core.detection.strategies.template_strategy - DEBUG - Loaded template 'crypt_smallres_zoomedin': (32, 33, 3)
+2025-02-25 13:55:43,142 - scout.core.detection.strategies.template_strategy - DEBUG - Template matching strategy initialized with 2 templates
+2025-02-25 13:55:43,142 - scout.core.detection.detection_service - INFO - Registered detection strategy: template
+2025-02-25 13:55:43,169 - scout.core.detection.strategies.ocr_strategy - DEBUG - Tesseract version: 5.5.0.20241111
+2025-02-25 13:55:43,169 - scout.core.detection.strategies.ocr_strategy - DEBUG - OCR strategy initialized
+2025-02-25 13:55:43,169 - scout.core.detection.detection_service - INFO - Registered detection strategy: ocr
+2025-02-25 13:55:43,170 - scout.ui.main_window - WARNING - YOLO model not found at D:\OneDrive\AI\Projekte\Bot_worldscan\resources\models\yolov5n.pt, YOLO detection will not be available
+2025-02-25 13:55:43,170 - scout.ui.service_locator_ui - DEBUG - Registered service: WindowServiceInterface
+2025-02-25 13:55:43,170 - scout.ui.service_locator_ui - DEBUG - Registered service: DetectionServiceInterface
+2025-02-25 13:55:43,170 - scout.ui.service_locator_ui - DEBUG - Registered service: AutomationServiceInterface
+2025-02-25 13:55:43,171 - scout.ui.service_locator_ui - DEBUG - Registered service: GameServiceInterface
+2025-02-25 13:55:43,171 - scout.ui.main_window - INFO - Services initialized and registered
+2025-02-25 13:55:43,199 - scout.ui.widgets.control_panel_widget - DEBUG - Set control panel context to: default
+2025-02-25 13:55:43,202 - scout.ui.widgets.template_list_widget - INFO - Template list widget initialized with directory: scout\resources\templates
+2025-02-25 13:55:43,205 - scout.ui.widgets.detection_result_widget - INFO - Detection result widget initialized
+2025-02-25 13:55:43,206 - scout.ui.widgets.detection_history_widget - DEBUG - DetectionHistoryWidget initialized
+2025-02-25 13:55:43,207 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: template, 0 items, 0ms
+2025-02-25 13:55:43,207 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: template, 0 items, 0ms
+2025-02-25 13:55:43,207 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: yolo, 0 items, 0ms
+2025-02-25 13:55:43,208 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: template, 0 items, 0ms
+2025-02-25 13:55:43,208 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: ocr, 0 items, 0ms
+2025-02-25 13:55:43,209 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: template, 0 items, 0ms
+2025-02-25 13:55:43,209 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: template, 0 items, 0ms
+2025-02-25 13:55:43,210 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: yolo, 0 items, 0ms
+2025-02-25 13:55:43,210 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: ocr, 0 items, 0ms
+2025-02-25 13:55:43,212 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: template, 0 items, 0ms
+2025-02-25 13:55:43,212 - scout.ui.widgets.detection_history_widget - DEBUG - Loaded sample detection history data
+2025-02-25 13:55:43,212 - scout.ui.widgets.detection_heatmap_widget - DEBUG - DetectionHeatmapWidget initialized
+2025-02-25 13:55:43,214 - scout.ui.widgets.template_list_widget - INFO - Loaded 2 templates from scout\resources\templates
+2025-02-25 13:55:43,215 - scout.ui.views.detection_tab - INFO - Loaded 2 templates from scout\resources\templates
+2025-02-25 13:55:43,215 - scout.ui.views.detection_tab - INFO - Detection tab initialized
+2025-02-25 13:55:43,219 - scout.ui.views.automation_tab - DEBUG - Connected automation tab signals
+2025-02-25 13:55:43,219 - scout.ui.views.automation_tab - INFO - Automation tab initialized
+2025-02-25 13:55:43,222 - scout.ui.views.game_tab - INFO - Game state tab initialized
+2025-02-25 13:55:43,223 - scout.ui.models.settings_model - INFO - Loaded settings from C:\Users\schrd\.scout\settings.json
+2025-02-25 13:55:43,223 - scout.ui.models.settings_model - INFO - Settings model initialized
+2025-02-25 13:55:43,223 - scout.ui.views.settings_tab - INFO - Settings tab initialized
+2025-02-25 13:55:43,224 - scout.ui.widgets.control_panel_widget - DEBUG - Set control panel context to: detection
+2025-02-25 13:55:43,224 - scout.ui.main_window - DEBUG - Creating menu bar
+2025-02-25 13:55:43,225 - scout.ui.main_window - DEBUG - Menu bar created
+2025-02-25 13:55:43,226 - scout.ui.main_window - INFO - Overlay view initialized
+2025-02-25 13:55:43,226 - scout.ui.main_window - INFO - Main window initialized
+2025-02-25 13:55:43,276 - scout.core.updater.settings - DEBUG - Loaded update settings: {'check_updates_on_startup': True, 'auto_download_updates': False, 'notify_on_update': True, 'last_check_time': '2025-02-25T13:53:54.419581', 'check_frequency_days': 1, 'update_channel': 'stable'}
+2025-02-25 13:55:43,276 - scout.ui.main_window - INFO - Checking for updates in background
+2025-02-25 13:55:44,479 - scout.core.updater.update_checker - ERROR - Unexpected error checking for updates: Expecting value: line 1 column 1 (char 0)
+2025-02-25 13:55:44,581 - scout.core.updater.settings - DEBUG - Update settings saved successfully
+2025-02-25 13:55:50,241 - scout.ui.widgets.template_list_widget - DEBUG - Selected templates: {'Crypt'}
+2025-02-25 13:55:57,578 - scout.ui.views.detection_tab - INFO - Running detection with strategy: template, params: {'confidence_threshold': 0.7, 'max_results': 10}
+2025-02-25 13:55:57,578 - scout.core.detection.detection_service - WARNING - No window title in context
+2025-02-25 13:55:57,579 - scout.ui.widgets.detection_result_widget - INFO - No detection results to display
+2025-02-25 13:55:57,590 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: Unknown, 0 items, 0ms
+2025-02-25 13:55:57,591 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: template, 0 items, 0ms
+2025-02-25 14:50:11,860 - debug - INFO - Starting Scout application in debug mode
+2025-02-25 14:50:11,964 - scout.core.utils.parallel - DEBUG - Initialized ParallelExecutor with 15 workers using threads
+2025-02-25 14:50:12,079 - scout.ui.utils.language_manager - INFO - Using translations directory: D:\OneDrive\AI\Projekte\Bot_worldscan\scout\translations
+2025-02-25 14:50:12,080 - scout.ui.utils.language_manager - DEBUG - Loaded language setting: en
+2025-02-25 14:50:12,088 - scout.ui.utils.language_manager - DEBUG - Using specified locale: en_US
+2025-02-25 14:50:12,089 - scout.ui.utils.language_manager - DEBUG - Loaded Qt translations for en_US
+2025-02-25 14:50:12,089 - scout.ui.utils.language_manager - INFO - Applied language: en_US
+2025-02-25 14:50:12,089 - scout.ui.utils.language_manager - INFO - LanguageManager initialized with language: en
+2025-02-25 14:50:12,112 - scout.core.window.window_service - DEBUG - Searching for window with title containing: 'Total Battle'
+2025-02-25 14:50:12,113 - scout.core.window.window_service - INFO - Found window: 'Total Battle' (hwnd: 197180)
+2025-02-25 14:50:12,113 - scout.core.window.window_service - DEBUG - Window metrics updated - DPI scale: 1.5, Client offset: (11, 45)
+2025-02-25 14:50:12,114 - scout.core.window.window_service - DEBUG - Not publishing window change event - no position information available
+2025-02-25 14:50:12,114 - scout.core.window.window_service - INFO - Window service initialized for window: 'Total Battle'
+2025-02-25 14:50:12,114 - scout.core.automation.automation_service - INFO - Automation service initialized
+2025-02-25 14:50:12,114 - scout.core.game.game_service - INFO - Game service initialized
+2025-02-25 14:50:12,128 - scout.core.detection.strategies.template_strategy - INFO - Loading templates from directory: D:\OneDrive\AI\Projekte\Bot_worldscan\scout\resources\templates
+2025-02-25 14:50:12,128 - scout.core.detection.strategies.template_strategy - DEBUG - Directory contains 2 files/dirs: ['Crypt.png', 'crypt_smallres_zoomedin.png']
+2025-02-25 14:50:12,128 - scout.core.detection.strategies.template_strategy - INFO - Found 2 PNG template files
+2025-02-25 14:50:12,128 - scout.core.detection.strategies.template_strategy - DEBUG - Loading template: Crypt.png
+2025-02-25 14:50:12,129 - scout.core.detection.strategies.template_strategy - DEBUG - Template dimensions: (32, 32, 4)
+2025-02-25 14:50:12,129 - scout.core.detection.strategies.template_strategy - DEBUG - Processed template with alpha channel: Crypt.png
+2025-02-25 14:50:12,129 - scout.core.detection.strategies.template_strategy - DEBUG - Successfully loaded template 'Crypt': (32, 32, 3)
+2025-02-25 14:50:12,129 - scout.core.detection.strategies.template_strategy - DEBUG - Loading template: crypt_smallres_zoomedin.png
+2025-02-25 14:50:12,130 - scout.core.detection.strategies.template_strategy - DEBUG - Template dimensions: (32, 33, 4)
+2025-02-25 14:50:12,130 - scout.core.detection.strategies.template_strategy - DEBUG - Processed template with alpha channel: crypt_smallres_zoomedin.png
+2025-02-25 14:50:12,130 - scout.core.detection.strategies.template_strategy - DEBUG - Successfully loaded template 'crypt_smallres_zoomedin': (32, 33, 3)
+2025-02-25 14:50:12,130 - scout.core.detection.strategies.template_strategy - INFO - Successfully loaded 2 of 2 templates
+2025-02-25 14:50:12,130 - scout.core.detection.strategies.template_strategy - INFO - Available templates: ['Crypt', 'crypt_smallres_zoomedin']
+2025-02-25 14:50:12,130 - scout.core.detection.strategies.template_strategy - DEBUG - Template matching strategy initialized with 2 templates
+2025-02-25 14:50:12,131 - scout.core.detection.detection_service - INFO - Registered detection strategy: template
+2025-02-25 14:50:12,152 - scout.core.detection.strategies.ocr_strategy - DEBUG - Tesseract version: 5.5.0.20241111
+2025-02-25 14:50:12,152 - scout.core.detection.strategies.ocr_strategy - DEBUG - OCR strategy initialized
+2025-02-25 14:50:12,153 - scout.core.detection.detection_service - INFO - Registered detection strategy: ocr
+2025-02-25 14:50:12,154 - scout.ui.main_window - WARNING - YOLO model not found at D:\OneDrive\AI\Projekte\Bot_worldscan\resources\models\yolov5n.pt, YOLO detection will not be available
+2025-02-25 14:50:12,154 - scout.ui.service_locator_ui - DEBUG - Registered service: WindowServiceInterface
+2025-02-25 14:50:12,154 - scout.ui.service_locator_ui - DEBUG - Registered service: DetectionServiceInterface
+2025-02-25 14:50:12,154 - scout.ui.service_locator_ui - DEBUG - Registered service: AutomationServiceInterface
+2025-02-25 14:50:12,154 - scout.ui.service_locator_ui - DEBUG - Registered service: GameServiceInterface
+2025-02-25 14:50:12,154 - scout.ui.main_window - INFO - Services initialized and registered
+2025-02-25 14:50:12,178 - scout.ui.widgets.control_panel_widget - DEBUG - Set control panel context to: default
+2025-02-25 14:50:12,181 - scout.ui.widgets.template_list_widget - INFO - Template list widget initialized with directory: scout\resources\templates
+2025-02-25 14:50:12,184 - scout.ui.widgets.detection_result_widget - INFO - Detection result widget initialized
+2025-02-25 14:50:12,185 - scout.ui.widgets.detection_history_widget - DEBUG - DetectionHistoryWidget initialized
+2025-02-25 14:50:12,186 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: template, 0 items, 0ms
+2025-02-25 14:50:12,186 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: template, 0 items, 0ms
+2025-02-25 14:50:12,186 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: ocr, 0 items, 0ms
+2025-02-25 14:50:12,186 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: template, 0 items, 0ms
+2025-02-25 14:50:12,188 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: ocr, 0 items, 0ms
+2025-02-25 14:50:12,188 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: yolo, 0 items, 0ms
+2025-02-25 14:50:12,189 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: ocr, 0 items, 0ms
+2025-02-25 14:50:12,189 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: template, 0 items, 0ms
+2025-02-25 14:50:12,190 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: yolo, 0 items, 0ms
+2025-02-25 14:50:12,190 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: yolo, 0 items, 0ms
+2025-02-25 14:50:12,190 - scout.ui.widgets.detection_history_widget - DEBUG - Loaded sample detection history data
+2025-02-25 14:50:12,192 - scout.ui.widgets.detection_heatmap_widget - DEBUG - DetectionHeatmapWidget initialized
+2025-02-25 14:50:12,193 - scout.ui.widgets.template_list_widget - INFO - Loaded 2 templates from scout\resources\templates
+2025-02-25 14:50:12,193 - scout.ui.views.detection_tab - INFO - Loaded 2 templates from scout\resources\templates
+2025-02-25 14:50:12,193 - scout.ui.views.detection_tab - INFO - Detection tab initialized
+2025-02-25 14:50:12,197 - scout.ui.views.automation_tab - DEBUG - Connected automation tab signals
+2025-02-25 14:50:12,198 - scout.ui.views.automation_tab - INFO - Automation tab initialized
+2025-02-25 14:50:12,199 - scout.ui.views.game_tab - INFO - Game state tab initialized
+2025-02-25 14:50:12,200 - scout.ui.models.settings_model - INFO - Loaded settings from C:\Users\schrd\.scout\settings.json
+2025-02-25 14:50:12,200 - scout.ui.models.settings_model - INFO - Settings model initialized
+2025-02-25 14:50:12,202 - scout.ui.views.settings_tab - DEBUG - Settings tab signals connected
+2025-02-25 14:50:12,202 - scout.ui.views.settings_tab - ERROR - Error loading settings to UI: 'SettingsModel' object has no attribute 'get_setting'
+2025-02-25 14:50:12,202 - scout.ui.views.settings_tab - INFO - Settings tab initialized
+2025-02-25 14:50:12,202 - scout.ui.widgets.control_panel_widget - DEBUG - Set control panel context to: detection
+2025-02-25 14:50:12,203 - scout.ui.main_window - DEBUG - Creating menu bar
+2025-02-25 14:50:12,204 - scout.ui.main_window - DEBUG - Menu bar created
+2025-02-25 14:50:12,205 - scout.ui.main_window - INFO - Creating overlay window...
+2025-02-25 14:50:12,205 - scout.core.window.window_service - DEBUG - Publishing window moved event: (3829, -11, 3862, 2110)
+2025-02-25 14:50:12,205 - scout.core.window.window_service - DEBUG - Publishing event bus event: window_change with position (3829, -11, 3862, 2110)
+2025-02-25 14:50:12,206 - scout.core.window.window_service - DEBUG - Publishing window state changed event: maximized
+2025-02-25 14:50:12,206 - scout.ui.main_window - DEBUG - Window state changed to: maximized
+2025-02-25 14:50:12,206 - scout.ui.main_window - DEBUG - Overlay position update timer started with interval: 100ms
+2025-02-25 14:50:12,206 - scout.ui.main_window - INFO - Overlay view initialized with flags: FramelessWindowHint | WindowStaysOnTopHint | Tool
+2025-02-25 14:50:12,206 - scout.ui.main_window - INFO - Overlay created successfully
+2025-02-25 14:50:12,206 - scout.ui.main_window - INFO - Main window initialized
+2025-02-25 14:50:12,258 - scout.core.updater.settings - DEBUG - Loaded update settings: {'check_updates_on_startup': True, 'auto_download_updates': False, 'notify_on_update': True, 'last_check_time': '2025-02-25T14:03:21.278447', 'check_frequency_days': 1, 'update_channel': 'stable'}
+2025-02-25 14:50:12,258 - scout.ui.main_window - INFO - Checking for updates in background
+2025-02-25 14:50:13,626 - scout.core.updater.update_checker - ERROR - Unexpected error checking for updates: Expecting value: line 1 column 1 (char 0)
+2025-02-25 14:50:13,628 - scout.core.updater.settings - DEBUG - Update settings saved successfully
+2025-02-25 14:50:16,663 - scout.ui.widgets.template_list_widget - DEBUG - Selected templates: {'Crypt'}
+2025-02-25 14:50:20,225 - scout.ui.widgets.control_panel_widget - DEBUG - Action triggered: run_detection_continuous, params: {'enabled': True}
+2025-02-25 14:50:20,225 - scout.ui.main_window - DEBUG - Control panel action: run_detection_continuous, params: None
+2025-02-25 14:50:21,867 - scout.ui.views.detection_tab - INFO - Running detection with strategy: template, params: {'confidence_threshold': 0.7, 'max_results': 10}
+2025-02-25 14:50:21,868 - scout.core.detection.detection_service - DEBUG - Set detection context: {'window_title': 'Total Battle'}
+2025-02-25 14:50:21,868 - scout.core.detection.detection_service - INFO - Starting template detection with templates: ['Crypt']
+2025-02-25 14:50:21,868 - scout.core.detection.detection_service - DEBUG - Detection parameters: confidence=0.7, max_results=10, region=None
+2025-02-25 14:50:21,868 - scout.core.detection.detection_service - DEBUG - Using window title from context: Total Battle
+2025-02-25 14:50:21,868 - scout.core.detection.detection_service - DEBUG - Using valid templates: ['Crypt']
+2025-02-25 14:50:21,868 - scout.core.detection.detection_service - DEBUG - Calling detect_all_templates
+2025-02-25 14:50:21,932 - scout.core.utils.performance - DEBUG - Screenshot capture completed in 0.0641 seconds
+2025-02-25 14:50:21,969 - scout.core.utils.caching - DEBUG - Cache hit (persistent): 010010011000110100001100010110000000111110000111000100101001010100001110
+2025-02-25 14:50:21,969 - scout.core.utils.caching - DEBUG - Cache hit for template detection with params: {'template_names': ['Crypt'], 'confidence_threshold': 0.7}
+2025-02-25 14:50:21,969 - scout.core.detection.detection_service - DEBUG - Using cached multi-template detection result
+2025-02-25 14:50:21,970 - scout.core.detection.detection_service - DEBUG - Got 1 results from detect_all_templates
+2025-02-25 14:50:21,970 - scout.core.detection.detection_service - INFO - Template detection complete: found 1 matches
+2025-02-25 14:50:21,970 - scout.core.detection.detection_service - DEBUG - Result 1: template=Crypt, confidence=0.95, position=(1717, 1037)
+2025-02-25 14:50:22,065 - scout.ui.widgets.detection_result_widget - INFO - Displayed 1 detection results
+2025-02-25 14:50:22,066 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: Unknown, 1 items, 0ms
+2025-02-25 14:50:22,066 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: template, 1 items, 0ms
+2025-02-25 14:50:29,397 - scout.ui.widgets.control_panel_widget - DEBUG - Action triggered: toggle_overlay, params: None
+2025-02-25 14:50:29,398 - scout.ui.main_window - DEBUG - Control panel action: toggle_overlay, params: None
+2025-02-25 14:50:29,398 - scout.ui.main_window - INFO - Toggling overlay visibility to: None
+2025-02-25 14:50:29,398 - scout.ui.main_window - DEBUG - Saving overlay visibility setting: None
+2025-02-25 14:50:29,398 - scout.ui.main_window - WARNING - Error saving overlay visibility setting: 'SettingsModel' object has no attribute 'set_setting'
+2025-02-25 14:50:29,398 - scout.ui.main_window - DEBUG - Calling show_overlay(None) on overlay instance
+2025-02-25 14:50:29,398 - scout.ui.main_window - INFO - Setting overlay visibility to: None
+2025-02-25 14:50:29,398 - scout.ui.main_window - DEBUG - Hiding overlay
+2025-02-25 14:50:29,398 - scout.ui.main_window - INFO - Overlay visibility toggled to: None
+2025-02-25 14:58:35,570 - debug - INFO - Starting Scout application in debug mode
+2025-02-25 14:58:35,669 - scout.core.utils.parallel - DEBUG - Initialized ParallelExecutor with 15 workers using threads
+2025-02-25 14:58:35,781 - scout.ui.utils.language_manager - INFO - Using translations directory: D:\OneDrive\AI\Projekte\Bot_worldscan\scout\translations
+2025-02-25 14:58:35,781 - scout.ui.utils.language_manager - DEBUG - Loaded language setting: en
+2025-02-25 14:58:35,789 - scout.ui.utils.language_manager - DEBUG - Using specified locale: en_US
+2025-02-25 14:58:35,789 - scout.ui.utils.language_manager - DEBUG - Loaded Qt translations for en_US
+2025-02-25 14:58:35,790 - scout.ui.utils.language_manager - INFO - Applied language: en_US
+2025-02-25 14:58:35,790 - scout.ui.utils.language_manager - INFO - LanguageManager initialized with language: en
+2025-02-25 14:58:35,813 - scout.core.window.window_service - INFO - Searching for window with title containing: 'Total Battle'
+2025-02-25 14:58:35,814 - scout.core.window.window_service - DEBUG - All visible windows (14):
+2025-02-25 14:58:35,814 - scout.core.window.window_service - DEBUG -   1. HWND: 2558858, Title: 'Scout', Size: (1822, 1772)
+2025-02-25 14:58:35,814 - scout.core.window.window_service - DEBUG -   2. HWND: 526406, Title: 'main.py - Bot_worldscan - Cursor [Administrator]', Size: (3862, 2110)
+2025-02-25 14:58:35,814 - scout.core.window.window_service - DEBUG -   3. HWND: 197180, Title: 'Total Battle', Size: (3862, 2110)
+2025-02-25 14:58:35,814 - scout.core.window.window_service - DEBUG -   4. HWND: 4525198, Title: 'Einstellungen', Size: (1806, 1402)
+2025-02-25 14:58:35,814 - scout.core.window.window_service - DEBUG -   5. HWND: 1707028, Title: 'Einstellungen', Size: (1828, 1414)
+2025-02-25 14:58:35,815 - scout.core.window.window_service - DEBUG -   6. HWND: 131962, Title: 'LinkesAuge/PyQt – Mozilla Firefox', Size: (3862, 2110)
+2025-02-25 14:58:35,815 - scout.core.window.window_service - DEBUG -   7. HWND: 67500, Title: 'Ollama – Datei-Explorer', Size: (237, 39)
+2025-02-25 14:58:35,815 - scout.core.window.window_service - DEBUG -   8. HWND: 66826, Title: 'Freunde - Discord', Size: (237, 39)
+2025-02-25 14:58:35,815 - scout.core.window.window_service - DEBUG -   9. HWND: 131900, Title: '24 Modern Ui: Python, PySide6, Pyqt6 Desktop GUI app - YouTube – Mozilla Firefox', Size: (3862, 2110)
+2025-02-25 14:58:35,815 - scout.core.window.window_service - DEBUG -   10. HWND: 131728, Title: 'Windows-Eingabeerfahrung', Size: (3840, 2160)
+2025-02-25 14:58:35,816 - scout.core.window.window_service - DEBUG -   ... and 4 more windows
+2025-02-25 14:58:35,816 - scout.core.window.window_service - INFO - Found 1 matching windows:
+2025-02-25 14:58:35,816 - scout.core.window.window_service - INFO -   1. HWND: 197180, Title: 'Total Battle', Size: (3862, 2110)
+2025-02-25 14:58:35,816 - scout.core.window.window_service - INFO - Selected window: 'Total Battle' (hwnd: 197180)
+2025-02-25 14:58:35,816 - scout.core.window.window_service - DEBUG - Window metrics updated - DPI scale: 1.5, Client offset: (11, 45)
+2025-02-25 14:58:35,816 - scout.core.window.window_service - DEBUG - Not publishing window change event - no position information available
+2025-02-25 14:58:35,817 - scout.core.window.window_service - INFO - Window service initialized for window: 'Total Battle'
+2025-02-25 14:58:35,817 - scout.core.automation.automation_service - INFO - Automation service initialized
+2025-02-25 14:58:35,817 - scout.core.game.game_service - INFO - Game service initialized
+2025-02-25 14:58:35,831 - scout.core.detection.strategies.template_strategy - INFO - Loading templates from directory: D:\OneDrive\AI\Projekte\Bot_worldscan\scout\resources\templates
+2025-02-25 14:58:35,831 - scout.core.detection.strategies.template_strategy - DEBUG - Directory contains 2 files/dirs: ['Crypt.png', 'crypt_smallres_zoomedin.png']
+2025-02-25 14:58:35,831 - scout.core.detection.strategies.template_strategy - INFO - Found 2 PNG template files
+2025-02-25 14:58:35,832 - scout.core.detection.strategies.template_strategy - DEBUG - Loading template: Crypt.png
+2025-02-25 14:58:35,832 - scout.core.detection.strategies.template_strategy - DEBUG - Template dimensions: (32, 32, 4)
+2025-02-25 14:58:35,832 - scout.core.detection.strategies.template_strategy - DEBUG - Processed template with alpha channel: Crypt.png
+2025-02-25 14:58:35,832 - scout.core.detection.strategies.template_strategy - DEBUG - Successfully loaded template 'Crypt': (32, 32, 3)
+2025-02-25 14:58:35,833 - scout.core.detection.strategies.template_strategy - DEBUG - Loading template: crypt_smallres_zoomedin.png
+2025-02-25 14:58:35,833 - scout.core.detection.strategies.template_strategy - DEBUG - Template dimensions: (32, 33, 4)
+2025-02-25 14:58:35,833 - scout.core.detection.strategies.template_strategy - DEBUG - Processed template with alpha channel: crypt_smallres_zoomedin.png
+2025-02-25 14:58:35,833 - scout.core.detection.strategies.template_strategy - DEBUG - Successfully loaded template 'crypt_smallres_zoomedin': (32, 33, 3)
+2025-02-25 14:58:35,833 - scout.core.detection.strategies.template_strategy - INFO - Successfully loaded 2 of 2 templates
+2025-02-25 14:58:35,834 - scout.core.detection.strategies.template_strategy - INFO - Available templates: ['Crypt', 'crypt_smallres_zoomedin']
+2025-02-25 14:58:35,834 - scout.core.detection.strategies.template_strategy - DEBUG - Template matching strategy initialized with 2 templates
+2025-02-25 14:58:35,834 - scout.core.detection.detection_service - INFO - Registered detection strategy: template
+2025-02-25 14:58:35,856 - scout.core.detection.strategies.ocr_strategy - DEBUG - Tesseract version: 5.5.0.20241111
+2025-02-25 14:58:35,856 - scout.core.detection.strategies.ocr_strategy - DEBUG - OCR strategy initialized
+2025-02-25 14:58:35,856 - scout.core.detection.detection_service - INFO - Registered detection strategy: ocr
+2025-02-25 14:58:35,857 - scout.ui.main_window - WARNING - YOLO model not found at D:\OneDrive\AI\Projekte\Bot_worldscan\resources\models\yolov5n.pt, YOLO detection will not be available
+2025-02-25 14:58:35,857 - scout.ui.service_locator_ui - DEBUG - Registered service: WindowServiceInterface
+2025-02-25 14:58:35,857 - scout.ui.service_locator_ui - DEBUG - Registered service: DetectionServiceInterface
+2025-02-25 14:58:35,857 - scout.ui.service_locator_ui - DEBUG - Registered service: AutomationServiceInterface
+2025-02-25 14:58:35,857 - scout.ui.service_locator_ui - DEBUG - Registered service: GameServiceInterface
+2025-02-25 14:58:35,858 - scout.ui.main_window - INFO - Services initialized and registered
+2025-02-25 14:58:35,882 - scout.ui.widgets.control_panel_widget - DEBUG - Set control panel context to: default
+2025-02-25 14:58:35,884 - scout.ui.widgets.template_list_widget - INFO - Template list widget initialized with directory: scout\resources\templates
+2025-02-25 14:58:35,886 - scout.ui.widgets.detection_result_widget - INFO - Detection result widget initialized
+2025-02-25 14:58:35,888 - scout.ui.widgets.detection_history_widget - DEBUG - DetectionHistoryWidget initialized
+2025-02-25 14:58:35,889 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: ocr, 0 items, 0ms
+2025-02-25 14:58:35,889 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: yolo, 0 items, 0ms
+2025-02-25 14:58:35,890 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: ocr, 0 items, 0ms
+2025-02-25 14:58:35,890 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: yolo, 0 items, 0ms
+2025-02-25 14:58:35,891 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: template, 0 items, 0ms
+2025-02-25 14:58:35,891 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: yolo, 0 items, 0ms
+2025-02-25 14:58:35,891 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: yolo, 0 items, 0ms
+2025-02-25 14:58:35,892 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: ocr, 0 items, 0ms
+2025-02-25 14:58:35,892 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: yolo, 0 items, 0ms
+2025-02-25 14:58:35,893 - scout.ui.widgets.detection_history_widget - DEBUG - Added history entry: yolo, 0 items, 0ms
+2025-02-25 14:58:35,893 - scout.ui.widgets.detection_history_widget - DEBUG - Loaded sample detection history data
+2025-02-25 14:58:35,894 - scout.ui.widgets.detection_heatmap_widget - DEBUG - DetectionHeatmapWidget initialized
+2025-02-25 14:58:35,895 - scout.ui.widgets.template_list_widget - INFO - Loaded 2 templates from scout\resources\templates
+2025-02-25 14:58:35,895 - scout.ui.views.detection_tab - INFO - Loaded 2 templates from scout\resources\templates
+2025-02-25 14:58:35,896 - scout.ui.views.detection_tab - INFO - Detection tab initialized
+2025-02-25 14:58:35,900 - scout.ui.views.automation_tab - DEBUG - Connected automation tab signals
+2025-02-25 14:58:35,900 - scout.ui.views.automation_tab - INFO - Automation tab initialized
+2025-02-25 14:58:35,903 - scout.ui.views.game_tab - INFO - Game state tab initialized
+2025-02-25 14:58:35,904 - scout.ui.models.settings_model - INFO - Loaded settings from C:\Users\schrd\.scout\settings.json
+2025-02-25 14:58:35,904 - scout.ui.models.settings_model - INFO - Settings model initialized
+2025-02-25 14:58:35,906 - scout.ui.views.settings_tab - DEBUG - Settings tab signals connected
+2025-02-25 14:58:35,906 - scout.ui.views.settings_tab - ERROR - Error loading settings to UI: 'SettingsModel' object has no attribute 'get_setting'
+2025-02-25 14:58:35,906 - scout.ui.views.settings_tab - INFO - Settings tab initialized
+2025-02-25 14:58:35,907 - scout.ui.widgets.control_panel_widget - DEBUG - Set control panel context to: detection
+2025-02-25 14:58:35,907 - scout.ui.main_window - DEBUG - Creating menu bar
+2025-02-25 14:58:35,908 - scout.ui.main_window - DEBUG - Menu bar created
+2025-02-25 14:58:35,909 - scout.ui.main_window - INFO - Creating overlay window...
+2025-02-25 14:58:35,910 - scout.core.window.window_service - DEBUG - Using existing window handle: 197180, title: 'Total Battle'
+2025-02-25 14:58:35,910 - scout.core.window.window_service - DEBUG - Using existing window handle: 197180, title: 'Total Battle'
+2025-02-25 14:58:35,910 - scout.core.window.window_service - DEBUG - Publishing window moved event: (3829, -11, 3862, 2110)
+2025-02-25 14:58:35,910 - scout.core.window.window_service - DEBUG - Publishing event bus event: window_change with position (3829, -11, 3862, 2110)
+2025-02-25 14:58:35,910 - scout.core.window.window_service - DEBUG - Using existing window handle: 197180, title: 'Total Battle'
+2025-02-25 14:58:35,910 - scout.core.window.window_service - DEBUG - Publishing window state changed event: maximized
+2025-02-25 14:58:35,911 - scout.ui.main_window - DEBUG - Window state changed to: maximized
+2025-02-25 14:58:35,911 - scout.ui.main_window - INFO - Target window position: (3829, -11), size: 3862x2110
+2025-02-25 14:58:35,911 - scout.ui.main_window - DEBUG - Creating OverlayView instance with self as parent
+2025-02-25 14:58:35,911 - scout.ui.main_window - DEBUG - Overlay position update timer started with interval: 100ms
+2025-02-25 14:58:35,911 - scout.ui.main_window - INFO - Overlay view initialized with flags: FramelessWindowHint | WindowStaysOnTopHint | Tool
+2025-02-25 14:58:35,911 - scout.ui.main_window - DEBUG - Setting up overlay update timer
+2025-02-25 14:58:35,912 - scout.ui.main_window - INFO - Overlay created successfully

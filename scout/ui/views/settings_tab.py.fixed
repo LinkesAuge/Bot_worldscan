@@ -1,0 +1,91 @@
+"""
+Settings Tab Module
+
+This module provides the settings tab for the Scout application.
+"""
+
+
+import logging
+import json
+from typing import Dict, List, Optional, Any, Tuple
+from pathlib import Path
+import os
+
+from PyQt6.QtWidgets import (
+from PyQt6.QtGui import QIcon, QAction, QFont, QColor, QPixmap
+from PyQt6.QtCore import Qt, pyqtSignal, QSize, QSettings, QTimer
+from PyQt6.QtWidgets import QApplication
+
+from scout.core.services.service_locator import ServiceLocator
+from scout.core.detection.detection_service_interface import DetectionServiceInterface
+from scout.core.window.window_service_interface import WindowServiceInterface
+from scout.core.automation.automation_service_interface import AutomationServiceInterface
+from scout.ui.models.settings_model import SettingsModel
+from scout.ui.utils.language_manager import get_language_manager, Language, tr
+from scout.ui.utils.layout_helper import set_min_width_for_text, adjust_button_sizes
+        from scout.ui.utils.layout_helper import set_min_width_for_text
+        from scout.ui.utils.layout_helper import set_min_width_for_text
+        from scout.ui.utils.layout_helper import set_min_width_for_text, adjust_button_sizes
+                
+                import platform
+                import sys
+                import datetime
+                    import psutil
+        from scout.ui.utils.layout_helper import set_min_width_for_text, adjust_button_sizes
+        from scout.ui.utils.layout_helper import set_min_width_for_text, adjust_button_sizes
+
+# Set up logging
+logger = logging.getLogger(__name__)
+
+
+class SettingsTab(QWidget):
+    """Settings tab for configuring application settings."""
+
+    def __init__(self, service_locator):
+        """Initialize the settings tab."""
+        super().__init__()
+        
+        # Internal state
+        self._modified = False
+        self._updating_ui = False
+        
+        # Create UI components
+        self._create_ui()
+        
+        # Add status label
+        self.status_label = QLabel("")
+        self.status_label.setStyleSheet("color: #FF6600;")
+        
+        logger.info("Settings tab initialized")
+
+    def _create_ui(self) -> None:
+        """Create the user interface."""
+        # Placeholder implementation
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("Settings"))
+
+    def _mark_settings_changed(self) -> None:
+        """Mark settings as modified."""
+        if self._updating_ui:
+            return
+        
+        self._modified = True
+        
+        # Update status label
+        if hasattr(self, "status_label") and self.status_label is not None:
+            self.status_label.setText("Settings have been modified (not saved)")
+
+    def _auto_save_settings(self) -> None:
+        """Auto-save settings if they have been modified."""
+        try:
+            # Check modified flag
+            if self._modified:
+                logger.debug("Auto-saving modified settings")
+                # No actual saving in this minimal version
+                self._modified = False
+                
+                # Clear status label
+                if hasattr(self, "status_label") and self.status_label is not None:
+                    self.status_label.setText("")
+        except Exception as e:
+            logger.error(f"Error in auto-save settings: {str(e)}")

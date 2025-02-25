@@ -1,0 +1,142 @@
+---
+description: Bug fixing errors debugging - you store your information and context in here
+globs: 
+---
+# Write "Bughunt" at the beginning of your reply if you considered this rule.
+If there are bugs, errors, user complaints or other reported issues you store the context information and everything else you need in here.
+Keep a detailed history, track possible solutions and issues and create a detailed analysis and checklist you use for your own reference.
+If you encounter an issue/bug/error always consider 5-6 possible causes, narrow it down to the two most likely and then try to come up with 2-3 solutions and start with your best idea for a solution first.
+
+Keep this file always updated with current information and check it first if you need to deal with bugs, errors or other app related problems.
+
+# Scout Application Bug Fixing Log
+
+This document tracks bugs, fixes, and ongoing issues in the Scout application.
+
+## Fixed Issues
+
+### 2025-02-25
+1. **Missing List Import in WindowService** ✅
+   - Issue: `List` was not imported from `typing` in `window_service.py`
+   - Fix: Added `List` to imports from typing module
+   - Status: Fixed
+
+2. **Missing run_template_detection Method** ✅
+   - Issue: `DetectionService` did not have a method called `run_template_detection` which was called in the DetectionTab
+   - Fix: Added the method as a wrapper around `detect_all_templates`
+   - Analysis: Method was implemented as a wrapper that calls `detect_all_templates` and then sorts and limits the results based on confidence score
+   - Status: Fixed
+
+3. **Invalid Event Type in _publish_window_changed_event** ✅
+   - Issue: Using `EventType.WINDOW_CHANGED` which doesn't exist in EventType enum
+   - Fix: Changed to `EventType.WINDOW_POSITION_CHANGED`
+   - Status: Fixed
+
+4. **Overlay Position Update Error** ✅
+   - Issue: `_update_position` method in OverlayView didn't handle None return from `get_window_position`
+   - Fix: Added check for None before trying to use the position
+   - Analysis: The issue was a mismatch between method calls - OverlayView was calling `get_window_rect()` but the WindowServiceInterface only defined `get_window_position()`
+   - Status: Fixed
+
+5. **Missing Window Title in Detection Context** ✅
+   - Issue: Detection service didn't have window title in context when running detection
+   - Fix: Set context with window title before running detection
+   - Status: Fixed
+
+6. **Event Bus Type Error** ✅
+   - Issue: EventBus expected event_type to be string, but we were passing enum
+   - Fix: Fixed _publish_window_changed_event to use correct type
+   - Status: Fixed
+
+## Current Issues
+
+1. **Template Detection** ⚠️
+   - Issue: Template detection might not work correctly
+   - Possible causes:
+     1. Detection strategies not properly registered
+     2. Template files might be missing or incorrectly formatted
+     3. Confidence threshold might be set too high
+     4. Image capture might not be working correctly
+     5. Template matching algorithm parameters might need tuning
+   - Most likely causes:
+     1. Detection service configuration issues
+     2. Window capture issues affecting image quality
+     3. Missing or inaccessible template directory
+   - Debugging steps taken:
+     1. Enhanced logging in `run_template_detection` method to track the detection flow
+     2. Improved error handling and validation of template names
+     3. Added verification of template availability before attempting detection
+     4. Enhanced logging in template strategy loading to debug template availability
+     5. Added verification and auto-creation of template directory at startup
+     6. Improved debugging in template matching algorithm
+   - Potential solutions:
+     1. Ensure template directory exists and is populated with valid PNG templates
+     2. Validate the window capture process is working correctly
+     3. Test with lower confidence thresholds
+   - Status: Debugging improvements implemented, awaiting testing results
+
+2. **Settings Tab Issues** ⚠️ 
+   - Issue: Possible syntax errors in settings_tab.py
+   - Possible causes:
+     1. Incomplete refactoring
+     2. Missing dependency imports
+     3. SignalNotFoundError for UI connections
+     4. Incorrect parameter types
+     5. UI component initialization issues
+   - Most likely causes:
+     1. Missing signal connections
+     2. Incorrect initialization order
+   - Potential solutions:
+     1. Review settings tab initialization order
+     2. Verify all required signals are connected
+     3. Check for missing dependencies
+   - Status: Under investigation
+
+## Next Steps
+
+1. Verify that the application runs without errors
+2. Implement more detailed logging for template detection flow
+3. Test overlay functionality in different window states
+4. Review Settings Tab code for initialization issues
+5. Create test cases for each problematic component
+6. Fix any remaining issues
+
+## Overlay Visibility Issues
+
+**Issue**: The overlay window is not properly appearing over the Total Battle game window, even with extensive debugging efforts.
+
+**Status**: Planned complete replacement with Qt's native window capture system.
+
+**Root Cause Analysis**:
+After extensive debugging and enhancement attempts, we've determined that the underlying issue is with the Windows API approach to creating overlays for certain applications, especially games using DirectX. The current approach using transparent Qt windows has fundamental limitations when trying to overlay on top of some application types due to:
+
+1. Windows security measures preventing transparent overlays on privileged applications
+2. DirectX rendering bypassing parts of the Windows composition engine
+3. Z-order enforcement limitations in Windows for certain window types
+4. Window manager interference with transparent windows
+
+**New Approach**:
+Rather than continuing to try fixing the overlay with the current approach, we've decided to implement a completely different solution using Qt's native window/screen capture capabilities:
+
+1. Use `QWindowCapture` and `QScreenCapture` from PyQt6.QtMultimedia
+2. Implement a `CaptureSession` to manage capturing from selected windows/screens
+3. Display captures in our application rather than trying to overlay on target windows
+4. Integrate window/screen selection directly into our detection tab UI
+
+**Benefits of New Approach**:
+1. More reliable detection - captures will work with any window type
+2. Better compatibility with games and DirectX applications
+3. Eliminates Z-order and visibility issues entirely
+4. Provides a more modern, maintainable architecture
+5. Better user experience with window selection integrated into the UI
+
+**Implementation Plan**:
+See the Qt Window Capture Implementation Plan in memory.mdc for detailed steps and timeline.
+
+**Migration Strategy**:
+1. Create the new implementation parallel to the existing one
+2. Test with various window types, especially Total Battle
+3. Once verified working, update main application to use the new implementation
+4. Maintain compatibility with existing detection and automation systems
+
+This approach represents a more fundamental, architectural solution to the overlay visibility issues rather than trying to work around Windows limitations.

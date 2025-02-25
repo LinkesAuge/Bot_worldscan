@@ -9,6 +9,7 @@ import sys
 import os
 import logging
 import threading
+import time
 from typing import Dict, List, Optional, Any
 from pathlib import Path
 
@@ -18,8 +19,11 @@ from PyQt6.QtWidgets import (
     QMenuBar, QMenu, QMessageBox, QDialog, QFileDialog, 
     QDockWidget, QSplitter
 )
-from PyQt6.QtGui import QIcon, QFont, QPixmap, QKeySequence, QCloseEvent, QAction
-from PyQt6.QtCore import Qt, QSize, QSettings, QTimer, pyqtSignal, QEvent, QThread
+from PyQt6.QtGui import (
+    QIcon, QFont, QPixmap, QKeySequence, QCloseEvent, QAction, 
+    QPainter, QPen, QBrush, QColor, QFontMetrics
+)
+from PyQt6.QtCore import Qt, QSize, QSettings, QTimer, pyqtSignal, QEvent, QThread, QRect
 
 # Import service interfaces from the centralized interfaces module
 from scout.core.interfaces.service_interfaces import (
@@ -86,6 +90,8 @@ class OverlayView(QWidget):
         self._results = []
         self._target_window_rect = None
         self._visible = False
+        self._update_failures = 0  # Track consecutive failures
+        self._last_update_time = 0  # Track last successful update time
         
         # Configure window
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
@@ -94,25 +100,87 @@ class OverlayView(QWidget):
         # Create update timer
         self._create_update_timer()
         
-        logger.info("Overlay view initialized")
+        logger.info("Overlay view initialized with flags: FramelessWindowHint | WindowStaysOnTopHint | Tool")
     
     def _create_update_timer(self):
         """Create timer for updating overlay position and content."""
         self.update_timer = QTimer(self)
         self.update_timer.timeout.connect(self._update_position)
-        self.update_timer.start(100)  # 10 fps
+        # Use shorter interval for more responsive updates
+        update_interval = 100  # 10 fps
+        self.update_timer.start(update_interval)
+        logger.debug(f"Overlay position update timer started with interval: {update_interval}ms")
     
     def _update_position(self):
         """Update overlay position to match target window."""
-        if self._visible:
-            # Get target window position and size
-            target_rect = self.window_service.get_window_rect()
+        if not self._visible:
+            return
             
-            if target_rect != self._target_window_rect:
-                # Update overlay position and size
-                self.setGeometry(target_rect)
+        try:
+            # Get target window position and size
+            target_rect = self.window_service.get_window_position()
+            current_time = time.time()
+            
+            # Debug log window position
+            if target_rect:
+                x, y, width, height = target_rect
+                logger.debug(f"Target window position: x={x}, y={y}, width={width}, height={height}")
+            else:
+                logger.debug("Target window position: None (window not found)")
+            
+            # Check if target_rect is not None
+            if target_rect is not None:
+                # Reset failure counter on success
+                self._update_failures = 0
+                self._last_update_time = current_time
+                
+                # Always update position even if it seems the same (minor differences might not be detected)
+                old_rect = self._target_window_rect
                 self._target_window_rect = target_rect
-                self.update()
+                
+                # Update overlay position and size
+                self.setGeometry(*target_rect)
+                
+                # Only log if position actually changed significantly
+                if old_rect is None or abs(old_rect[0] - target_rect[0]) > 1 or abs(old_rect[1] - target_rect[1]) > 1:
+                    logger.debug(f"Overlay position updated from {old_rect} to {target_rect}")
+                
+                # Ensure overlay is visible and stays on top
+                if not self.isVisible():
+                    logger.warning("Overlay should be visible but isn't - showing it again")
+                    self.show()
+                
+                # Always force the overlay to the top to ensure it's visible
+                self.raise_()
+                
+                # Force a repaint if we have results to show
+                if self._results:
+                    self.update()
+            else:
+                # Increment failure counter
+                self._update_failures += 1
+                
+                if self._update_failures == 1:
+                    logger.warning("Target window not found, but overlay is visible")
+                
+                # If we've had multiple consecutive failures, hide the overlay
+                if self._update_failures >= 5:  # Hide after 5 consecutive failures (500ms)
+                    logger.warning("Multiple failures finding target window, hiding overlay")
+                    self._visible = False
+                    self.hide()
+                    
+                # If it's been too long since a successful update
+                elapsed_time = current_time - self._last_update_time
+                if elapsed_time > 2.0:  # 2 seconds with no updates
+                    logger.warning(f"No window updates for {elapsed_time:.1f}s, hiding overlay")
+                    self._visible = False
+                    self.hide()
+                    
+        except Exception as e:
+            logger.error(f"Error updating overlay position: {e}", exc_info=True)
+            # If there's an exception, hide the overlay to be safe
+            self._visible = False
+            self.hide()
     
     def set_results(self, results: List[Dict[str, Any]]):
         """
@@ -121,6 +189,7 @@ class OverlayView(QWidget):
         Args:
             results: List of detection result dictionaries
         """
+        logger.debug(f"Setting overlay results: {len(results)} items")
         self._results = results
         self.update()
     
@@ -131,13 +200,44 @@ class OverlayView(QWidget):
         Args:
             show: Whether to show the overlay
         """
+        logger.info(f"Setting overlay visibility to: {show}")
         self._visible = show
         
         if show:
+            # Reset failure counters
+            self._update_failures = 0
+            self._last_update_time = time.time()
+            
+            # Make sure we have the right window flags
+            self.setWindowFlags(Qt.WindowType.FramelessWindowHint | 
+                              Qt.WindowType.WindowStaysOnTopHint | 
+                              Qt.WindowType.Tool)
+            self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+            self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+            
             # Update position before showing
-            self._update_position()
-            self.show()
+            target_rect = self.window_service.get_window_position()
+            if target_rect:
+                logger.info(f"Target window found at position: {target_rect}")
+                self._target_window_rect = target_rect
+                self.setGeometry(*target_rect)
+                
+                # Need to show after setting flags and geometry
+                self.show()
+                
+                # Force the window to stay on top and not take focus
+                self.raise_()
+                self.activateWindow()
+                
+                # Force a repaint
+                self.update()
+                
+                logger.debug("Overlay visibility set to true and shown")
+            else:
+                logger.warning("Cannot show overlay - target window not found")
+                self._visible = False
         else:
+            logger.debug("Hiding overlay")
             self.hide()
     
     def paintEvent(self, event):
@@ -150,11 +250,82 @@ class OverlayView(QWidget):
         if not self._visible or not self._results:
             return
         
-        # Create painter
-        painter = self.window_service.create_overlay_painter(self)
-        
-        # Draw results
-        self.window_service.draw_detection_results(painter, self._results)
+        try:
+            # Create painter
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            
+            # Set up styles
+            bounding_box_pen = QPen(QColor(0, 255, 0))
+            bounding_box_pen.setWidth(2)
+            
+            text_box_brush = QBrush(QColor(0, 0, 0, 180))
+            text_pen = QPen(QColor(255, 255, 255))
+            
+            # Draw each result
+            for result in self._results:
+                # Get bounding box
+                if 'bbox' in result:
+                    x, y, w, h = result['bbox']
+                    
+                    # Draw bounding box
+                    painter.setPen(bounding_box_pen)
+                    painter.drawRect(x, y, w, h)
+                    
+                    # Draw label if available
+                    if 'label' in result:
+                        label = result['label']
+                        
+                        # Get confidence if available
+                        if 'confidence' in result:
+                            confidence = result['confidence']
+                            label = f"{label} ({confidence:.2f})"
+                        
+                        # Draw text background
+                        font = painter.font()
+                        font_metrics = QFontMetrics(font)
+                        text_width = font_metrics.horizontalAdvance(label)
+                        text_height = font_metrics.height()
+                        
+                        text_rect = QRect(x, y - text_height - 4, text_width + 6, text_height + 4)
+                        painter.setBrush(text_box_brush)
+                        painter.setPen(Qt.PenStyle.NoPen)
+                        painter.drawRect(text_rect)
+                        
+                        # Draw text
+                        painter.setPen(text_pen)
+                        painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, label)
+                elif 'x' in result and 'y' in result and 'template_name' in result:
+                    # Handle template match results
+                    x, y = result['x'], result['y']
+                    width = result.get('width', 50)  # Default if not provided
+                    height = result.get('height', 50)  # Default if not provided
+                    
+                    # Draw bounding box
+                    painter.setPen(bounding_box_pen)
+                    painter.drawRect(x, y, width, height)
+                    
+                    # Draw template name and confidence
+                    template_name = result['template_name']
+                    confidence = result.get('confidence', 0.0)
+                    label = f"{template_name} ({confidence:.2f})"
+                    
+                    # Draw text background
+                    font = painter.font()
+                    font_metrics = QFontMetrics(font)
+                    text_width = font_metrics.horizontalAdvance(label)
+                    text_height = font_metrics.height()
+                    
+                    text_rect = QRect(x, y - text_height - 4, text_width + 6, text_height + 4)
+                    painter.setBrush(text_box_brush)
+                    painter.setPen(Qt.PenStyle.NoPen)
+                    painter.drawRect(text_rect)
+                    
+                    # Draw text
+                    painter.setPen(text_pen)
+                    painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, label)
+        except Exception as e:
+            logger.error(f"Error in overlay paintEvent: {e}", exc_info=True)
 
 
 class MainWindow(QMainWindow):
@@ -197,6 +368,61 @@ class MainWindow(QMainWindow):
         detection_service = DetectionService(event_bus=event_bus, window_service=window_service)
         automation_service = AutomationService(event_bus=event_bus)
         game_state_service = GameService(window_service=window_service, detection_service=detection_service, event_bus=event_bus)
+        
+        # Register detection strategies
+        try:
+            from scout.core.detection.strategies.template_strategy import TemplateMatchingStrategy as TemplateStrategy
+            from scout.core.detection.strategies.ocr_strategy import OCRStrategy
+            
+            # Register template strategy
+            template_strategy = TemplateStrategy()
+            detection_service.register_strategy("template", template_strategy)
+            
+            # Verify template directory exists
+            template_dir = template_strategy.templates_dir
+            if not os.path.exists(template_dir):
+                logger.warning(f"Template directory not found: {template_dir}")
+                try:
+                    os.makedirs(template_dir, exist_ok=True)
+                    logger.info(f"Created template directory: {template_dir}")
+                    
+                    # Create a README file in the templates directory to help users
+                    readme_path = os.path.join(template_dir, "README.txt")
+                    with open(readme_path, "w") as f:
+                        f.write("Place PNG template images in this directory for detection.\n")
+                        f.write("Templates should be transparent PNGs with the target object clearly visible.\n")
+                        f.write("The filename (without extension) will be used as the template name.\n")
+                    
+                    logger.info("Created README file in templates directory")
+                except Exception as e:
+                    logger.error(f"Failed to create template directory: {e}")
+                    QMessageBox.warning(
+                        self,
+                        tr("Template Directory Missing"),
+                        tr("Could not create template directory at {0}. Template detection may not work correctly.").format(template_dir)
+                    )
+            
+            # Register OCR strategy
+            detection_service.register_strategy("ocr", OCRStrategy())
+            
+            # Try to register YOLO strategy if possible
+            try:
+                from scout.core.detection.strategies.yolo_strategy import YOLOStrategy
+                
+                # Look for YOLO model in resources/models directory
+                yolo_model_path = os.path.join(os.getcwd(), "resources", "models", "yolov5n.pt")
+                
+                # Check if model file exists
+                if os.path.exists(yolo_model_path):
+                    # Initialize with model path
+                    detection_service.register_strategy("yolo", YOLOStrategy(model_path=yolo_model_path))
+                    logger.info(f"YOLO strategy registered with model: {yolo_model_path}")
+                else:
+                    logger.warning(f"YOLO model not found at {yolo_model_path}, YOLO detection will not be available")
+            except (ImportError, Exception) as e:
+                logger.warning(f"YOLO strategy not registered: {e}")
+        except ImportError as e:
+            logger.error(f"Error registering detection strategies: {e}")
         
         # Register with locator
         ServiceLocator.register(WindowServiceInterface, window_service)
@@ -327,16 +553,28 @@ class MainWindow(QMainWindow):
         success = self.window_service.find_window()
         
         if success:
-            window_info = self.window_service.get_window_info()
-            self._on_window_selected(window_info)
-        else:
+            # Get window position and create info dictionary
+            position = self.window_service.get_window_position()
+            if position:
+                x, y, width, height = position
+                window_info = {
+                    "title": "Total Battle",
+                    "position": (x, y),
+                    "size": (width, height),
+                    "state": self.window_service.get_window_state()
+                }
+                self._on_window_selected(window_info)
+            else:
+                success = False
+        
+        if not success:
             self._on_window_lost()
             
             # Show error message
             QMessageBox.warning(
                 self,
-                "Window Not Found",
-                "Could not find the game window. Please make sure the game is running."
+                tr("Window Not Found"),
+                tr("Could not find the game window. Please make sure the game is running.")
             )
     
     def _on_tab_changed(self, index):
@@ -367,7 +605,7 @@ class MainWindow(QMainWindow):
     def _create_tabs(self):
         """Create the tab widget and individual tabs."""
         # Create detection tab
-        self.detection_tab = DetectionTab(self.detection_service, self.window_service)
+        self.detection_tab = DetectionTab(self.window_service, self.detection_service)
         self.tab_widget.addTab(self.detection_tab, tr("Detection"))
         
         # Create automation tab
@@ -486,6 +724,13 @@ class MainWindow(QMainWindow):
         self.overlay_action.triggered.connect(self._on_toggle_overlay)
         window_menu.addAction(self.overlay_action)
         
+        # Debug Overlay action
+        self.debug_overlay_action = QAction(QIcon.fromTheme("debug-step-into"), tr("Debug &Mode Overlay"), self)
+        self.debug_overlay_action.setCheckable(True)
+        self.debug_overlay_action.setStatusTip(tr("Toggle debug mode for overlay (very visible)"))
+        self.debug_overlay_action.triggered.connect(self._on_toggle_debug_overlay)
+        window_menu.addAction(self.debug_overlay_action)
+        
         # Tools menu
         tools_menu = menu_bar.addMenu(tr("&Tools"))
         
@@ -594,8 +839,76 @@ class MainWindow(QMainWindow):
         self.status_bar.addPermanentWidget(self.detection_status_label)
     
     def _create_overlay(self):
-        """Create the overlay window."""
-        self.overlay = OverlayView(self.window_service)
+        """
+        Create the overlay window that displays detection results on top of the target window.
+        
+        Returns:
+            bool: True if overlay was created successfully, False otherwise
+        """
+        try:
+            logger.info("Creating overlay window...")
+            
+            # First check if we have an existing overlay and clean it up
+            if hasattr(self, 'overlay') and self.overlay is not None:
+                try:
+                    logger.info("Cleaning up existing overlay before creating a new one")
+                    if hasattr(self, 'overlay_timer') and self.overlay_timer is not None:
+                        self.overlay_timer.stop()
+                    self.overlay.hide()
+                    self.overlay.deleteLater()
+                    self.overlay = None
+                except Exception as e:
+                    logger.warning(f"Error cleaning up existing overlay: {e}")
+            
+            # Make sure we have a target window first
+            if not self.window_service.find_window():
+                logger.warning("Cannot create overlay: No target window selected")
+                return False
+                
+            # Get window position to confirm we can track it
+            window_position = self.window_service.get_window_position()
+            if not window_position:
+                logger.warning("Cannot create overlay: Unable to get window position")
+                return False
+                
+            # Log target window info for debugging
+            x, y, width, height = window_position
+            target_info = f"Target window position: ({x}, {y}), size: {width}x{height}"
+            logger.info(target_info)
+            
+            # Create the overlay view with the parent window reference
+            logger.debug("Creating OverlayView instance with self as parent")
+            self.overlay = OverlayView(self)
+            
+            # Set initial position to match the target window
+            self.overlay.setGeometry(x, y, width, height)
+            
+            # Set up the overlay timer - use shorter interval for more responsive updates
+            logger.debug("Setting up overlay update timer")
+            self.overlay_timer = QTimer()
+            self.overlay_timer.timeout.connect(self.overlay._update_position)
+            self.overlay_timer.start(50)  # Update position every 50ms (20 fps) for more responsive tracking
+            
+            # Force initial position update
+            self.overlay._target_window_rect = QRect(x, y, width, height)
+            
+            logger.info("Overlay created successfully")
+            
+            # Force debug mode
+            self.overlay.debug_mode = True
+            
+            # Inform user that debug mode is enabled
+            QMessageBox.information(
+                self,
+                tr("Debug Mode"),
+                tr("The overlay has been created in debug mode. You should see a red tinted overlay with debug information on top of the Total Battle window. If you don't see the overlay, please try the 'Debug Mode Overlay' option in the Window menu.")
+            )
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to create overlay: {str(e)}", exc_info=True)
+            return False
     
     def _connect_signals(self):
         """Connect signals between components."""
@@ -609,8 +922,16 @@ class MainWindow(QMainWindow):
                 self.settings_tab.settings_changed.connect(self._on_settings_changed)
             
             # Connect window service signals
-            self.window_service.window_selected.connect(self._on_window_selected)
-            self.window_service.window_lost.connect(self._on_window_lost)
+            if hasattr(self.window_service, 'window_selected'):
+                self.window_service.window_selected.connect(self._on_window_selected)
+            if hasattr(self.window_service, 'window_lost'):
+                self.window_service.window_lost.connect(self._on_window_lost)
+            
+            # Connect other available window service signals
+            if hasattr(self.window_service, 'window_moved'):
+                self.window_service.window_moved.connect(self._on_window_moved)
+            if hasattr(self.window_service, 'window_state_changed'):
+                self.window_service.window_state_changed.connect(self._on_window_state_changed)
         except Exception as e:
             logger.error(f"Error connecting signals: {str(e)}")
     
@@ -651,16 +972,25 @@ class MainWindow(QMainWindow):
         Args:
             event: Close event
         """
-        # Save settings
-        self._save_settings()
-        
-        # Hide overlay
-        if self.overlay:
-            self.overlay.hide()
-        
-        # Shut down services
-        ServiceLocator.shutdown()
-        
+        try:
+            # Save settings
+            self._save_settings()
+            
+            # Hide overlay if it exists
+            if hasattr(self, 'overlay') and self.overlay is not None:
+                try:
+                    self.overlay.hide()
+                    logger.debug("Overlay hidden during application close")
+                except Exception as e:
+                    logger.warning(f"Error hiding overlay during close: {e}")
+            
+            # Shut down services
+            ServiceLocator.shutdown()
+            logger.info("Services shut down during application close")
+            
+        except Exception as e:
+            logger.error(f"Error during application close: {e}")
+            
         # Accept event
         event.accept()
     
@@ -732,24 +1062,74 @@ class MainWindow(QMainWindow):
         Args:
             window_info: Window information dictionary
         """
-        # Update status bar
-        window_title = window_info.get("title", "Unknown")
-        self.window_status_label.setText(f"Target: {window_title}")
-        
-        # Enable actions that require a target window
-        self.overlay_action.setEnabled(True)
+        try:
+            # Update status bar
+            window_title = window_info.get("title", "Unknown")
+            self.window_status_label.setText(f"Target: {window_title}")
+            
+            logger.info(f"Window selected: {window_title}")
+            
+            # Check if overlay exists and initialize it if needed
+            overlay_existed = hasattr(self, 'overlay') and self.overlay is not None
+            
+            if not overlay_existed:
+                logger.info("Initializing overlay for the first time")
+                self._create_overlay()
+                if hasattr(self, 'overlay') and self.overlay is not None:
+                    logger.debug("Overlay successfully created")
+                else:
+                    logger.error("Failed to create overlay - check the create_overlay method")
+            else:
+                logger.debug("Overlay already exists, ensuring it's properly positioned")
+                # Force a position update if overlay is visible
+                if self.overlay._visible:
+                    self.overlay._update_position()
+            
+            # Enable actions that require a target window
+            if hasattr(self, 'overlay_action'):
+                self.overlay_action.setEnabled(True)
+            
+            # Check user settings for auto-showing overlay
+            show_overlay = False
+            try:
+                if hasattr(self, 'settings_tab') and hasattr(self.settings_tab, 'settings_model'):
+                    settings = self.settings_tab.settings_model.get_all_settings()
+                    appearance_settings = settings.get('appearance', {})
+                    show_overlay = appearance_settings.get('show_overlay', True)  # Default to True if not specified
+                    logger.info(f"Auto-show overlay setting: {show_overlay}")
+                else:
+                    logger.debug("Settings model not available, defaulting to show overlay")
+                    show_overlay = True
+            except Exception as e:
+                logger.warning(f"Error accessing overlay settings: {e}")
+                show_overlay = True  # Default to showing overlay if settings can't be accessed
+            
+            # Auto-show overlay based on settings
+            if show_overlay:
+                logger.info("Auto-showing overlay based on settings")
+                if hasattr(self, 'overlay_action'):
+                    self.overlay_action.setChecked(True)
+                self._on_toggle_overlay(True)
+            else:
+                logger.debug("Not auto-showing overlay based on settings")
+                
+        except Exception as e:
+            logger.error(f"Error handling window selection: {e}", exc_info=True)
     
     def _on_window_lost(self):
         """Handle window loss event."""
+        logger.info("Target window lost")
+        
         # Update status bar
         self.window_status_label.setText("No target window")
         
         # Disable overlay
-        self.overlay_action.setChecked(False)
-        self._on_toggle_overlay(False)
-        
-        # Disable actions that require a target window
-        self.overlay_action.setEnabled(False)
+        if hasattr(self, 'overlay_action') and self.overlay_action is not None:
+            self.overlay_action.setChecked(False)
+            self._on_toggle_overlay(False)
+            self.overlay_action.setEnabled(False)
+        else:
+            logger.warning("overlay_action not initialized in _on_window_lost")
     
     def _on_toggle_overlay(self, checked: bool):
         """
@@ -758,8 +1138,137 @@ class MainWindow(QMainWindow):
         Args:
             checked: Whether the overlay should be shown
         """
-        if self.overlay:
+        logger.info(f"Toggling overlay visibility to: {checked}")
+        
+        try:
+            # Verify window service state first
+            window_active = self.window_service.find_window()
+            if not window_active:
+                logger.warning("Cannot toggle overlay: No target window found")
+                QMessageBox.warning(
+                    self,
+                    tr("No Target Window"),
+                    tr("Cannot show overlay because no target window is active. Please select a target window first.")
+                )
+                
+                # Uncheck the overlay action to reflect state
+                if hasattr(self, 'overlay_action'):
+                    self.overlay_action.setChecked(False)
+                return
+                
+            # Initialize overlay if it doesn't exist
+            if not hasattr(self, 'overlay') or self.overlay is None:
+                logger.warning("Overlay not initialized, creating it now")
+                success = self._create_overlay()
+                
+                if not success or not hasattr(self, 'overlay') or self.overlay is None:
+                    logger.error("Failed to create overlay - window service may not be initialized")
+                    
+                    # Show error message
+                    QMessageBox.critical(
+                        self,
+                        tr("Overlay Creation Failed"),
+                        tr("Failed to create the overlay window. Please try selecting the window again.")
+                    )
+                    
+                    # Uncheck the overlay action to reflect state
+                    if hasattr(self, 'overlay_action'):
+                        self.overlay_action.setChecked(False)
+                    return
+                
+                logger.info("Overlay created successfully for toggle")
+            
+            # Save the setting if we have a settings tab with a settings model
+            try:
+                if hasattr(self, 'settings_tab') and hasattr(self.settings_tab, 'settings_model'):
+                    logger.debug(f"Saving overlay visibility setting: {checked}")
+                    self.settings_tab.settings_model.set_setting('appearance', 'show_overlay', checked)
+                    self.settings_tab.settings_model.save_settings()
+            except Exception as e:
+                logger.warning(f"Error saving overlay visibility setting: {e}")
+            
+            # Get the current window position to verify
+            position = self.window_service.get_window_position()
+            if position:
+                logger.debug(f"Current window position: {position}")
+            else:
+                logger.warning("Could not get window position, overlay may not appear in the correct location")
+            
+            # Show or hide the overlay
+            logger.debug(f"Calling show_overlay({checked}) on overlay instance")
             self.overlay.show_overlay(checked)
+            
+            # Make sure the toolbar button state matches
+            if hasattr(self, 'overlay_action') and self.overlay_action.isChecked() != checked:
+                logger.debug(f"Updating overlay action checked state to {checked}")
+                self.overlay_action.setChecked(checked)
+            
+            # Verify the overlay visibility state
+            if checked:
+                # Give a short delay for the overlay to appear
+                logger.debug("Setting timer to check overlay visibility")
+                QTimer.singleShot(100, self._check_overlay_visibility)
+                
+                # Update debug overlay action to match overlay debug mode
+                if hasattr(self, 'debug_overlay_action') and hasattr(self.overlay, 'debug_mode'):
+                    self.debug_overlay_action.setChecked(self.overlay.debug_mode)
+                    
+            logger.info(f"Overlay visibility toggled to: {checked}")
+            
+            # If turning on the overlay, alert user about debug mode
+            if checked and hasattr(self.overlay, 'debug_mode') and self.overlay.debug_mode:
+                logger.info("Overlay is in debug mode")
+                
+                # Prompt the user to look for the red tinted overlay
+                QTimer.singleShot(500, lambda: QMessageBox.information(
+                    self,
+                    tr("Overlay Debug Mode"),
+                    tr("The overlay is now visible in debug mode. You should see a red-tinted overlay with debug information on top of the Total Battle window. If you don't see it, please check if the Total Battle window is visible and not minimized.")
+                ))
+                
+        except Exception as e:
+            logger.error(f"Error toggling overlay: {e}", exc_info=True)
+            
+            # Show error message
+            QMessageBox.critical(
+                self,
+                tr("Overlay Error"),
+                tr("An error occurred while toggling the overlay: {0}").format(str(e))
+            )
+            
+            # Uncheck the overlay action to reflect state
+            if hasattr(self, 'overlay_action'):
+                self.overlay_action.setChecked(False)
+    
+    def _check_overlay_visibility(self):
+        """Check if the overlay is visible as expected and try to fix if not."""
+        if not hasattr(self, 'overlay') or self.overlay is None:
+            return
+            
+        if self.overlay._visible and not self.overlay.isVisible():
+            logger.warning("Overlay should be visible but isn't - attempting to fix")
+            
+            try:
+                # Try to force it visible with explicit flags
+                self.overlay.setWindowFlags(Qt.WindowType.FramelessWindowHint | 
+                                          Qt.WindowType.WindowStaysOnTopHint | 
+                                          Qt.WindowType.Tool)
+                self.overlay.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+                self.overlay.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+                
+                # Update position
+                position = self.window_service.get_window_position()
+                if position:
+                    x, y, width, height = position
+                    self.overlay.setGeometry(x, y, width, height)
+                
+                # Show and raise
+                self.overlay.show()
+                self.overlay.raise_()
+                
+                logger.info("Fixed overlay visibility")
+            except Exception as e:
+                logger.error(f"Failed to fix overlay visibility: {e}")
     
     def _on_new(self):
         """Handle new action."""
@@ -983,6 +1492,81 @@ class MainWindow(QMainWindow):
         """Handle Check for Updates action."""
         logger.debug("Check for Updates action triggered")
         show_update_dialog(self)
+    
+    def _on_window_moved(self, x, y, width, height):
+        """Handle window moved event."""
+        # Update overlay position if needed
+        if hasattr(self, 'overlay') and self.overlay is not None:
+            self.overlay._update_position()
+            
+    def _on_window_state_changed(self, state):
+        """
+        Handle window state changed event.
+        
+        Args:
+            state: The new window state ('normal', 'minimized', 'maximized', or 'unknown')
+        """
+        logger.debug(f"Window state changed to: {state}")
+        
+        # Update overlay if it exists and is visible
+        if hasattr(self, 'overlay') and self.overlay is not None and self.overlay._visible:
+            if state == 'minimized':
+                # Hide overlay if window is minimized
+                logger.info("Target window minimized, hiding overlay")
+                self.overlay.hide()
+            elif state in ['normal', 'maximized']:
+                # Ensure overlay is visible and correctly positioned
+                logger.debug("Target window state changed to normal/maximized, updating overlay")
+                self.overlay._update_position()
+                self.overlay.raise_()
+                self.overlay.update()
+            else:
+                # Unknown state, force position update to be safe
+                logger.warning(f"Unknown window state: {state}, forcing overlay position update")
+                self.overlay._update_position()
+    
+    def _on_toggle_debug_overlay(self, checked: bool):
+        """
+        Toggle debug mode for overlay.
+        
+        Args:
+            checked: Whether debug mode should be enabled
+        """
+        logger.info(f"Toggling overlay debug mode to: {checked}")
+        
+        # Ensure overlay exists
+        if not hasattr(self, 'overlay') or self.overlay is None:
+            logger.warning("Cannot toggle debug mode - overlay not initialized")
+            if checked:
+                QMessageBox.warning(
+                    self,
+                    tr("Overlay Not Initialized"),
+                    tr("Cannot enable debug mode because the overlay is not initialized. Please select a target window first.")
+                )
+            self.debug_overlay_action.setChecked(False)
+            return
+        
+        # Store debug mode
+        self.overlay.debug_mode = checked
+        
+        # If debug mode enabled, make sure overlay is visible
+        if checked and not self.overlay._visible:
+            logger.info("Enabling overlay because debug mode was turned on")
+            self.overlay_action.setChecked(True)
+            self._on_toggle_overlay(True)
+        
+        # Force refresh of the overlay
+        self.overlay.update()
+        
+        # Show message if debug mode enabled
+        if checked:
+            QMessageBox.information(
+                self,
+                tr("Debug Mode Enabled"),
+                tr("Overlay debug mode is now ON. The overlay will be very visible with a red tint and debug information.")
+            )
+        
+        logger.info(f"Overlay debug mode is now: {'ON' if checked else 'OFF'}")
 
 
 def check_updates_if_needed(main_window, force_check=False, skip_check=False):

@@ -337,7 +337,7 @@ class DetectionTab(QWidget):
     def run_detection(self) -> None:
         """Run detection with the current settings."""
         # Check if we have a window
-        if not self.window_service.has_window():
+        if not self.window_service.find_window():
             QMessageBox.warning(self, tr("Error"), tr("Could not find game window"))
             return
         
@@ -350,6 +350,9 @@ class DetectionTab(QWidget):
         params = self._get_detection_params()
         
         logger.info(f"Running detection with strategy: {self._current_strategy}, params: {params}")
+        
+        # Set window title in detection service context
+        self.detection_service.set_context({"window_title": "Total Battle"})
         
         # Run detection
         results = []

@@ -86,13 +86,14 @@ class DetectionService:
             logger.debug("Using cached screenshot")
             return self._latest_screenshot
             
-        # Find the window using the title from context
+        # Get window title from context (for logging purposes)
         window_title = self.context.get('window_title')
         if not window_title:
             logger.warning("No window title in context")
             return None
             
-        if not self.window_service.find_window(window_title):
+        # Find the window (the window service already knows the title)
+        if not self.window_service.find_window():
             logger.warning(f"Window not found: {window_title}")
             return None
             
@@ -182,7 +183,7 @@ class DetectionService:
             # Define detection function for each tile
             def detect_in_tile(tile: np.ndarray) -> List[Dict]:
                 return strategy.detect(
-                    tile,
+                    image=tile,
                     template_names=[template_name],
                     confidence_threshold=confidence_threshold,
                     max_results=max_results
@@ -201,7 +202,7 @@ class DetectionService:
             # Regular detection for smaller images
             with ExecutionTimer("Template detection"):
                 results = strategy.detect(
-                    detection_image,
+                    image=detection_image,
                     template_names=[template_name],
                     confidence_threshold=confidence_threshold,
                     max_results=max_results
@@ -478,7 +479,7 @@ class DetectionService:
             # Define detection function for each tile
             def detect_in_tile(tile: np.ndarray) -> List[Dict]:
                 return strategy.detect(
-                    tile,
+                    image=tile,
                     template_names=template_names,
                     confidence_threshold=confidence_threshold
                 )
@@ -496,7 +497,7 @@ class DetectionService:
             # Regular detection for smaller images
             with ExecutionTimer("Multi-template detection"):
                 results = strategy.detect(
-                    detection_image,
+                    image=detection_image,
                     template_names=template_names,
                     confidence_threshold=confidence_threshold
                 )
@@ -516,6 +517,83 @@ class DetectionService:
         
         return results
     
+    def run_template_detection(self, template_names: List[str], confidence_threshold: float = 0.7,
+                           max_results: int = 10, region: Optional[Dict[str, int]] = None) -> List[Dict]:
+        """
+        Run template detection on the current window.
+        
+        This is a wrapper around detect_all_templates that limits the number of results.
+        
+        Args:
+            template_names: List of template names to detect
+            confidence_threshold: Minimum confidence level (0.0-1.0)
+            max_results: Maximum number of results to return
+            region: Region to search in {left, top, width, height} (None for full image)
+            
+        Returns:
+            List of detection results with positions and confidence scores
+        """
+        try:
+            logger.info(f"Starting template detection with templates: {template_names}")
+            logger.debug(f"Detection parameters: confidence={confidence_threshold}, max_results={max_results}, region={region}")
+            
+            # Check if we have template strategy registered
+            if 'template' not in self.strategies:
+                logger.error("Template strategy not registered in detection service")
+                return []
+            
+            # Check context
+            if not self.context or not self.context.get('window_title'):
+                logger.warning("Window title missing from context, detection might not work correctly")
+                window_title = self.context.get('window_title', 'Unknown Window')
+                logger.debug(f"Current context: {self.context}")
+            else:
+                window_title = self.context.get('window_title')
+                logger.debug(f"Using window title from context: {window_title}")
+            
+            # Validate template names
+            all_templates = self.strategies['template'].get_template_names()
+            missing_templates = [t for t in template_names if t not in all_templates]
+            if missing_templates:
+                logger.warning(f"Some templates not found: {missing_templates}")
+                logger.debug(f"Available templates: {all_templates}")
+            
+            valid_templates = [t for t in template_names if t in all_templates]
+            if not valid_templates:
+                logger.error("No valid templates found for detection")
+                return []
+            
+            logger.debug(f"Using valid templates: {valid_templates}")
+            
+            # Call detect_all_templates with the given parameters
+            logger.debug("Calling detect_all_templates")
+            results = self.detect_all_templates(
+                template_names=valid_templates,
+                confidence_threshold=confidence_threshold,
+                region=region
+            )
+            
+            logger.debug(f"Got {len(results)} results from detect_all_templates")
+            
+            # Limit the number of results if needed
+            if max_results > 0 and len(results) > max_results:
+                logger.debug(f"Limiting results from {len(results)} to {max_results}")
+                # Sort by confidence score (highest first) and take the top max_results
+                results.sort(key=lambda x: x.get('confidence', 0), reverse=True)
+                results = results[:max_results]
+                
+            logger.info(f"Template detection complete: found {len(results)} matches")
+            for i, result in enumerate(results):
+                logger.debug(f"Result {i+1}: template={result.get('template_name')}, "
+                            f"confidence={result.get('confidence'):.2f}, "
+                            f"position=({result.get('x')}, {result.get('y')})")
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"Error in run_template_detection: {e}", exc_info=True)
+            return []
+    
     def clear_cache(self) -> None:
         """Clear the detection cache."""
         # Clear screenshot cache
@@ -528,27 +606,32 @@ class DetectionService:
     
     def _publish_detection_event(self, strategy_name: str, results: List[Dict], query: Any) -> None:
         """
-        Publish a detection event.
+        Publish detection event to event bus.
         
         Args:
-            strategy_name: Name of the detection strategy
-            results: Detection results
-            query: The detection query (template name, pattern, etc.)
+            strategy_name: Name of detection strategy used
+            results: Detection results to publish
+            query: Detection query (e.g., template name, OCR pattern)
         """
-        # Create event with detection details
+        if not self.event_bus:
+            return
+            
+        # Prepare event data
         event_data = {
             'strategy': strategy_name,
-            'query': str(query),
+            'query': query,
+            'results': results,
             'result_count': len(results),
             'timestamp': time.time()
         }
         
         # Choose event type based on results
         if results:
-            event_type = EventType.DETECTION_COMPLETED
+            # Convert enum to string - the event_bus expects string event types
+            event_type_str = 'detection_completed'
         else:
-            event_type = EventType.DETECTION_FAILED
+            event_type_str = 'detection_failed'
             
-        # Publish event
-        event = Event(event_type, event_data)
-        self.event_bus.publish(event) 
+        # Publish event with string event type and data directly
+        logger.debug(f"Publishing detection event: {event_type_str} with {len(results)} results")
+        self.event_bus.publish(event_type_str, event_data) 

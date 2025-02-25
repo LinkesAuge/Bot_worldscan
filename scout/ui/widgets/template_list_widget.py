@@ -315,9 +315,21 @@ class TemplateListWidget(QWidget):
     
     def _on_selection_changed(self) -> None:
         """Handle selection change."""
+        # Clear previous selections
+        self._selected_templates.clear()
+        
+        # Get currently selected items
         selected_items = self.template_list.selectedItems()
+        
+        # Update selected templates set
+        for item in selected_items:
+            self._selected_templates.add(item.text())
+        
+        # Emit signal for the first selected item (for backward compatibility)
         if selected_items:
             self.template_selected.emit(selected_items[0].text())
+            
+        logger.debug(f"Selected templates: {self._selected_templates}")
     
     def _on_context_menu(self, position) -> None:
         """

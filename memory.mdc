@@ -1,5 +1,5 @@
 ---
-description: 
+description: The memory file to keep all relevant information, status and whatever else is needed for the code in the project plan
 globs: 
 ---
 ---
@@ -7,7 +7,7 @@ description: your memory file
 globs: *.py
 ---
 please remember to do not more than 24 tool calls in one reply. Ask for feedback inbetween.
----
+You must also reference the bugfixing.mdc for any issues, errors or other problems you encounter and keep relevant information and context in there.
 description: our memory file
 globs: *.py
 ---
@@ -24,7 +24,7 @@ globs:
 ## Current Status
 - **Status**: Release Ready
 - **Version**: 1.0.0
-- **Last Updated**: February 25, 2025
+- **Last Updated**: Today
 
 ## Architecture Overview
 
@@ -383,3 +383,144 @@ The application is now ready for release with all planned features implemented:
    - Integration tests for component interactions
    - Cross-platform tests for platform-specific behavior
    - Performance benchmarks for critical operations
+
+### Current Status (Last Updated: Today)
+
+We've identified a more reliable approach to window capture and detection using Qt's native QWindowCapture and QScreenCapture components. We'll be implementing a complete replacement of our current window service to solve the overlay visibility issues with the Total Battle game window.
+
+## Qt Window Capture Implementation Plan
+
+Based on the example code provided, we've developed a comprehensive plan to integrate Qt's native window/screen capture capabilities into our application architecture.
+
+### Implementation Objectives:
+1. Replace the current WindowService with a Qt-based implementation
+2. Integrate window/screen selection into the detection tab UI
+3. Support both real-time and on-demand capture
+4. Maintain proper MVC architecture throughout
+5. Ensure backward compatibility with existing code
+
+### Architecture Overview
+
+#### Core Components:
+1. **QtWindowService** - Core service implementing WindowServiceInterface using Qt's capture APIs
+2. **WindowListModel/ScreenListModel** - Data models for available windows/screens
+3. **WindowSelectorWidget** - UI component for window/screen selection
+4. **CaptureSession** - Manager for the capture process
+5. **CaptureFrameProvider** - Interface to access captured frames for detection
+
+#### Signal Flow:
+- WindowService → emit window_changed → MainWindow
+- CaptureSession → emit frame_captured → Detection/Automation services
+- WindowSelector → emit selection_changed → WindowService
+
+### Implementation Checklist
+
+1. **Core Services (scout/core/window/)**
+   - [x] Create `source_type.py` defining SourceType enumeration
+   - [x] Create `capture_session.py` for QMediaCaptureSession management
+   - [x] Create `image_utils.py` with QImage/numpy conversion utilities
+   - [ ] Create `qt_window_service.py` implementing WindowServiceInterface
+   - [ ] Implement window/screen enumeration and selection logic
+   - [ ] Add compatibility layer for existing code that expects the old WindowService
+
+2. **Models (scout/ui/models/)**
+   - [x] Create `window_list_model.py` adapting WindowListModel to PyQt6
+   - [x] Create `screen_list_model.py` adapting ScreenListModel to PyQt6
+   - [x] Implement proper signal handling for window/screen changes
+
+3. **UI Components (scout/ui/widgets/)**
+   - [x] Create `window_selector_widget.py` with list views for windows/screens
+   - [x] Create `capture_preview_widget.py` for displaying capture output
+   - [ ] Implement UI controls for capture options
+
+4. **Integration (scout/ui/)**
+   - [ ] Modify `detection_tab.py` to include window selection components
+   - [ ] Update `main_window.py` to use new QtWindowService
+   - [ ] Modify `overlay_view.py` to work with the new capture system
+
+5. **Tests**
+   - [ ] Create unit tests for QtWindowService
+   - [ ] Create integration tests for capture functionality
+   - [ ] Test window selection and capture with various applications
+
+6. **Permissions and Error Handling**
+   - [ ] Add appropriate error handling for when capture requires admin rights
+   - [ ] Add clear user prompts for required permissions
+   - [ ] Implement graceful fallbacks when capture fails
+
+7. **Documentation**
+   - [ ] Update developer documentation with new architecture
+   - [ ] Add user documentation for window selection
+   - [ ] Document known limitations and requirements
+
+### Implementation Progress
+
+We have made significant progress on the core components and UI elements for the Qt-based window capture system:
+
+1. **SourceType Enumeration** ✅
+   - Created enumeration for different capture source types (Window or Screen)
+   - Added comprehensive documentation
+
+2. **CaptureSession Class** ✅
+   - Implemented media capture session management
+   - Added support for both window and screen capture sources
+   - Implemented error handling and signal connections
+   - Added methods for starting/stopping capture and taking screenshots
+
+3. **Image Utilities** ✅
+   - Created utility functions for converting between QImage and numpy arrays
+   - Added image resizing utility to handle large captures
+   - Ensured compatibility with OpenCV by properly handling color formats
+
+4. **UI Data Models** ✅
+   - Implemented `WindowListModel` for displaying available windows
+   - Implemented `ScreenListModel` for displaying available screens
+   - Added auto-updating for screen/window changes
+   - Provided search capabilities for finding windows by title
+
+5. **UI Widget Components** ✅
+   - Implemented `WindowSelectorWidget` with the following features:
+     - Tabbed interface for selecting windows or screens
+     - Search functionality for finding windows by title
+     - Automatic updating of screen list when screens are added/removed
+     - Clear signaling of selection changes with appropriate data types
+   - Implemented `CapturePreviewWidget` with the following features:
+     - Real-time display of captured frames using QVideoWidget
+     - Screenshot capability with file save dialog
+     - Auto-screenshot mode for continuous frame processing
+     - FPS counter and status information overlay
+     - Frame conversion utilities for detection system integration
+
+### Next Tasks
+
+1. **Implement QtWindowService**
+   - Primary implementation task to create the window service interface
+   - Ensure backward compatibility with existing code
+   - Integrate with CaptureSession for managing captures
+
+2. **Integration with Detection Tab**
+   - Integrate the UI components into the Detection Tab
+   - Connect signals between components for seamless operation
+   - Update the UI layout to accommodate the new components
+
+### Technical Implementation Details
+
+The implementation is based on PyQt6's Qt Multimedia module, specifically using:
+- `QWindowCapture`: For capturing specific application windows
+- `QScreenCapture`: For capturing entire screens
+- `QMediaCaptureSession`: For managing the capture process
+- `QVideoWidget`: For displaying the captured content
+
+The UI components follow Qt's model-view-controller pattern:
+- **Models**: `WindowListModel` and `ScreenListModel` provide data access
+- **Views**: List views and QVideoWidget for display
+- **Controllers**: Signal/slot connections handle user interactions
+
+The CapturePreviewWidget supports both real-time view of the captured window/screen and on-demand screenshot functionality. It also provides an auto-screenshot mode that continuously emits frames for processing by the detection system, eliminating the need for the current overlay approach.
+
+### Next Steps
+
+1. Continue implementation by creating QtWindowService
+2. Integrate the UI components into the Detection Tab
+3. Connect signals between components for seamless operation
+4. Test with Total Battle and other application windows

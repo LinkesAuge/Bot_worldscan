@@ -350,3 +350,292 @@ AttributeError: 'SettingsTab' object has no attribute 'use_cache'
 2025-02-25 12:13:42,060 - scout.ui.main_window - INFO - Main window initialized
 2025-02-25 12:13:42,084 - scout.ui.main_window - INFO - Checking for updates in background
 2025-02-25 12:13:43,473 - scout.core.updater.update_checker - ERROR - Unexpected error checking for updates: Expecting value: line 1 column 1 (char 0)
+2025-02-25 12:57:25,216 - root - INFO - Logging to file: resources/logs/scout.log
+2025-02-25 12:57:25,218 - root - INFO - Logging initialized with level: info
+2025-02-25 12:57:25,218 - __main__ - INFO - Starting Scout application
+2025-02-25 12:57:25,219 - __main__ - INFO - Default directories created successfully
+2025-02-25 12:57:25,219 - __main__ - INFO - Starting GUI application
+2025-02-25 12:57:25,232 - scout.ui.utils.language_manager - INFO - Using translations directory: D:\OneDrive\AI\Projekte\Bot_worldscan\scout\translations
+2025-02-25 12:57:25,246 - scout.ui.utils.language_manager - INFO - Applied language: en_US
+2025-02-25 12:57:25,246 - scout.ui.utils.language_manager - INFO - LanguageManager initialized with language: en
+2025-02-25 12:57:25,275 - scout.core.window.window_service - INFO - Found window: 'Total Battle' (hwnd: 7998862)
+2025-02-25 12:57:25,276 - scout.core.window.window_service - INFO - Window service initialized for window: 'Total Battle'
+2025-02-25 12:57:25,276 - scout.core.automation.automation_service - INFO - Automation service initialized
+2025-02-25 12:57:25,276 - scout.core.game.game_service - INFO - Game service initialized
+2025-02-25 12:57:25,276 - scout.ui.main_window - INFO - Services initialized and registered
+2025-02-25 12:57:25,408 - scout.ui.widgets.template_list_widget - INFO - Template list widget initialized with directory: scout\resources\templates
+2025-02-25 12:57:25,420 - scout.ui.widgets.detection_result_widget - INFO - Detection result widget initialized
+2025-02-25 12:57:25,434 - scout.ui.widgets.template_list_widget - INFO - Loaded 0 templates from scout\resources\templates
+2025-02-25 12:57:25,434 - scout.ui.views.detection_tab - INFO - Loaded 0 templates from scout\resources\templates
+2025-02-25 12:57:25,434 - scout.ui.views.detection_tab - INFO - Detection tab initialized
+2025-02-25 12:57:25,447 - scout.ui.views.automation_tab - INFO - Automation tab initialized
+2025-02-25 12:57:25,449 - scout.ui.views.game_tab - INFO - Game state tab initialized
+2025-02-25 12:57:25,450 - scout.ui.models.settings_model - INFO - Loaded settings from C:\Users\schrd\.scout\settings.json
+2025-02-25 12:57:25,450 - scout.ui.models.settings_model - INFO - Settings model initialized
+2025-02-25 12:57:25,450 - scout.ui.views.settings_tab - INFO - Settings tab initialized
+2025-02-25 12:57:25,454 - scout.ui.main_window - ERROR - Error connecting signals: 'WindowService' object has no attribute 'window_selected'
+2025-02-25 12:57:25,456 - scout.ui.main_window - INFO - Overlay view initialized
+2025-02-25 12:57:25,456 - scout.ui.main_window - INFO - Main window initialized
+2025-02-25 12:57:25,541 - scout.ui.main_window - INFO - Checking for updates in background
+2025-02-25 12:57:26,805 - scout.core.updater.update_checker - ERROR - Unexpected error checking for updates: Expecting value: line 1 column 1 (char 0)
+2025-02-25 12:58:35,180 - scout.ui.widgets.template_list_widget - INFO - Imported template: Crypt
+2025-02-25 13:05:51,529 - root - INFO - Logging to file: resources/logs/scout.log
+2025-02-25 13:05:51,530 - root - INFO - Logging initialized with level: info
+2025-02-25 13:05:51,530 - __main__ - INFO - Starting Scout application
+2025-02-25 13:05:51,530 - __main__ - INFO - Default directories created successfully
+2025-02-25 13:05:51,530 - __main__ - INFO - Starting GUI application
+2025-02-25 13:05:51,547 - scout.ui.utils.language_manager - INFO - Using translations directory: D:\OneDrive\AI\Projekte\Bot_worldscan\scout\translations
+2025-02-25 13:05:51,562 - scout.ui.utils.language_manager - INFO - Applied language: en_US
+2025-02-25 13:05:51,562 - scout.ui.utils.language_manager - INFO - LanguageManager initialized with language: en
+2025-02-25 13:05:51,606 - scout.core.window.window_service - INFO - Found window: 'Total Battle' (hwnd: 7998862)
+2025-02-25 13:05:51,606 - scout.core.window.window_service - INFO - Window service initialized for window: 'Total Battle'
+2025-02-25 13:05:51,606 - scout.core.automation.automation_service - INFO - Automation service initialized
+2025-02-25 13:05:51,606 - scout.core.game.game_service - INFO - Game service initialized
+2025-02-25 13:05:51,607 - scout.ui.main_window - INFO - Services initialized and registered
+2025-02-25 13:05:51,651 - scout.ui.widgets.template_list_widget - INFO - Template list widget initialized with directory: scout\resources\templates
+2025-02-25 13:05:51,655 - scout.ui.widgets.detection_result_widget - INFO - Detection result widget initialized
+2025-02-25 13:05:51,663 - scout.ui.widgets.template_list_widget - INFO - Loaded 1 templates from scout\resources\templates
+2025-02-25 13:05:51,663 - scout.ui.views.detection_tab - INFO - Loaded 1 templates from scout\resources\templates
+2025-02-25 13:05:51,663 - scout.ui.views.detection_tab - INFO - Detection tab initialized
+2025-02-25 13:05:51,671 - scout.ui.views.automation_tab - INFO - Automation tab initialized
+2025-02-25 13:05:51,674 - scout.ui.views.game_tab - INFO - Game state tab initialized
+2025-02-25 13:05:51,675 - scout.ui.models.settings_model - INFO - Loaded settings from C:\Users\schrd\.scout\settings.json
+2025-02-25 13:05:51,675 - scout.ui.models.settings_model - INFO - Settings model initialized
+2025-02-25 13:05:51,676 - scout.ui.views.settings_tab - INFO - Settings tab initialized
+2025-02-25 13:05:51,678 - scout.ui.main_window - ERROR - Error connecting signals: 'WindowService' object has no attribute 'window_selected'
+2025-02-25 13:05:51,679 - scout.ui.main_window - INFO - Overlay view initialized
+2025-02-25 13:05:51,679 - scout.ui.main_window - INFO - Main window initialized
+2025-02-25 13:05:51,753 - scout.ui.main_window - INFO - Checking for updates in background
+2025-02-25 13:05:52,966 - scout.core.updater.update_checker - ERROR - Unexpected error checking for updates: Expecting value: line 1 column 1 (char 0)
+2025-02-25 13:07:07,973 - root - INFO - Logging to file: resources/logs/scout.log
+2025-02-25 13:07:07,973 - root - INFO - Logging initialized with level: info
+2025-02-25 13:07:07,974 - __main__ - INFO - Starting Scout application
+2025-02-25 13:07:07,974 - __main__ - INFO - Default directories created successfully
+2025-02-25 13:07:07,974 - __main__ - INFO - Starting GUI application
+2025-02-25 13:07:07,987 - scout.ui.utils.language_manager - INFO - Using translations directory: D:\OneDrive\AI\Projekte\Bot_worldscan\scout\translations
+2025-02-25 13:07:07,997 - scout.ui.utils.language_manager - INFO - Applied language: en_US
+2025-02-25 13:07:07,997 - scout.ui.utils.language_manager - INFO - LanguageManager initialized with language: en
+2025-02-25 13:07:08,027 - scout.core.window.window_service - INFO - Found window: 'Total Battle' (hwnd: 7998862)
+2025-02-25 13:07:08,028 - scout.core.window.window_service - INFO - Window service initialized for window: 'Total Battle'
+2025-02-25 13:07:08,029 - scout.core.automation.automation_service - INFO - Automation service initialized
+2025-02-25 13:07:08,029 - scout.core.game.game_service - INFO - Game service initialized
+2025-02-25 13:07:08,029 - scout.ui.main_window - INFO - Services initialized and registered
+2025-02-25 13:07:08,065 - scout.ui.widgets.template_list_widget - INFO - Template list widget initialized with directory: scout\resources\templates
+2025-02-25 13:07:08,068 - scout.ui.widgets.detection_result_widget - INFO - Detection result widget initialized
+2025-02-25 13:07:08,075 - scout.ui.widgets.template_list_widget - INFO - Loaded 1 templates from scout\resources\templates
+2025-02-25 13:07:08,075 - scout.ui.views.detection_tab - INFO - Loaded 1 templates from scout\resources\templates
+2025-02-25 13:07:08,076 - scout.ui.views.detection_tab - INFO - Detection tab initialized
+2025-02-25 13:07:08,083 - scout.ui.views.automation_tab - INFO - Automation tab initialized
+2025-02-25 13:07:08,085 - scout.ui.views.game_tab - INFO - Game state tab initialized
+2025-02-25 13:07:08,085 - scout.ui.models.settings_model - INFO - Loaded settings from C:\Users\schrd\.scout\settings.json
+2025-02-25 13:07:08,086 - scout.ui.models.settings_model - INFO - Settings model initialized
+2025-02-25 13:07:08,086 - scout.ui.views.settings_tab - INFO - Settings tab initialized
+2025-02-25 13:07:08,088 - scout.ui.main_window - ERROR - Error connecting signals: 'WindowService' object has no attribute 'window_selected'
+2025-02-25 13:07:08,089 - scout.ui.main_window - INFO - Overlay view initialized
+2025-02-25 13:07:08,089 - scout.ui.main_window - INFO - Main window initialized
+2025-02-25 13:07:08,165 - scout.ui.main_window - INFO - Checking for updates in background
+2025-02-25 13:07:09,357 - scout.core.updater.update_checker - ERROR - Unexpected error checking for updates: Expecting value: line 1 column 1 (char 0)
+2025-02-25 13:08:31,081 - root - INFO - Logging to file: resources/logs/scout.log
+2025-02-25 13:08:31,082 - root - INFO - Logging initialized with level: info
+2025-02-25 13:08:31,082 - __main__ - INFO - Starting Scout application
+2025-02-25 13:08:31,082 - __main__ - INFO - Default directories created successfully
+2025-02-25 13:08:31,082 - __main__ - INFO - Starting GUI application
+2025-02-25 13:08:31,096 - scout.ui.utils.language_manager - INFO - Using translations directory: D:\OneDrive\AI\Projekte\Bot_worldscan\scout\translations
+2025-02-25 13:08:31,105 - scout.ui.utils.language_manager - INFO - Applied language: en_US
+2025-02-25 13:08:31,105 - scout.ui.utils.language_manager - INFO - LanguageManager initialized with language: en
+2025-02-25 13:08:31,130 - scout.core.window.window_service - INFO - Found window: 'Total Battle' (hwnd: 7998862)
+2025-02-25 13:08:31,130 - scout.core.window.window_service - INFO - Window service initialized for window: 'Total Battle'
+2025-02-25 13:08:31,131 - scout.core.automation.automation_service - INFO - Automation service initialized
+2025-02-25 13:08:31,131 - scout.core.game.game_service - INFO - Game service initialized
+2025-02-25 13:08:31,131 - scout.ui.main_window - INFO - Services initialized and registered
+2025-02-25 13:08:31,162 - scout.ui.widgets.template_list_widget - INFO - Template list widget initialized with directory: scout\resources\templates
+2025-02-25 13:08:31,164 - scout.ui.widgets.detection_result_widget - INFO - Detection result widget initialized
+2025-02-25 13:08:31,170 - scout.ui.widgets.template_list_widget - INFO - Loaded 1 templates from scout\resources\templates
+2025-02-25 13:08:31,170 - scout.ui.views.detection_tab - INFO - Loaded 1 templates from scout\resources\templates
+2025-02-25 13:08:31,170 - scout.ui.views.detection_tab - INFO - Detection tab initialized
+2025-02-25 13:08:31,177 - scout.ui.views.automation_tab - INFO - Automation tab initialized
+2025-02-25 13:08:31,179 - scout.ui.views.game_tab - INFO - Game state tab initialized
+2025-02-25 13:08:31,180 - scout.ui.models.settings_model - INFO - Loaded settings from C:\Users\schrd\.scout\settings.json
+2025-02-25 13:08:31,180 - scout.ui.models.settings_model - INFO - Settings model initialized
+2025-02-25 13:08:31,180 - scout.ui.views.settings_tab - INFO - Settings tab initialized
+2025-02-25 13:08:31,183 - scout.ui.main_window - ERROR - Error connecting signals: 'WindowService' object has no attribute 'window_selected'
+2025-02-25 13:08:31,184 - scout.ui.main_window - INFO - Overlay view initialized
+2025-02-25 13:08:31,184 - scout.ui.main_window - INFO - Main window initialized
+2025-02-25 13:08:31,240 - scout.ui.main_window - INFO - Checking for updates in background
+2025-02-25 13:08:32,446 - scout.core.updater.update_checker - ERROR - Unexpected error checking for updates: Expecting value: line 1 column 1 (char 0)
+2025-02-25 13:09:14,909 - root - INFO - Logging to file: resources/logs/scout.log
+2025-02-25 13:09:14,909 - root - INFO - Logging initialized with level: info
+2025-02-25 13:09:14,909 - __main__ - INFO - Starting Scout application
+2025-02-25 13:09:14,910 - __main__ - INFO - Default directories created successfully
+2025-02-25 13:09:14,910 - __main__ - INFO - Starting GUI application
+2025-02-25 13:09:14,924 - scout.ui.utils.language_manager - INFO - Using translations directory: D:\OneDrive\AI\Projekte\Bot_worldscan\scout\translations
+2025-02-25 13:09:14,933 - scout.ui.utils.language_manager - INFO - Applied language: en_US
+2025-02-25 13:09:14,933 - scout.ui.utils.language_manager - INFO - LanguageManager initialized with language: en
+2025-02-25 13:09:14,960 - scout.core.window.window_service - INFO - Found window: 'Total Battle' (hwnd: 7998862)
+2025-02-25 13:09:14,960 - scout.core.window.window_service - INFO - Window service initialized for window: 'Total Battle'
+2025-02-25 13:09:14,960 - scout.core.automation.automation_service - INFO - Automation service initialized
+2025-02-25 13:09:14,961 - scout.core.game.game_service - INFO - Game service initialized
+2025-02-25 13:09:14,961 - scout.ui.main_window - INFO - Services initialized and registered
+2025-02-25 13:09:14,994 - scout.ui.widgets.template_list_widget - INFO - Template list widget initialized with directory: scout\resources\templates
+2025-02-25 13:09:14,997 - scout.ui.widgets.detection_result_widget - INFO - Detection result widget initialized
+2025-02-25 13:09:15,002 - scout.ui.widgets.template_list_widget - INFO - Loaded 1 templates from scout\resources\templates
+2025-02-25 13:09:15,002 - scout.ui.views.detection_tab - INFO - Loaded 1 templates from scout\resources\templates
+2025-02-25 13:09:15,002 - scout.ui.views.detection_tab - INFO - Detection tab initialized
+2025-02-25 13:09:15,007 - scout.ui.views.automation_tab - INFO - Automation tab initialized
+2025-02-25 13:09:15,009 - scout.ui.views.game_tab - INFO - Game state tab initialized
+2025-02-25 13:09:15,010 - scout.ui.models.settings_model - INFO - Loaded settings from C:\Users\schrd\.scout\settings.json
+2025-02-25 13:09:15,010 - scout.ui.models.settings_model - INFO - Settings model initialized
+2025-02-25 13:09:15,010 - scout.ui.views.settings_tab - INFO - Settings tab initialized
+2025-02-25 13:09:15,012 - scout.ui.main_window - ERROR - Error connecting signals: 'WindowService' object has no attribute 'window_selected'
+2025-02-25 13:09:15,013 - scout.ui.main_window - INFO - Overlay view initialized
+2025-02-25 13:09:15,013 - scout.ui.main_window - INFO - Main window initialized
+2025-02-25 13:09:15,072 - scout.ui.main_window - INFO - Checking for updates in background
+2025-02-25 13:09:16,279 - scout.core.updater.update_checker - ERROR - Unexpected error checking for updates: Expecting value: line 1 column 1 (char 0)
+2025-02-25 13:09:49,641 - scout.ui.widgets.template_list_widget - INFO - Imported template: crypt_smallres_zoomedin
+2025-02-25 13:56:05,507 - root - INFO - Logging to file: resources/logs/scout.log
+2025-02-25 13:56:05,508 - root - INFO - Logging initialized with level: info
+2025-02-25 13:56:05,508 - __main__ - INFO - Starting Scout application
+2025-02-25 13:56:05,508 - __main__ - INFO - Default directories created successfully
+2025-02-25 13:56:05,508 - __main__ - INFO - Starting GUI application
+2025-02-25 13:56:05,522 - scout.ui.utils.language_manager - INFO - Using translations directory: D:\OneDrive\AI\Projekte\Bot_worldscan\scout\translations
+2025-02-25 13:56:05,530 - scout.ui.utils.language_manager - INFO - Applied language: en_US
+2025-02-25 13:56:05,530 - scout.ui.utils.language_manager - INFO - LanguageManager initialized with language: en
+2025-02-25 13:56:05,569 - scout.core.window.window_service - INFO - Found window: 'Total Battle' (hwnd: 197180)
+2025-02-25 13:56:05,569 - scout.core.window.window_service - INFO - Window service initialized for window: 'Total Battle'
+2025-02-25 13:56:05,569 - scout.core.automation.automation_service - INFO - Automation service initialized
+2025-02-25 13:56:05,569 - scout.core.game.game_service - INFO - Game service initialized
+2025-02-25 13:56:05,587 - scout.core.detection.detection_service - INFO - Registered detection strategy: template
+2025-02-25 13:56:05,610 - scout.core.detection.detection_service - INFO - Registered detection strategy: ocr
+2025-02-25 13:56:05,610 - scout.ui.main_window - WARNING - YOLO model not found at D:\OneDrive\AI\Projekte\Bot_worldscan\resources\models\yolov5n.pt, YOLO detection will not be available
+2025-02-25 13:56:05,610 - scout.ui.main_window - INFO - Services initialized and registered
+2025-02-25 13:56:05,638 - scout.ui.widgets.template_list_widget - INFO - Template list widget initialized with directory: scout\resources\templates
+2025-02-25 13:56:05,640 - scout.ui.widgets.detection_result_widget - INFO - Detection result widget initialized
+2025-02-25 13:56:05,647 - scout.ui.widgets.template_list_widget - INFO - Loaded 2 templates from scout\resources\templates
+2025-02-25 13:56:05,647 - scout.ui.views.detection_tab - INFO - Loaded 2 templates from scout\resources\templates
+2025-02-25 13:56:05,647 - scout.ui.views.detection_tab - INFO - Detection tab initialized
+2025-02-25 13:56:05,652 - scout.ui.views.automation_tab - INFO - Automation tab initialized
+2025-02-25 13:56:05,654 - scout.ui.views.game_tab - INFO - Game state tab initialized
+2025-02-25 13:56:05,655 - scout.ui.models.settings_model - INFO - Loaded settings from C:\Users\schrd\.scout\settings.json
+2025-02-25 13:56:05,655 - scout.ui.models.settings_model - INFO - Settings model initialized
+2025-02-25 13:56:05,655 - scout.ui.views.settings_tab - INFO - Settings tab initialized
+2025-02-25 13:56:05,658 - scout.ui.main_window - INFO - Overlay view initialized
+2025-02-25 13:56:05,658 - scout.ui.main_window - INFO - Main window initialized
+2025-02-25 13:56:05,721 - scout.ui.main_window - INFO - Checking for updates in background
+2025-02-25 13:56:06,925 - scout.core.updater.update_checker - ERROR - Unexpected error checking for updates: Expecting value: line 1 column 1 (char 0)
+2025-02-25 13:56:19,150 - scout.ui.views.detection_tab - INFO - Running detection with strategy: template, params: {'confidence_threshold': 0.7, 'max_results': 10}
+2025-02-25 13:56:19,150 - scout.core.detection.detection_service - WARNING - No window title in context
+2025-02-25 13:56:19,150 - scout.ui.widgets.detection_result_widget - INFO - No detection results to display
+2025-02-25 13:56:32,304 - scout.ui.views.detection_tab - INFO - Running detection with strategy: template, params: {'confidence_threshold': 0.7, 'max_results': 10}
+2025-02-25 13:56:32,304 - scout.core.detection.detection_service - WARNING - No window title in context
+2025-02-25 13:56:32,304 - scout.ui.widgets.detection_result_widget - INFO - No detection results to display
+2025-02-25 13:56:43,407 - scout.core.window.window_service - ERROR - Error getting window position: WINDOW_CHANGED
+2025-02-25 13:57:42,932 - root - INFO - Logging to file: resources/logs/scout.log
+2025-02-25 13:57:42,932 - root - INFO - Logging initialized with level: info
+2025-02-25 13:57:42,933 - __main__ - INFO - Starting Scout application
+2025-02-25 13:57:42,933 - __main__ - INFO - Default directories created successfully
+2025-02-25 13:57:42,933 - __main__ - INFO - Starting GUI application
+2025-02-25 13:57:42,947 - scout.ui.utils.language_manager - INFO - Using translations directory: D:\OneDrive\AI\Projekte\Bot_worldscan\scout\translations
+2025-02-25 13:57:42,961 - scout.ui.utils.language_manager - INFO - Applied language: en_US
+2025-02-25 13:57:42,961 - scout.ui.utils.language_manager - INFO - LanguageManager initialized with language: en
+2025-02-25 13:57:42,999 - scout.core.window.window_service - INFO - Found window: 'Total Battle' (hwnd: 197180)
+2025-02-25 13:57:42,999 - scout.core.window.window_service - INFO - Window service initialized for window: 'Total Battle'
+2025-02-25 13:57:43,001 - scout.core.automation.automation_service - INFO - Automation service initialized
+2025-02-25 13:57:43,001 - scout.core.game.game_service - INFO - Game service initialized
+2025-02-25 13:57:43,022 - scout.core.detection.detection_service - INFO - Registered detection strategy: template
+2025-02-25 13:57:43,050 - scout.core.detection.detection_service - INFO - Registered detection strategy: ocr
+2025-02-25 13:57:43,051 - scout.ui.main_window - WARNING - YOLO model not found at D:\OneDrive\AI\Projekte\Bot_worldscan\resources\models\yolov5n.pt, YOLO detection will not be available
+2025-02-25 13:57:43,051 - scout.ui.main_window - INFO - Services initialized and registered
+2025-02-25 13:57:43,085 - scout.ui.widgets.template_list_widget - INFO - Template list widget initialized with directory: scout\resources\templates
+2025-02-25 13:57:43,088 - scout.ui.widgets.detection_result_widget - INFO - Detection result widget initialized
+2025-02-25 13:57:43,095 - scout.ui.widgets.template_list_widget - INFO - Loaded 2 templates from scout\resources\templates
+2025-02-25 13:57:43,095 - scout.ui.views.detection_tab - INFO - Loaded 2 templates from scout\resources\templates
+2025-02-25 13:57:43,096 - scout.ui.views.detection_tab - INFO - Detection tab initialized
+2025-02-25 13:57:43,103 - scout.ui.views.automation_tab - INFO - Automation tab initialized
+2025-02-25 13:57:43,105 - scout.ui.views.game_tab - INFO - Game state tab initialized
+2025-02-25 13:57:43,106 - scout.ui.models.settings_model - INFO - Loaded settings from C:\Users\schrd\.scout\settings.json
+2025-02-25 13:57:43,106 - scout.ui.models.settings_model - INFO - Settings model initialized
+2025-02-25 13:57:43,106 - scout.ui.views.settings_tab - INFO - Settings tab initialized
+2025-02-25 13:57:43,109 - scout.ui.main_window - INFO - Overlay view initialized
+2025-02-25 13:57:43,109 - scout.ui.main_window - INFO - Main window initialized
+2025-02-25 13:57:43,174 - scout.ui.main_window - INFO - Checking for updates in background
+2025-02-25 13:57:44,361 - scout.core.updater.update_checker - ERROR - Unexpected error checking for updates: Expecting value: line 1 column 1 (char 0)
+2025-02-25 13:57:52,289 - scout.ui.views.detection_tab - INFO - Running detection with strategy: template, params: {'confidence_threshold': 0.7, 'max_results': 10}
+2025-02-25 13:57:52,290 - scout.ui.views.detection_tab - ERROR - Detection error: WindowService.find_window() takes 1 positional argument but 2 were given
+Traceback (most recent call last):
+  File "D:\OneDrive\AI\Projekte\Bot_worldscan\scout\ui\views\detection_tab.py", line 371, in run_detection
+    results = self.detection_service.run_template_detection(
+  File "D:\OneDrive\AI\Projekte\Bot_worldscan\scout\core\detection\detection_service.py", line 536, in run_template_detection
+    results = self.detect_all_templates(
+  File "D:\OneDrive\AI\Projekte\Bot_worldscan\scout\core\detection\detection_service.py", line 435, in detect_all_templates
+    screenshot = self._get_screenshot(use_cache)
+  File "D:\OneDrive\AI\Projekte\Bot_worldscan\scout\core\detection\detection_service.py", line 95, in _get_screenshot
+    if not self.window_service.find_window(window_title):
+TypeError: WindowService.find_window() takes 1 positional argument but 2 were given
+2025-02-25 14:01:17,086 - root - INFO - Logging to file: resources/logs/scout.log
+2025-02-25 14:01:17,086 - root - INFO - Logging initialized with level: info
+2025-02-25 14:01:17,086 - __main__ - INFO - Starting Scout application
+2025-02-25 14:01:17,086 - __main__ - INFO - Default directories created successfully
+2025-02-25 14:01:17,087 - __main__ - INFO - Starting GUI application
+2025-02-25 14:01:17,099 - scout.ui.utils.language_manager - INFO - Using translations directory: D:\OneDrive\AI\Projekte\Bot_worldscan\scout\translations
+2025-02-25 14:01:17,107 - scout.ui.utils.language_manager - INFO - Applied language: en_US
+2025-02-25 14:01:17,107 - scout.ui.utils.language_manager - INFO - LanguageManager initialized with language: en
+2025-02-25 14:01:17,136 - scout.core.window.window_service - INFO - Found window: 'Total Battle' (hwnd: 197180)
+2025-02-25 14:01:17,137 - scout.core.window.window_service - INFO - Window service initialized for window: 'Total Battle'
+2025-02-25 14:01:17,137 - scout.core.automation.automation_service - INFO - Automation service initialized
+2025-02-25 14:01:17,137 - scout.core.game.game_service - INFO - Game service initialized
+2025-02-25 14:01:17,151 - scout.core.detection.detection_service - INFO - Registered detection strategy: template
+2025-02-25 14:01:17,282 - scout.core.detection.detection_service - INFO - Registered detection strategy: ocr
+2025-02-25 14:01:17,282 - scout.ui.main_window - WARNING - YOLO model not found at D:\OneDrive\AI\Projekte\Bot_worldscan\resources\models\yolov5n.pt, YOLO detection will not be available
+2025-02-25 14:01:17,283 - scout.ui.main_window - INFO - Services initialized and registered
+2025-02-25 14:01:17,314 - scout.ui.widgets.template_list_widget - INFO - Template list widget initialized with directory: scout\resources\templates
+2025-02-25 14:01:17,317 - scout.ui.widgets.detection_result_widget - INFO - Detection result widget initialized
+2025-02-25 14:01:17,324 - scout.ui.widgets.template_list_widget - INFO - Loaded 2 templates from scout\resources\templates
+2025-02-25 14:01:17,324 - scout.ui.views.detection_tab - INFO - Loaded 2 templates from scout\resources\templates
+2025-02-25 14:01:17,325 - scout.ui.views.detection_tab - INFO - Detection tab initialized
+2025-02-25 14:01:17,330 - scout.ui.views.automation_tab - INFO - Automation tab initialized
+2025-02-25 14:01:17,332 - scout.ui.views.game_tab - INFO - Game state tab initialized
+2025-02-25 14:01:17,333 - scout.ui.models.settings_model - INFO - Loaded settings from C:\Users\schrd\.scout\settings.json
+2025-02-25 14:01:17,333 - scout.ui.models.settings_model - INFO - Settings model initialized
+2025-02-25 14:01:17,333 - scout.ui.views.settings_tab - INFO - Settings tab initialized
+2025-02-25 14:01:17,336 - scout.ui.main_window - INFO - Overlay view initialized
+2025-02-25 14:01:17,336 - scout.ui.main_window - INFO - Main window initialized
+2025-02-25 14:01:17,398 - scout.ui.main_window - INFO - Checking for updates in background
+2025-02-25 14:01:18,586 - scout.core.updater.update_checker - ERROR - Unexpected error checking for updates: Expecting value: line 1 column 1 (char 0)
+2025-02-25 14:01:27,045 - scout.ui.views.detection_tab - INFO - Running detection with strategy: template, params: {'confidence_threshold': 0.7, 'max_results': 10}
+2025-02-25 14:01:27,046 - scout.core.window.window_service - ERROR - Error getting window position: WINDOW_CHANGED
+2025-02-25 14:01:27,046 - scout.core.detection.detection_service - WARNING - Failed to capture screenshot
+2025-02-25 14:01:27,046 - scout.ui.widgets.detection_result_widget - INFO - No detection results to display
+2025-02-25 14:03:19,777 - root - INFO - Logging to file: resources/logs/scout.log
+2025-02-25 14:03:19,777 - root - INFO - Logging initialized with level: info
+2025-02-25 14:03:19,778 - __main__ - INFO - Starting Scout application
+2025-02-25 14:03:19,778 - __main__ - INFO - Default directories created successfully
+2025-02-25 14:03:19,778 - __main__ - INFO - Starting GUI application
+2025-02-25 14:03:19,791 - scout.ui.utils.language_manager - INFO - Using translations directory: D:\OneDrive\AI\Projekte\Bot_worldscan\scout\translations
+2025-02-25 14:03:19,802 - scout.ui.utils.language_manager - INFO - Applied language: en_US
+2025-02-25 14:03:19,802 - scout.ui.utils.language_manager - INFO - LanguageManager initialized with language: en
+2025-02-25 14:03:19,827 - scout.core.window.window_service - INFO - Found window: 'Total Battle' (hwnd: 197180)
+2025-02-25 14:03:19,827 - scout.core.window.window_service - INFO - Window service initialized for window: 'Total Battle'
+2025-02-25 14:03:19,828 - scout.core.automation.automation_service - INFO - Automation service initialized
+2025-02-25 14:03:19,828 - scout.core.game.game_service - INFO - Game service initialized
+2025-02-25 14:03:19,845 - scout.core.detection.detection_service - INFO - Registered detection strategy: template
+2025-02-25 14:03:19,973 - scout.core.detection.detection_service - INFO - Registered detection strategy: ocr
+2025-02-25 14:03:19,974 - scout.ui.main_window - WARNING - YOLO model not found at D:\OneDrive\AI\Projekte\Bot_worldscan\resources\models\yolov5n.pt, YOLO detection will not be available
+2025-02-25 14:03:19,974 - scout.ui.main_window - INFO - Services initialized and registered
+2025-02-25 14:03:20,003 - scout.ui.widgets.template_list_widget - INFO - Template list widget initialized with directory: scout\resources\templates
+2025-02-25 14:03:20,007 - scout.ui.widgets.detection_result_widget - INFO - Detection result widget initialized
+2025-02-25 14:03:20,012 - scout.ui.widgets.template_list_widget - INFO - Loaded 2 templates from scout\resources\templates
+2025-02-25 14:03:20,012 - scout.ui.views.detection_tab - INFO - Loaded 2 templates from scout\resources\templates
+2025-02-25 14:03:20,012 - scout.ui.views.detection_tab - INFO - Detection tab initialized
+2025-02-25 14:03:20,017 - scout.ui.views.automation_tab - INFO - Automation tab initialized
+2025-02-25 14:03:20,019 - scout.ui.views.game_tab - INFO - Game state tab initialized
+2025-02-25 14:03:20,021 - scout.ui.models.settings_model - INFO - Loaded settings from C:\Users\schrd\.scout\settings.json
+2025-02-25 14:03:20,022 - scout.ui.models.settings_model - INFO - Settings model initialized
+2025-02-25 14:03:20,022 - scout.ui.views.settings_tab - INFO - Settings tab initialized
+2025-02-25 14:03:20,025 - scout.ui.main_window - INFO - Overlay view initialized
+2025-02-25 14:03:20,025 - scout.ui.main_window - INFO - Main window initialized
+2025-02-25 14:03:20,080 - scout.ui.main_window - INFO - Checking for updates in background
+2025-02-25 14:03:21,278 - scout.core.updater.update_checker - ERROR - Unexpected error checking for updates: Expecting value: line 1 column 1 (char 0)
+2025-02-25 14:03:37,050 - scout.ui.views.detection_tab - INFO - Running detection with strategy: template, params: {'confidence_threshold': 0.7, 'max_results': 10}
+2025-02-25 14:03:37,050 - scout.core.window.window_service - ERROR - Error getting window position: EventBus.generic_event_signal[str, object].emit(): argument 1 has unexpected type 'EventType'
+2025-02-25 14:03:37,050 - scout.core.detection.detection_service - WARNING - Failed to capture screenshot
+2025-02-25 14:03:37,050 - scout.ui.widgets.detection_result_widget - INFO - No detection results to display

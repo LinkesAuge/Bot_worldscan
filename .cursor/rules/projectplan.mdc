@@ -2,7 +2,7 @@
 description: The plan for our rework / restructure / architecture / refactor that needs to be followed for our code implementation
 globs: *.py
 ---
-Make sure to usethe memory.mdc file as your memory.
+Make sure to usethe memory.mdc file as your memory and look at/reference the bugfixing.mdc.
 The file must be referenced and updated with any progress or changes!
 please remember to do not more than 24 tool calls in one reply. Ask for feedback inbetween.
 
