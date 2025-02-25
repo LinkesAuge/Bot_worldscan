@@ -213,8 +213,14 @@ scout/
       - ✅ Configurable overlay with confidence threshold filter
       - ✅ Control bar for quick settings adjustment
       - ✅ Performance optimizations for handling many markers
-    - ⬜ Historical detection visualization
-    - ⬜ Game state visualization
+    - ✅ Historical detection visualization
+      - ✅ Timeline view for browsing detection history
+      - ✅ Playback controls (play, pause, speed control)
+      - ✅ Trend analysis (counts, distribution, hotspots)
+      - ✅ Export functionality (CSV, JSON, HTML)
+      - ✅ Detailed detection results display
+    - ⬜ Heatmap for detection frequency
+  - ⬜ Game state visualization
   - ⬜ Configuration Interface
     - ⬜ Detection configuration
     - ⬜ Automation sequence configuration
