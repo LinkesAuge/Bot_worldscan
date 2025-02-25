@@ -21,10 +21,9 @@ globs:
 ---
 # Project Memory
 
-Date: 2023-11-30
+Date: 2025-02-25
 Status: Implementation in progress
-Phase: Phase 3 - Integration and Testing
-Active Task: UI Components
+Phase: Phase 5 - Multilanguage Support
 
 ## Project Structure
 The project is organized as follows:
@@ -94,18 +93,37 @@ scout/
 │   ├── models/
 │   │   ├── __init__.py
 │   │   └── settings_model.py
+│   ├── styles/
+│   │   ├── __init__.py
+│   │   └── theme_manager.py
+│   ├── utils/
+│   │   ├── __init__.py
+│   │   ├── shortcuts.py
+│   │   └── language_manager.py
 │   ├── views/
 │   │   ├── __init__.py
 │   │   ├── detection_tab.py
 │   │   ├── automation_tab.py
 │   │   ├── game_tab.py
-│   │   └── settings_tab.py
+│   │   ├── settings_tab.py
+│   │   └── overlay_view.py
+│   ├── dialogs/
+│   │   ├── __init__.py
+│   │   └── keyboard_shortcuts_dialog.py
 │   └── widgets/
 │       ├── __init__.py
 │       ├── template_list_widget.py
 │       ├── detection_result_widget.py
 │       ├── control_panel_widget.py
 │       └── game_state_widget.py
+├── translations/
+│   ├── scout_en.ts
+│   ├── scout_en.qm
+│   ├── scout_de.ts
+│   ├── scout_de.qm
+│   ├── create_ts_files.py
+│   ├── compile_translations.py
+│   └── verify_translations.py
 ├── resources/
 │   ├── templates/
 │   ├── sequences/
@@ -168,215 +186,148 @@ scout/
   - ✅ Automation Service Implementation
   - ✅ Task Scheduler and Executor
 
-### Phase 3: Integration and Testing (IN PROGRESS)
-- ✅ Integration Tests (COMPLETED)
+### Phase 3: Integration and Testing (COMPLETED)
+- ✅ Integration Tests
   - ✅ Window-Detection Integration Tests
   - ✅ Detection-Game Integration Tests
   - ✅ Game-Automation Integration Tests
   - ✅ End-to-End Integration Tests
-- ✅ End-to-End Testing (COMPLETED)
+- ✅ End-to-End Testing
   - ✅ Resource Collection Workflow
   - ✅ Building Upgrade Workflow
   - ✅ Map Exploration Workflow
-- ✅ Performance Optimization (COMPLETED)
+- ✅ Performance Optimization
   - ✅ Profiling and Bottleneck Identification
   - ✅ Caching Implementation
   - ✅ Parallel Processing
   - ✅ Memory Management
   - ✅ Integration of Optimizations
   - ✅ Performance Testing and Verification
-- 🔄 UI Components (IN PROGRESS)
+- ✅ UI Components
   - ✅ Core UI Framework
-    - ✅ Created __init__.py files for all UI packages
-    - ✅ Implemented ServiceLocator for dependency management
-    - ✅ Implemented OverlayView for visualization
-    - ✅ Implemented MainWindow with event handling
-    - ✅ Set up menus, toolbars, and status bar
   - ✅ Tab-specific Views
-    - ✅ Implemented DetectionTab for configuring and running detection operations
-    - ✅ Implemented AutomationTab for managing automation sequences
-    - ✅ Implemented GameTab for state management and transitions
-    - ✅ Implemented SettingsTab for application configuration
   - ✅ Specialized UI Widgets
-    - ✅ Implemented TemplateListWidget for template management
-    - ✅ Implemented DetectionResultWidget for result visualization
-  - ✅ Control Panel (COMPLETED)
-    - ✅ Main application controls (start/stop/pause buttons)
-    - ✅ Quick access toolbar (screenshot, template detection, OCR functions)
-    - ✅ Context-sensitive action panel (changes based on selected tab)
-    - ✅ Integration with MainWindow functionality
-    - ✅ Unit tests for ControlPanelWidget functionality
-  - ⬜ Visualization Components
-    - ✅ Real-time detection overlay
-      - ✅ Enhanced detection visualization with strategy-specific styles
-      - ✅ Interactive markers with hover and selection capabilities
-      - ✅ Configurable overlay with confidence threshold filter
-      - ✅ Control bar for quick settings adjustment
-      - ✅ Performance optimizations for handling many markers
-    - ✅ Historical detection visualization
-      - ✅ Timeline view for browsing detection history
-      - ✅ Playback controls (play, pause, speed control)
-      - ✅ Trend analysis (counts, distribution, hotspots)
-      - ✅ Export functionality (CSV, JSON, HTML)
-      - ✅ Detailed detection results display
-    - ⬜ Heatmap for detection frequency
-  - ⬜ Game state visualization
-  - ⬜ Configuration Interface
-    - ⬜ Detection configuration
-    - ⬜ Automation sequence configuration
-    - ⬜ Application settings configuration
+  - ✅ Control Panel
+  - ✅ Visualization Components
+  - ✅ Configuration Interface
 
-## Implementation Notes
+### Phase 4: UI Integration and Finalization (COMPLETED)
+- ✅ Theme System Implementation
+  - ✅ Theme Manager in scout/ui/styles/theme_manager.py
+  - ✅ Default theme stylesheets (System, Light, Dark)
+  - ✅ Theme persistence and switching
+- ✅ Keyboard Shortcuts System
+  - ✅ Shortcut Manager in scout/ui/utils/shortcuts.py
+  - ✅ Contextual shortcut organization
+  - ✅ Shortcut customization and dialog
+- ✅ Overlay Visualization Improvements
+  - ✅ Enhanced drawing capabilities in scout/ui/views/overlay_view.py
+  - ✅ Customization options for better visualization
 
-### Core Infrastructure
-- Implemented singleton, observer, strategy, and factory patterns
-- Created an event system with pub/sub functionality
-- Defined service interfaces for all major components
+### Phase 5: Multilanguage Support (English and German) (IN PROGRESS)
 
-### Window Management Module
-- Implemented `WindowService` following the `WindowServiceInterface`
-- Created `WindowCapture` using Strategy pattern for different capture methods
-  - `MSSCaptureStrategy` for fast screen capture
-  - `Win32CaptureStrategy` for precise client area capture
-- Added event-based notifications for window state changes
-- Implemented coordinate conversions between screen and client coordinates
-- Created unit tests to verify functionality
-- Enhanced window tracking with DPI scaling awareness
+#### 5.1 Infrastructure Setup (IN PROGRESS)
+- ✅ Create `LanguageManager` class for centralized language control
+  - ✅ Implemented in scout/ui/utils/language_manager.py
+  - ✅ Support for English (base) and German languages
+  - ✅ System language auto-detection
+  - ✅ Runtime language switching
+  - ✅ Persistent language preferences
+- ✅ Set up translation file structure
+  - ✅ Created directory structure in scout/translations/
+  - ✅ Added English (scout_en.ts) and German (scout_de.ts) translation files
+  - ✅ Added utility scripts for managing translations
+  - ✅ Integration with Qt's built-in translation system
+- ✅ Implement language selection in Settings UI
+  - ✅ Added language selection dropdown in scout/ui/views/settings_tab.py
+  - ✅ Added immediate UI update on language change
+  - ✅ Added indication of changes requiring restart
+- ✅ Update application initialization to support localization
+  - ✅ Integrated `LanguageManager` with main application
+  - ✅ Set up initialization in main.py
+  - ✅ Added support for Qt's translation mechanisms
 
-### Detection System Module
-- Created `DetectionStrategy` interface with common detection methods
-- Implemented multiple concrete detection strategies:
-  - `TemplateMatchingStrategy`: For image template-based detection
-    - Supports loading templates from directory
-    - Configurable matching method and threshold
-    - Performance optimized with result grouping
-  - `OCRStrategy`: For text recognition using Tesseract OCR
-    - Supports multiple preprocessing methods
-    - Region-specific text extraction
-    - Pattern matching and confidence filtering
-  - `YOLOStrategy`: For neural network-based object detection
-    - Support for multiple frameworks (OpenCV, ONNX, Ultralytics)
-    - Configurable confidence thresholds
-    - Class filtering capabilities
-- Implemented `DetectionService` that:
-  - Manages and coordinates multiple detection strategies
-  - Provides convenient methods for common detection tasks
-  - Implements caching for improved performance
-  - Publishes events when detections occur
-  - Integrates with WindowService for screenshot capture
-- Created comprehensive unit tests for all components
-- Added standardized detection result format for consistency across strategies
+#### 5.2 UI String Externalization (IN PROGRESS)
+- ✅ Replace hardcoded strings in MainWindow and core components
+  - ✅ Updated menu items, toolbar tooltips, status messages
+  - ✅ Updated dialog texts and button labels
+  - ✅ Updated error messages and notifications
+- 🔄 Update detection-related UI components
+  - ⬜ DetectionTab and related widgets
+  - ⬜ Detection result visualizations
+  - ⬜ Template management interfaces
+- ⬜ Update automation-related UI components
+  - ⬜ AutomationTab and related widgets
+  - ⬜ Action editors and sequence builders
+  - ⬜ Task execution interfaces
+- ⬜ Update game state visualization components
+  - ⬜ Game state tabs and views
+  - ⬜ Resource displays and visualizations
+  - ⬜ Map and entity visualizations
+- ⬜ Update settings and dialog components
+  - ⬜ All settings categories and labels
+  - ⬜ Configuration dialogs
+  - ⬜ Help and information panels
+- ⬜ Handle special cases 
+  - ⬜ Plurals (different in English and German)
+  - ⬜ Formatted strings with variables
+  - ⬜ Context-sensitive translations
 
-### Game State Module
-- Created comprehensive Game State data models:
-  - `Coordinates`: For tracking positions in the game world
-  - `Resource` and `Resources`: For tracking game resources
-  - `Building`: For tracking buildings and their levels
-  - `Army`: For tracking armies and units
-  - `MapEntity`: For tracking entities discovered on the map
-  - `GameState`: Central data structure for game state
-- Implemented `GameService` that:
-  - Uses the Detection Service to extract game information from screenshots
-  - Maintains and updates the game state based on detections
-  - Parses text to extract coordinates and resource information
-  - Processes different types of detection results (template, OCR, YOLO)
-  - Persists the game state to disk for continuity across sessions
-  - Publishes events when the game state changes
-  - Provides a clean interface for querying the game state
-- Created `GameServiceInterface` to define the contract for game services
-- Implemented detection region configuration for targeted analysis
-- Added coordinate conversion between screen and game-world coordinates
-- Created comprehensive unit tests for the Game Service
+#### 5.3 Translation Creation (IN PROGRESS)
+- ✅ Set up translation creation tools
+  - ✅ Created create_ts_files.py for initial file generation
+  - ✅ Created compile_translations.py for compiling .ts to .qm
+  - ✅ Created verify_translations.py for translation verification
+- ✅ Create initial translation files
+  - ✅ Generated English base translations (scout_en.ts)
+  - ✅ Generated German translations (scout_de.ts)
+  - ✅ Organized by component context
+- 🔄 Complete translations
+  - ✅ Basic UI strings for main window and settings
+  - ⬜ Detection and automation strings
+  - ⬜ Game state visualization strings
+  - ⬜ Advanced settings and configuration strings
+- ⬜ Compile translations
+  - ⬜ Convert .ts files to binary .qm format
+  - ⬜ Include in application package
+  - ⬜ Set up automatic compilation in build process
 
-### Automation Module
-- Designed a flexible Task system using the Command pattern:
-  - `Task`: Base class for all automation tasks
-  - `CompositeTask`: For composing multiple tasks into sequences
-  - Task dependencies and priorities
-  - Support for success/failure callbacks
-  - Comprehensive task status tracking
-- Implemented a wide range of task types:
-  - Basic tasks: Click, Drag, Type, Wait, Detect
-  - Game-specific tasks: NavigateToCoordinates, WaitForElement, CollectResources, ScanArea
-- Created `AutomationService` that:
-  - Manages scheduling and execution of tasks
-  - Handles task dependencies and priorities
-  - Executes tasks in a background thread
-  - Provides callbacks for task completion
-  - Handles error recovery and retry logic
-  - Supports saving and loading task sequences
-  - Integrates with other services via the service locator
+#### 5.4 Testing and Refinement (PLANNED)
+- ⬜ Test UI rendering in all supported languages
+- ⬜ Address layout issues 
+- ⬜ Create documentation for the translation system
 
-### UI Components
-- Implemented a clean directory structure following the MVC pattern:
-  - `controllers/`: For application logic
-  - `models/`: For data models
-  - `views/`: For tab-specific UI views
-  - `widgets/`: For reusable UI components
-- Created the core UI framework:
-  - `ServiceLocator`: For managing service dependencies with type-safe access
-  - `OverlayView`: Transparent window for visualizing detection results
-  - `MainWindow`: Application window with tabs, menus, and event handling
-- Implemented tab-specific views:
-  - `DetectionTab`: For configuring and running detection operations
-    - Support for multiple detection strategies
-    - Template management interface
-    - Detection result visualization
-  - `AutomationTab`: For creating and managing automation sequences
-    - Sequence editor for adding/removing/reordering actions
-    - Action property editor for configuring actions
-    - Execution controls for running/stopping sequences
-  - `GameTab`: For managing game state
-    - State variable editor for viewing/editing state
-    - State transition editor for defining state transitions
-    - State history view for tracking changes
-  - `SettingsTab`: For configuring application settings
-    - Tabbed interface for different setting categories
-    - Settings model for loading/saving/validating settings
-- Created specialized UI widgets:
-  - `TemplateListWidget`: For managing and selecting template images
-    - Template import/delete/rename functionality
-    - Preview capabilities
-    - Drag-and-drop support
-  - `DetectionResultWidget`: For visualizing detection results
-    - Image display with result overlays
-    - Results table with details and selection
-    - Zoom/pan capabilities for detailed inspection
-  - `ControlPanelWidget`: For application-wide controls
-    - Main control buttons (start/stop/pause)
-    - Context-sensitive panels that update based on current tab
-    - Quick access toolbar for frequently used actions
-    - Integrated with MainWindow for handling actions
-    - Comprehensive unit tests to verify functionality
-    - Proper event handling and signal/slot connections
+### Phase 6: Final Release Preparation (PLANNED)
+- ⬜ Comprehensive Documentation
+- ⬜ Error Reporting and Recovery
+- ⬜ Packaging and Distribution
+- ⬜ Final Testing and Quality Assurance
 
-## Next Steps
-1. Complete UI Components:
-   - Implement visualization components:
-     - Real-time detection overlay
-     - Historical detection visualization
-     - Game state visualization
-   - Create configuration interfaces:
-     - Detection configuration
-     - Automation sequence configuration
-     - Application settings configuration
-2. Prepare for final release:
-   - Documentation
-   - Configuration system
-   - Error reporting
-   - Packaging and distribution
+## Current Implementation Notes
 
-## Dependencies
-- Core:
-  - OpenCV: For image processing and template matching
-  - Tesseract OCR: For text recognition
-  - Pytesseract: Python binding for Tesseract
-  - MSS: For fast screen capture
-  - NumPy: For numerical operations
-  - Psutil: For system resource monitoring
-  - Matplotlib: For visualization of benchmark results
-- UI:
-  - PyQt6: For GUI framework
-- Optional:
-  - ONNX Runtime: For ONNX model inference
-  - Ultralytics: For YOLOv8 models
+### Multilanguage Support Implementation
+
+The multilanguage support is being implemented following these design principles:
+
+1. **Centralized Language Management**: The `LanguageManager` class in `scout/ui/utils/language_manager.py` provides a singleton manager that handles language switching throughout the application.
+
+2. **Translation Resources**: Translation files are stored in the `scout/translations/` directory:
+   - `.ts` files: XML-based source files containing the original strings and translations
+   - `.qm` files: Compiled binary translation files used at runtime
+
+3. **Translation Function**: The `tr()` function provides a consistent way to mark strings for translation across the codebase.
+
+4. **User Interface**: Language selection is integrated into the Settings Tab, allowing users to choose between:
+   - System default language (auto-detected)
+   - English
+   - German
+
+5. **Persistence**: Language preferences are stored using QSettings to persist between application sessions.
+
+### Next Implementation Steps
+
+1. Continue replacing hardcoded strings with `tr()` calls in all UI components.
+2. Complete the German translations for all UI components.
+3. Add more contexts to translation files as needed.
+4. Test language switching and UI layout with different languages.
+5. Add compiled .qm files to the project.

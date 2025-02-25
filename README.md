@@ -10,6 +10,7 @@ Scout is a powerful automation and computer vision tool designed to detect and i
 - **Game State Tracking**: Monitor and record game state changes over time
 - **Real-time Visualization**: Overlay detection results on the game window
 - **Extensible Architecture**: Modular design with clean interfaces
+- **Multi-language Support**: Available in English and German with easy switching
 
 ## Installation
 
@@ -77,6 +78,14 @@ python main.py
 3. Set up state transitions based on detection results
 4. View the state history to track changes over time
 
+### Changing Language Settings
+
+1. Go to the Settings tab
+2. Select the "UI" section
+3. Choose your preferred language from the dropdown (English or German)
+4. The application will immediately switch to the selected language
+5. Some components may require an application restart to fully update
+
 ## Architecture
 
 Scout is built with a modular architecture following the MVC pattern:
@@ -91,6 +100,9 @@ Scout is built with a modular architecture following the MVC pattern:
   - **Models**: Data models
   - **Views**: UI views
   - **Widgets**: Reusable UI components
+- **Localization**: Internationalization components
+  - **LanguageManager**: Manages language switching and persistence
+  - **Translations**: Language resource files
 
 ## Development
 
@@ -100,7 +112,14 @@ Scout is built with a modular architecture following the MVC pattern:
 scout/
 ├── core/          # Core functionality
 ├── ui/            # User interface
+│   ├── utils/
+│   │   ├── language_manager.py  # Language management system
 ├── resources/     # Application resources
+├── translations/  # Language files
+│   ├── scout_en.ts  # English translation source
+│   ├── scout_en.qm  # Compiled English translation
+│   ├── scout_de.ts  # German translation source
+│   └── scout_de.qm  # Compiled German translation
 ├── tests/         # Test suite
 ├── main.py        # Application entry point
 └── requirements.txt  # Dependencies
@@ -110,6 +129,29 @@ scout/
 
 ```bash
 pytest
+```
+
+### Translation Workflow
+
+To update or modify translations:
+
+1. Update source strings in code:
+```python
+# Use tr() function or QObject.tr() method
+label = QLabel(tr("Hello World"))
+self.button.setText(self.tr("Click Me"))
+```
+
+2. Extract translatable strings:
+```bash
+pylupdate6 scout/**/*.py -ts scout/translations/scout_en.ts scout/translations/scout_de.ts
+```
+
+3. Edit translations using Qt Linguist or any text editor (XML format)
+
+4. Compile translations:
+```bash
+lrelease scout/translations/scout_en.ts scout/translations/scout_de.ts
 ```
 
 ### Code Style

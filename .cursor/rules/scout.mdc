@@ -2,6 +2,7 @@
 description: General rules for the project
 globs: *.py
 ---
+Make sure not to use more than 24 tool calls per reply, take breaks inbetween.
 ---
 description: General rules for the project
 globs: *.py

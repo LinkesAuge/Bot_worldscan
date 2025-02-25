@@ -18,12 +18,14 @@ from PyQt6.QtGui import QIcon, QAction
 from PyQt6.QtCore import Qt, pyqtSignal
 
 from pathlib import Path
+from datetime import datetime
 
 from scout.core.window.window_service_interface import WindowServiceInterface
 from scout.core.detection.detection_service_interface import DetectionServiceInterface
 from scout.ui.widgets.template_list_widget import TemplateListWidget
 from scout.ui.widgets.detection_result_widget import DetectionResultWidget
 from scout.ui.widgets.detection_history_widget import DetectionHistoryWidget
+from scout.ui.widgets.detection_heatmap_widget import DetectionHeatmapWidget
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -89,11 +91,18 @@ class DetectionTab(QWidget):
         history_tab = QWidget()
         self.view_tabs.addTab(history_tab, "Detection History")
         
+        # Create heatmap tab
+        heatmap_tab = QWidget()
+        self.view_tabs.addTab(heatmap_tab, "Detection Heatmap")
+        
         # Setup real-time detection tab
         self._setup_realtime_tab(realtime_tab)
         
         # Setup history tab
         self._setup_history_tab(history_tab)
+        
+        # Setup heatmap tab
+        self._setup_heatmap_tab(heatmap_tab)
     
     def _setup_realtime_tab(self, tab_widget: QWidget) -> None:
         """
@@ -214,16 +223,44 @@ class DetectionTab(QWidget):
         Args:
             tab_widget: Tab widget to set up
         """
-        # Create layout for history tab
-        history_layout = QVBoxLayout(tab_widget)
+        # Create layout
+        layout = QVBoxLayout(tab_widget)
         
         # Create detection history widget
-        self.history_widget = DetectionHistoryWidget(
+        self._history_widget = DetectionHistoryWidget(
             self.window_service, 
             self.detection_service
         )
         
-        history_layout.addWidget(self.history_widget)
+        # Add to layout
+        layout.addWidget(self._history_widget)
+        
+        # Load sample data for testing
+        # TODO: Remove or make configurable in production
+        self._history_widget.load_sample_data()
+    
+    def _setup_heatmap_tab(self, tab_widget: QWidget) -> None:
+        """
+        Set up the detection heatmap tab.
+        
+        Args:
+            tab_widget: Tab widget to set up
+        """
+        # Create layout
+        layout = QVBoxLayout(tab_widget)
+        
+        # Create detection heatmap widget
+        self._heatmap_widget = DetectionHeatmapWidget(
+            self.window_service, 
+            self.detection_service
+        )
+        
+        # Add to layout
+        layout.addWidget(self._heatmap_widget)
+        
+        # Connect signals
+        # When a detection occurs, add it to both the history and heatmap widgets
+        # This is handled in the _on_detection_result method
     
     def _connect_signals(self) -> None:
         """Connect UI signals to slots."""
@@ -354,7 +391,7 @@ class DetectionTab(QWidget):
             self._detection_results = results
             
             # Add to history
-            self.history_widget.add_detection_result(results, self._current_strategy)
+            self._history_widget.add_detection_result(results, self._current_strategy)
             
             # Emit signal with strategy and results
             self.detection_requested.emit(self._current_strategy, params)
@@ -385,4 +422,29 @@ class DetectionTab(QWidget):
                 "height": self.region_height_spin.value()
             }
         
-        return params 
+        return params
+
+    def _on_detection_result(self, strategy: str, results: List[Dict]) -> None:
+        """
+        Handle detection results.
+        
+        Args:
+            strategy: Detection strategy used
+            results: List of detection results
+        """
+        # Get current screenshot
+        screenshot = self.window_service.capture_screenshot()
+        
+        # Add to history widget
+        timestamp = datetime.now()
+        self._history_widget.add_to_history(timestamp, results, strategy, screenshot)
+        
+        # Add to heatmap widget
+        self._heatmap_widget.add_detection_event(timestamp, results, strategy, screenshot)
+        
+        # Update tab title with result count
+        tab_text = f"Detection History ({len(results)} new)"
+        self.view_tabs.setTabText(1, tab_text)
+        
+        # Log the results
+        logger.info(f"Detection completed: {strategy} with {len(results)} results") 

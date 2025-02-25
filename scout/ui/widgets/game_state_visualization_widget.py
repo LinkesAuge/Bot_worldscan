@@ -10,7 +10,7 @@ at a glance.
 import logging
 from typing import Dict, List, Optional, Any, Tuple
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timedelta
 import cv2
 from collections import defaultdict
 from pathlib import Path
@@ -32,7 +32,7 @@ from PyQt6.QtCore import (
     Qt, pyqtSignal, QRect, QSize, QPoint, QTimer, QRectF, QPointF
 )
 
-from scout.core.game.game_state_service_interface import GameStateServiceInterface
+from scout.core.game.game_service_interface import GameServiceInterface
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -45,7 +45,7 @@ class ResourcesView(QWidget):
     with graphical indicators.
     """
     
-    def __init__(self, game_state_service: GameStateServiceInterface):
+    def __init__(self, game_state_service: GameServiceInterface):
         """
         Initialize the resources view.
         
@@ -59,6 +59,7 @@ class ResourcesView(QWidget):
         # Initialize state
         self._resources = {}
         self._resource_history = defaultdict(list)
+        self._timestamps = []
         
         # Create UI layout
         self._create_ui()
@@ -114,12 +115,48 @@ class ResourcesView(QWidget):
         
         main_layout.addWidget(self.resources_group)
         
-        # Add resource history graph placeholder
+        # Add resource history graph
         history_group = QGroupBox("Resource History")
         history_layout = QVBoxLayout(history_group)
         
-        history_layout.addWidget(QLabel("Resource history graph placeholder"))
+        # Set up matplotlib for resource history graph
+        import matplotlib
+        matplotlib.use('Qt5Agg')  # Use Qt5Agg backend for PyQt6 compatibility
+        from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+        from matplotlib.figure import Figure
         
+        # Create figure and canvas
+        self.figure = Figure(figsize=(5, 4), dpi=100)
+        self.canvas = FigureCanvas(self.figure)
+        self.canvas.setMinimumHeight(200)
+        
+        # Create axes for plotting
+        self.axes = self.figure.add_subplot(111)
+        self.axes.set_title('Resource History')
+        self.axes.set_xlabel('Time')
+        self.axes.set_ylabel('Amount')
+        
+        # Add chart to layout
+        history_layout.addWidget(self.canvas)
+        
+        # Add control panel for the chart
+        control_layout = QHBoxLayout()
+        
+        # Resource selection for chart
+        self.chart_resource_combo = QComboBox()
+        self.chart_resource_combo.addItems(standard_resources)
+        self.chart_resource_combo.currentIndexChanged.connect(self._update_chart)
+        control_layout.addWidget(QLabel("Resource:"))
+        control_layout.addWidget(self.chart_resource_combo)
+        
+        # Time range for chart
+        self.chart_timerange_combo = QComboBox()
+        self.chart_timerange_combo.addItems(["Last 10 minutes", "Last hour", "Last day", "All"])
+        self.chart_timerange_combo.currentIndexChanged.connect(self._update_chart)
+        control_layout.addWidget(QLabel("Time Range:"))
+        control_layout.addWidget(self.chart_timerange_combo)
+        
+        history_layout.addLayout(control_layout)
         main_layout.addWidget(history_group)
         
         # Add stretcher to keep widgets at top
@@ -135,6 +172,10 @@ class ResourcesView(QWidget):
             
             # Get resources
             resources = game_state.get('resources', {})
+            
+            # Store timestamp
+            current_time = datetime.now()
+            self._timestamps.append(current_time)
             
             # Update UI with resource data
             for resource_name, resource_data in resources.items():
@@ -167,12 +208,138 @@ class ResourcesView(QWidget):
                 # Limit history size
                 if len(self._resource_history[resource_name]) > 100:
                     self._resource_history[resource_name].pop(0)
+                    self._timestamps.pop(0)
             
             # Store resources for other use
             self._resources = resources
             
+            # Update chart
+            self._update_chart()
+            
         except Exception as e:
             logger.error(f"Error updating resources: {e}")
+    
+    def _update_chart(self) -> None:
+        """Update the resource history chart."""
+        try:
+            # Check if we have any data
+            if not self._resource_history or not self._timestamps:
+                return
+            
+            # Get selected resource
+            resource_name = self.chart_resource_combo.currentText().lower()
+            
+            # Get selected time range
+            time_range = self.chart_timerange_combo.currentText()
+            
+            # Determine how many data points to show
+            if time_range == "Last 10 minutes":
+                cutoff_time = datetime.now() - timedelta(minutes=10)
+                start_idx = next((i for i, t in enumerate(self._timestamps) if t >= cutoff_time), 0)
+            elif time_range == "Last hour":
+                cutoff_time = datetime.now() - timedelta(hours=1)
+                start_idx = next((i for i, t in enumerate(self._timestamps) if t >= cutoff_time), 0)
+            elif time_range == "Last day":
+                cutoff_time = datetime.now() - timedelta(days=1)
+                start_idx = next((i for i, t in enumerate(self._timestamps) if t >= cutoff_time), 0)
+            else:  # All
+                start_idx = 0
+            
+            # Get data to plot
+            if resource_name in self._resource_history:
+                resource_data = self._resource_history[resource_name][start_idx:]
+                timestamps = self._timestamps[start_idx:]
+                
+                # Clear previous plot
+                self.axes.clear()
+                
+                # Plot data
+                if resource_data and timestamps:
+                    self.axes.plot(timestamps, resource_data, 'b-')
+                    
+                    # Format the x-axis as time
+                    self.figure.autofmt_xdate()
+                    
+                    # Set labels
+                    self.axes.set_title(f'{resource_name.capitalize()} History')
+                    self.axes.set_xlabel('Time')
+                    self.axes.set_ylabel('Amount')
+                    
+                    # Update canvas
+                    self.canvas.draw()
+            
+        except Exception as e:
+            logger.error(f"Error updating resource chart: {e}")
+    
+    def refresh(self) -> None:
+        """Refresh the view with the latest data."""
+        self._update_resources()
+    
+    def update_data(self, resources_data: Dict[str, Any]) -> None:
+        """
+        Update the view with provided resource data.
+        
+        Args:
+            resources_data: Resource data dictionary
+        """
+        # Create a formatted resources dictionary
+        resources = {}
+        
+        # Extract resources and production rates
+        for resource_name in self.resource_labels.keys():
+            # Get amount (check different possible structures)
+            amount = 0
+            if resource_name in resources_data:
+                if isinstance(resources_data[resource_name], dict):
+                    amount = resources_data[resource_name].get('amount', 0)
+                else:
+                    amount = resources_data[resource_name]
+            
+            # Get production rate
+            production = 0
+            if 'production' in resources_data and resource_name in resources_data['production']:
+                production = resources_data['production'][resource_name]
+            
+            # Create resource entry
+            resources[resource_name] = {
+                'amount': amount,
+                'production_rate': production
+            }
+        
+        # Store resources
+        self._resources = resources
+        
+        # Store timestamp and history
+        current_time = datetime.now()
+        self._timestamps.append(current_time)
+        
+        for resource_name, data in resources.items():
+            self._resource_history[resource_name].append(data['amount'])
+        
+        # Update UI
+        for resource_name, resource_data in resources.items():
+            # Update resource labels if they exist
+            if resource_name in self.resource_labels:
+                amount = resource_data.get('amount', 0)
+                production = resource_data.get('production_rate', 0)
+                
+                self.resource_labels[resource_name].setText(f"{amount:,}")
+                
+                self.production_labels[resource_name].setText(f"{production:+,}/h")
+                
+                # Update trend indicator
+                if production > 0:
+                    self.trend_indicators[resource_name].setText("↑")
+                    self.trend_indicators[resource_name].setStyleSheet("color: green;")
+                elif production < 0:
+                    self.trend_indicators[resource_name].setText("↓")
+                    self.trend_indicators[resource_name].setStyleSheet("color: red;")
+                else:
+                    self.trend_indicators[resource_name].setText("→")
+                    self.trend_indicators[resource_name].setStyleSheet("color: gray;")
+        
+        # Update chart
+        self._update_chart()
 
 
 class MapView(QWidget):
@@ -185,7 +352,7 @@ class MapView(QWidget):
     
     entity_selected = pyqtSignal(dict)  # Signal when an entity is selected
     
-    def __init__(self, game_state_service: GameStateServiceInterface):
+    def __init__(self, game_state_service: GameServiceInterface):
         """
         Initialize the map view.
         
@@ -656,7 +823,7 @@ class BuildingsView(QWidget):
     and production information.
     """
     
-    def __init__(self, game_state_service: GameStateServiceInterface):
+    def __init__(self, game_state_service: GameServiceInterface):
         """
         Initialize the buildings view.
         
@@ -763,7 +930,7 @@ class ArmyView(QWidget):
     Displays units, their stats, locations, and status.
     """
     
-    def __init__(self, game_state_service: GameStateServiceInterface):
+    def __init__(self, game_state_service: GameServiceInterface):
         """
         Initialize the army view.
         
@@ -791,8 +958,8 @@ class ArmyView(QWidget):
         main_layout = QVBoxLayout(self)
         
         # Create tabs for different views
-        tabs = QTabWidget()
-        main_layout.addWidget(tabs)
+        self._tabs = QTabWidget()
+        main_layout.addWidget(self._tabs)
         
         # Units tab
         units_tab = QWidget()
@@ -821,7 +988,7 @@ class ArmyView(QWidget):
         
         units_layout.addWidget(self.units_table)
         
-        tabs.addTab(units_tab, "Units")
+        self._tabs.addTab(units_tab, "Units")
         
         # Armies tab
         armies_tab = QWidget()
@@ -835,7 +1002,7 @@ class ArmyView(QWidget):
         
         armies_layout.addWidget(self.armies_tree)
         
-        tabs.addTab(armies_tab, "Armies")
+        self._tabs.addTab(armies_tab, "Armies")
     
     def _update_armies(self) -> None:
         """Update armies data from the game state service."""
@@ -968,13 +1135,37 @@ class ArmyView(QWidget):
             for unit_type, unit_data in units.items():
                 count = unit_data.get('count', 0)
                 unit_status = unit_data.get('status', 'ready')
+                health_percent = unit_data.get('health_percent', 100)
+                attack = unit_data.get('attack', 0)
+                defense = unit_data.get('defense', 0)
                 
+                # Create unit item
                 unit_item = QTreeWidgetItem(army_item, [
                     unit_type.capitalize(),
-                    "",
+                    unit_status.capitalize(),
                     f"{count} units",
-                    ""
+                    f"A:{attack} D:{defense} H:{health_percent}%"
                 ])
+                
+                # Set unit status color
+                if unit_status == 'ready':
+                    unit_item.setForeground(1, QColor(0, 150, 0))  # Green
+                elif unit_status == 'marching':
+                    unit_item.setForeground(1, QColor(0, 0, 150))  # Blue
+                elif unit_status == 'fighting':
+                    unit_item.setForeground(1, QColor(150, 0, 0))  # Red
+                elif unit_status == 'wounded':
+                    unit_item.setForeground(1, QColor(150, 75, 0))  # Orange
+                
+                # Set health color based on percentage
+                if health_percent < 25:
+                    unit_item.setForeground(3, QColor(255, 0, 0))  # Red
+                elif health_percent < 50:
+                    unit_item.setForeground(3, QColor(255, 165, 0))  # Orange
+                elif health_percent < 75:
+                    unit_item.setForeground(3, QColor(255, 255, 0))  # Yellow
+                else:
+                    unit_item.setForeground(3, QColor(0, 255, 0))  # Green
 
 
 class GameStateVisualizationWidget(QWidget):
@@ -988,7 +1179,7 @@ class GameStateVisualizationWidget(QWidget):
     - Army units and their status
     """
     
-    def __init__(self, game_state_service: GameStateServiceInterface):
+    def __init__(self, game_state_service: GameServiceInterface):
         """
         Initialize the game state visualization widget.
         
@@ -1009,74 +1200,85 @@ class GameStateVisualizationWidget(QWidget):
         # Main layout
         main_layout = QVBoxLayout(self)
         
-        # Create view mode selector
-        view_selector = QToolBar()
-        
-        # Map view button
-        map_action = QAction("Map View")
-        map_action.setCheckable(True)
-        map_action.setChecked(True)
-        view_selector.addAction(map_action)
-        
-        # Resources view button
-        resources_action = QAction("Resources")
-        resources_action.setCheckable(True)
-        view_selector.addAction(resources_action)
-        
-        # Buildings view button
-        buildings_action = QAction("Buildings")
-        buildings_action.setCheckable(True)
-        view_selector.addAction(buildings_action)
-        
-        # Army view button
-        army_action = QAction("Army")
-        army_action.setCheckable(True)
-        view_selector.addAction(army_action)
-        
-        # Add to main layout
-        main_layout.addWidget(view_selector)
-        
-        # Create stacked widget for different views
-        self.stacked_widget = QStackedWidget()
-        main_layout.addWidget(self.stacked_widget)
-        
-        # Create map view
-        self.map_view = MapView(self.game_state_service)
-        self.stacked_widget.addWidget(self.map_view)
+        # Create tabs for different views
+        self._tabs = QTabWidget()
+        main_layout.addWidget(self._tabs)
         
         # Create resources view
-        self.resources_view = ResourcesView(self.game_state_service)
-        self.stacked_widget.addWidget(self.resources_view)
+        self._resources_view = ResourcesView(self.game_state_service)
+        self._tabs.addTab(self._resources_view, "Resources")
+        
+        # Create map view
+        self._map_view = MapView(self.game_state_service)
+        self._tabs.addTab(self._map_view, "Map")
         
         # Create buildings view
-        self.buildings_view = BuildingsView(self.game_state_service)
-        self.stacked_widget.addWidget(self.buildings_view)
+        self._buildings_view = BuildingsView(self.game_state_service)
+        self._tabs.addTab(self._buildings_view, "Buildings")
         
         # Create army view
-        self.army_view = ArmyView(self.game_state_service)
-        self.stacked_widget.addWidget(self.army_view)
+        self._army_view = ArmyView(self.game_state_service)
+        self._tabs.addTab(self._army_view, "Army")
         
-        # Connect view selector actions
-        map_action.triggered.connect(lambda: self._change_view(0))
-        resources_action.triggered.connect(lambda: self._change_view(1))
-        buildings_action.triggered.connect(lambda: self._change_view(2))
-        army_action.triggered.connect(lambda: self._change_view(3))
-        
-        # Group actions for exclusive selection
-        view_group = QButtonGroup(self)
-        for i, action in enumerate([map_action, resources_action, buildings_action, army_action]):
-            view_group.addButton(action, i)
+        # Connect tab changed signal
+        self._tabs.currentChanged.connect(self._on_tab_changed)
     
-    def _change_view(self, index: int) -> None:
+    def _on_tab_changed(self, index: int) -> None:
         """
-        Change the current view.
+        Handle tab change event.
         
         Args:
-            index: View index
+            index: New tab index
         """
-        self.stacked_widget.setCurrentIndex(index)
+        # Refresh the selected view
+        if index == 0:
+            self._resources_view.refresh()
+        elif index == 1:
+            self._map_view.refresh()
+        elif index == 2:
+            self._buildings_view.refresh()
+        elif index == 3:
+            self._army_view.refresh()
     
-    def update_game_state(self) -> None:
-        """Update the visualization with the latest game state."""
-        # Each view has its own update timer, so we don't need to do anything here
-        pass 
+    def refresh(self) -> None:
+        """Refresh the visualization with the latest game state."""
+        # Get game state from service
+        game_state = self.game_state_service.get_game_state()
+        if not game_state:
+            return
+        
+        # Update all views
+        self._resources_view.refresh()
+        self._map_view.refresh()
+        self._buildings_view.refresh()
+        self._army_view.refresh()
+    
+    def set_game_data(self, game_data: Dict[str, Any]) -> None:
+        """
+        Set game data directly for visualization.
+        
+        Args:
+            game_data: Game state data dictionary
+        """
+        # Update each view with relevant data
+        if 'resources' in game_data:
+            self._resources_view.update_data(game_data['resources'])
+        
+        if 'map' in game_data:
+            self._map_view.update_data(game_data['map'])
+        
+        if 'buildings' in game_data:
+            self._buildings_view.update_data(game_data['buildings'])
+        
+        if 'army' in game_data:
+            self._army_view.update_data(game_data['army'])
+
+    @property
+    def entity_selected(self) -> pyqtSignal:
+        """
+        Signal emitted when an entity is selected.
+        
+        Returns:
+            The entity_selected signal from the map view
+        """
+        return self._map_view.entity_selected 

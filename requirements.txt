@@ -17,6 +17,9 @@ pyyaml>=6.0.0  # Configuration file parsing
 tqdm>=4.65.0  # Progress bars
 colorlog>=6.7.0  # Colored console logging
 
+# Internationalization support
+PyQt6-tools>=6.5.0  # Includes pylupdate6 and lrelease tools
+
 # Testing
 pytest>=7.3.1
 pytest-cov>=4.1.0

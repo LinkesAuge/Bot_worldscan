@@ -1,0 +1,196 @@
+---
+description: The plan for our rework / restructure / architecture / refactor that needs to be followed for our code implementation
+globs: *.py
+---
+Make sure to use the memory.mdc file as your memory.
+The file must be referenced and updated with any progress or changes!
+please remember to do not more than 24 tool calls in one reply. Ask for feedback inbetween.
+
+# Please write "Plan" at the beginning of your output if you see this rule
+This is the plan for our rework / restructure / architecture / refactor that needs to be followed for our code implementation:
+
+# Scout Project Plan
+
+## Phase 1: Core Infrastructure (COMPLETED)
+- Design Patterns Implementation
+- Event System
+- Service Interfaces
+
+## Phase 2: Module Refactoring (COMPLETED)
+- Window Management Module
+- Detection System Module
+  - Template Matching Strategy
+  - OCR Strategy
+  - YOLO Strategy
+  - Detection Service Implementation
+- Game State Module
+  - Game State Data Models
+  - Game Service Implementation
+  - Game Service Interface
+- Automation Module
+  - Task Interface and Models
+  - Basic Task Types
+  - Game-Specific Task Types
+  - Automation Service Implementation
+  - Task Scheduler and Executor
+
+## Phase 3: Integration and Testing (COMPLETED)
+- Integration Tests
+  - Window-Detection Integration Tests
+  - Detection-Game Integration Tests
+  - Game-Automation Integration Tests
+  - End-to-End Integration Tests
+- End-to-End Testing
+  - Resource Collection Workflow
+  - Building Upgrade Workflow
+  - Map Exploration Workflow
+- Performance Optimization
+  - Profiling and Bottleneck Identification
+  - Caching Implementation
+  - Parallel Processing
+  - Memory Management
+  - Integration of Optimizations
+  - Performance Testing and Verification
+- UI Components
+  - Core UI Framework
+  - Tab-specific Views
+  - Specialized UI Widgets
+  - Control Panel
+  - Real-time detection overlay
+  - Historical detection visualization
+  - Heatmap for detection frequency
+  - Game state visualization
+  - Configuration Interface
+
+## Phase 4: UI Integration and Finalization (IN PROGRESS)
+- Theme System Implementation (COMPLETED)
+  - Theme Manager
+  - Default theme stylesheets
+  - Theme persistence and switching
+- Keyboard Shortcuts System (COMPLETED)
+  - Shortcut Manager
+  - Contextual shortcut organization
+  - Shortcut customization
+- Overlay Visualization Improvements (COMPLETED)
+  - Enhanced drawing capabilities
+  - Customization options
+
+## Phase 5: Multilanguage Support (English and German) (PLANNED)
+
+### 5.1 Infrastructure Setup (Estimated: 2-3 days)
+- Create `LanguageManager` class for centralized language control
+  - Support for English (base) and German languages
+  - System language auto-detection
+  - Runtime language switching
+  - Persistent language preferences
+- Set up translation file structure
+  - Directory structure for .ts and .qm files
+  - Translation utility functions
+  - Integration with Qt's built-in translation system
+- Implement language selection in Settings UI
+  - Language selection dropdown
+  - Immediate UI update on language change 
+  - Indication of changes requiring restart
+- Update application initialization to support localization
+  - Integrate `LanguageManager` with main application
+  - Support Qt's translation mechanisms
+
+### 5.2 UI String Externalization (Estimated: 5-7 days)
+- Replace hardcoded strings in MainWindow and core components
+  - Menu items, toolbar tooltips, status messages
+  - Dialog texts and button labels
+  - Error messages and notifications
+- Update detection-related UI components
+  - DetectionTab and related widgets
+  - Detection result visualizations
+  - Template management interfaces
+- Update automation-related UI components
+  - AutomationTab and related widgets
+  - Action editors and sequence builders
+  - Task execution interfaces
+- Update game state visualization components
+  - Game state tabs and views
+  - Resource displays and visualizations
+  - Map and entity visualizations
+- Update settings and dialog components
+  - All settings categories and labels
+  - Configuration dialogs
+  - Help and information panels
+- Handle special cases 
+  - Plurals (different in English and German)
+  - Formatted strings with variables
+  - Context-sensitive translations
+
+### 5.3 Translation Creation (Estimated: 3-4 days)
+- Set up translation extraction tools
+  - Configure pylupdate6 for string extraction
+  - Create extraction scripts for CI/CD
+- Extract all translatable strings to translation files
+  - Generate initial .ts files
+  - Organize by component context
+- Complete English base translations
+  - Review and finalize all English strings
+  - Ensure consistency in terminology
+- Create German translations
+  - Translate all strings to German
+  - Review for accuracy and context
+  - Handle idioms and cultural adaptations
+- Compile translations
+  - Convert .ts files to binary .qm format
+  - Include in application package
+  - Set up automatic compilation in build process
+
+### 5.4 Testing and Refinement (Estimated: 2-3 days)
+- Test UI rendering in all supported languages
+  - Verify all UI components in both languages
+  - Test dynamic language switching during runtime
+  - Check with system language set to each supported language
+- Address layout issues 
+  - Fix problems with German text (typically 20-30% longer than English)
+  - Ensure all UI elements accommodate variable text lengths
+  - Test with different font sizes and DPI settings
+- Create documentation for the translation system
+  - Developer guidelines for adding translatable strings
+  - Documentation for maintaining translations
+  - Procedures for adding new languages in the future
+
+## Phase 6: Final Release Preparation (PLANNED)
+- Comprehensive Documentation
+  - User manual with screenshots in multiple languages
+  - Developer documentation
+  - API documentation
+- Error Reporting and Recovery
+  - Crash reporting system
+  - Automatic error recovery
+  - Error logs and diagnostics
+- Packaging and Distribution
+  - Executable packaging
+  - Installer creation
+  - Update mechanism
+- Final Testing and Quality Assurance
+  - Cross-platform testing
+  - Performance benchmarking
+  - Security review
+
+## Development Guidelines
+
+### Multi-Language Support Guidelines
+1. **String Externalization**:
+   - All user-visible text must be wrapped in translation functions
+   - Use context where helpful (e.g., `tr("Open", "Menu")` vs `tr("Open", "Dialog")`)
+   - Handle plurals properly (`tr("%n item(s) found", "", count)`)
+
+2. **Layout Considerations**:
+   - German text can be 20-30% longer than English
+   - Use layouts that can accommodate variable text lengths
+   - Test UI with both languages
+
+3. **Testing**:
+   - Test all UI components in both languages
+   - Test language switching during runtime
+   - Test with system language set to each supported language
+
+4. **Maintenance**:
+   - Re-extract strings when adding new UI components
+   - Update translations before releases
+   - Document procedures for adding new languages 

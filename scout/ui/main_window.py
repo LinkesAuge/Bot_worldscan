@@ -39,6 +39,9 @@ from scout.ui.views.settings_tab import SettingsTab
 from scout.ui.widgets.detection_result_widget import DetectionResultWidget
 from scout.ui.widgets.control_panel_widget import ControlPanelWidget
 
+# Import language manager
+from scout.ui.utils.language_manager import get_language_manager, tr
+
 # Set up logging
 logger = logging.getLogger(__name__)
 
@@ -246,7 +249,7 @@ class MainWindow(QMainWindow):
     def _init_ui(self):
         """Initialize the user interface."""
         # Set window properties
-        self.setWindowTitle("Scout")
+        self.setWindowTitle(tr("Scout"))
         self.resize(1200, 800)
         
         # Create central widget
@@ -294,15 +297,15 @@ class MainWindow(QMainWindow):
     
     def _on_control_panel_action(self, action_id, params=None):
         """
-        Handle actions from the control panel.
+        Handle action from control panel.
         
         Args:
-            action_id: Action identifier
+            action_id: ID of the action
             params: Optional parameters for the action
         """
         logger.debug(f"Control panel action: {action_id}, params: {params}")
         
-        # Handle actions
+        # Handle common actions
         if action_id == "start":
             self._on_run()
         elif action_id == "stop":
@@ -311,35 +314,30 @@ class MainWindow(QMainWindow):
             self._on_pause()
         elif action_id == "resume":
             self._on_resume()
+        elif action_id == "refresh":
+            self._on_refresh()
         elif action_id == "screenshot":
             self._on_capture_screenshot()
         elif action_id == "toggle_overlay":
-            self._on_toggle_overlay(not self.overlay_action.isChecked())
-            self.overlay_action.setChecked(not self.overlay_action.isChecked())
-        elif action_id == "template_editor":
-            self._on_template_creator()
-        elif action_id == "sequence_editor":
-            self._on_sequence_recorder()
-        elif action_id == "template_detection":
-            self._run_template_detection()
-        elif action_id == "ocr_detection":
-            self._run_ocr_detection()
-        elif action_id == "capture_window":
-            self._on_capture_window()
-        elif action_id == "create_template":
-            self._on_template_creator()
-        elif action_id == "record_sequence":
-            self._on_sequence_recorder()
-        elif action_id == "edit_settings":
-            self._on_preferences()
-        # ... handle other actions ...
+            self._on_toggle_overlay(params.get("checked", False) if params else None)
         else:
-            # Forward to current tab if it has a handle_action method
+            # Handle tab-specific actions
             current_tab = self.tab_widget.currentWidget()
-            if hasattr(current_tab, 'handle_action'):
-                current_tab.handle_action(action_id, params)
-            else:
-                logger.warning(f"Unhandled control panel action: {action_id}")
+            
+            if current_tab == self.detection_tab:
+                if action_id == "run_template_detection":
+                    self._run_template_detection()
+                elif action_id == "run_ocr_detection":
+                    self._run_ocr_detection()
+            elif current_tab == self.automation_tab:
+                # Automation-specific actions
+                pass
+            elif current_tab == self.game_tab:
+                # Game state-specific actions
+                pass
+                
+        # Update status
+        self.control_panel.set_status(tr("Ready"))
     
     def _run_template_detection(self):
         """Run template detection."""
@@ -404,20 +402,20 @@ class MainWindow(QMainWindow):
         """Create the tab widget and individual tabs."""
         # Create detection tab
         self.detection_tab = DetectionTab(self.detection_service, self.window_service)
-        self.tab_widget.addTab(self.detection_tab, "Detection")
+        self.tab_widget.addTab(self.detection_tab, tr("Detection"))
         
         # Create automation tab
         self.automation_tab = AutomationTab(
             self.automation_service, self.detection_service, self.window_service)
-        self.tab_widget.addTab(self.automation_tab, "Automation")
+        self.tab_widget.addTab(self.automation_tab, tr("Automation"))
         
         # Create game state tab
         self.game_tab = GameTab(self.game_state_service, self.detection_service)
-        self.tab_widget.addTab(self.game_tab, "Game State")
+        self.tab_widget.addTab(self.game_tab, tr("Game State"))
         
         # Create settings tab
         self.settings_tab = SettingsTab()
-        self.tab_widget.addTab(self.settings_tab, "Settings")
+        self.tab_widget.addTab(self.settings_tab, tr("Settings"))
         
         # Connect tab changed signal
         self.tab_widget.currentChanged.connect(self._on_tab_changed)
@@ -431,28 +429,28 @@ class MainWindow(QMainWindow):
         menu_bar = self.menuBar()
         
         # File menu
-        file_menu = menu_bar.addMenu("File")
+        file_menu = menu_bar.addMenu(tr("File"))
         
         # File -> New
-        new_action = QAction("New", self)
+        new_action = QAction(tr("New"), self)
         new_action.setShortcut(QKeySequence.StandardKey.New)
         new_action.triggered.connect(self._on_new)
         file_menu.addAction(new_action)
         
         # File -> Open
-        open_action = QAction("Open", self)
+        open_action = QAction(tr("Open"), self)
         open_action.setShortcut(QKeySequence.StandardKey.Open)
         open_action.triggered.connect(self._on_open)
         file_menu.addAction(open_action)
         
         # File -> Save
-        save_action = QAction("Save", self)
+        save_action = QAction(tr("Save"), self)
         save_action.setShortcut(QKeySequence.StandardKey.Save)
         save_action.triggered.connect(self._on_save)
         file_menu.addAction(save_action)
         
         # File -> Save As
-        save_as_action = QAction("Save As", self)
+        save_as_action = QAction(tr("Save As"), self)
         save_as_action.setShortcut(QKeySequence.StandardKey.SaveAs)
         save_as_action.triggered.connect(self._on_save_as)
         file_menu.addAction(save_as_action)
@@ -460,63 +458,66 @@ class MainWindow(QMainWindow):
         file_menu.addSeparator()
         
         # File -> Exit
-        exit_action = QAction("Exit", self)
+        exit_action = QAction(tr("Exit"), self)
         exit_action.setShortcut(QKeySequence.StandardKey.Quit)
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
         
         # Edit menu
-        edit_menu = menu_bar.addMenu("Edit")
+        edit_menu = menu_bar.addMenu(tr("Edit"))
         
         # Edit -> Preferences
-        preferences_action = QAction("Preferences", self)
+        preferences_action = QAction(tr("Preferences"), self)
+        preferences_action.setShortcut(QKeySequence("Ctrl+,"))
         preferences_action.triggered.connect(self._on_preferences)
         edit_menu.addAction(preferences_action)
         
         # View menu
-        view_menu = menu_bar.addMenu("View")
+        view_menu = menu_bar.addMenu(tr("View"))
         
-        # View -> Overlay
-        self.overlay_action = QAction("Show Overlay", self)
+        # View -> Refresh
+        refresh_action = QAction(tr("Refresh"), self)
+        refresh_action.setShortcut(QKeySequence.StandardKey.Refresh)
+        refresh_action.triggered.connect(self._on_refresh)
+        view_menu.addAction(refresh_action)
+        
+        # View -> Toggle Overlay
+        self.overlay_action = QAction(tr("Show Overlay"), self)
         self.overlay_action.setCheckable(True)
         self.overlay_action.setChecked(False)
         self.overlay_action.triggered.connect(self._on_toggle_overlay)
         view_menu.addAction(self.overlay_action)
         
-        # View -> Refresh
-        refresh_action = QAction("Refresh", self)
-        refresh_action.setShortcut(QKeySequence.StandardKey.Refresh)
-        refresh_action.triggered.connect(self._on_refresh)
-        view_menu.addAction(refresh_action)
+        # View -> Capture Screenshot
+        screenshot_action = QAction(tr("Capture Screenshot"), self)
+        screenshot_action.setShortcut(QKeySequence("Ctrl+P"))
+        screenshot_action.triggered.connect(self._on_capture_screenshot)
+        view_menu.addAction(screenshot_action)
         
         # Tools menu
-        tools_menu = menu_bar.addMenu("Tools")
-        
-        # Tools -> Capture Screenshot
-        screenshot_action = QAction("Capture Screenshot", self)
-        screenshot_action.triggered.connect(self._on_capture_screenshot)
-        tools_menu.addAction(screenshot_action)
+        tools_menu = menu_bar.addMenu(tr("Tools"))
         
         # Tools -> Template Creator
-        template_creator_action = QAction("Template Creator", self)
+        template_creator_action = QAction(tr("Template Creator"), self)
         template_creator_action.triggered.connect(self._on_template_creator)
         tools_menu.addAction(template_creator_action)
         
         # Tools -> Sequence Recorder
-        sequence_recorder_action = QAction("Sequence Recorder", self)
+        sequence_recorder_action = QAction(tr("Sequence Recorder"), self)
         sequence_recorder_action.triggered.connect(self._on_sequence_recorder)
         tools_menu.addAction(sequence_recorder_action)
         
         # Help menu
-        help_menu = menu_bar.addMenu("Help")
+        help_menu = menu_bar.addMenu(tr("Help"))
         
         # Help -> Documentation
-        docs_action = QAction("Documentation", self)
-        docs_action.triggered.connect(self._on_documentation)
-        help_menu.addAction(docs_action)
+        documentation_action = QAction(tr("Documentation"), self)
+        documentation_action.setShortcut(QKeySequence.StandardKey.HelpContents)
+        documentation_action.triggered.connect(self._on_documentation)
+        help_menu.addAction(documentation_action)
         
         # Help -> About
-        about_action = QAction("About", self)
+        about_action = QAction(tr("About"), self)
         about_action.triggered.connect(self._on_about)
         help_menu.addAction(about_action)
     
@@ -578,16 +579,21 @@ class MainWindow(QMainWindow):
     def _create_status_bar(self):
         """Create the status bar."""
         # Create status bar
-        status_bar = QStatusBar()
-        self.setStatusBar(status_bar)
+        self.status_bar = QStatusBar()
+        self.setStatusBar(self.status_bar)
         
         # Create status labels
-        self.status_label = QLabel("Ready")
-        status_bar.addWidget(self.status_label, 1)
+        self.status_label = QLabel(tr("Ready"))
+        self.status_bar.addWidget(self.status_label)
         
-        # Create window status label
-        self.window_status = QLabel("No target window")
-        status_bar.addPermanentWidget(self.window_status)
+        # Add window status label
+        self.window_status_label = QLabel(tr("No Window Selected"))
+        self.window_status_label.setStyleSheet("color: red;")
+        self.status_bar.addPermanentWidget(self.window_status_label)
+        
+        # Add detection status label
+        self.detection_status_label = QLabel(tr("Detection: Idle"))
+        self.status_bar.addPermanentWidget(self.detection_status_label)
     
     def _create_overlay(self):
         """Create the overlay window."""
@@ -725,7 +731,7 @@ class MainWindow(QMainWindow):
         """
         # Update status bar
         window_title = window_info.get("title", "Unknown")
-        self.window_status.setText(f"Target: {window_title}")
+        self.window_status_label.setText(f"Target: {window_title}")
         
         # Enable actions that require a target window
         self.overlay_action.setEnabled(True)
@@ -733,7 +739,7 @@ class MainWindow(QMainWindow):
     def _on_window_lost(self):
         """Handle window loss event."""
         # Update status bar
-        self.window_status.setText("No target window")
+        self.window_status_label.setText("No target window")
         
         # Disable overlay
         self.overlay_action.setChecked(False)
@@ -974,18 +980,32 @@ class MainWindow(QMainWindow):
 
 
 def run_application():
-    """Run the Scout application."""
+    """
+    Run the application.
+    
+    This function:
+    1. Creates the QApplication instance
+    2. Initializes the language manager
+    3. Creates and shows the main window
+    4. Enters the application event loop
+    
+    Returns:
+        Application exit code
+    """
     # Create application
     app = QApplication(sys.argv)
     app.setApplicationName("Scout")
-    app.setOrganizationName("ScoutTeam")
+    app.setApplicationVersion("0.1.0")
+    
+    # Initialize language manager
+    language_manager = get_language_manager()
     
     # Create main window
     main_window = MainWindow()
     main_window.show()
     
     # Run application
-    sys.exit(app.exec())
+    return app.exec()
 
 
 if __name__ == "__main__":
