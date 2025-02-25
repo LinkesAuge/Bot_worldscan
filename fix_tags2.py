@@ -1,0 +1,1 @@
+with open("scout/tests/translations/test_check_translations.py", "r") as f: content = f.read(); with open("scout/tests/translations/test_check_translations.py", "w") as f: f.write(content.replace("<n>MainWindow</n>", "<name>MainWindow</name>")); print("Done")

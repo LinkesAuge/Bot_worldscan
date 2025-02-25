@@ -8,23 +8,31 @@ interaction with the target application.
 
 import logging
 import json
-from typing import Dict, List, Optional, Any
+import os
+from typing import Dict, List, Optional, Any, Tuple
 from pathlib import Path
+from datetime import datetime
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
     QListWidget, QListWidgetItem, QFrame, QSplitter, QComboBox,
     QToolBar, QScrollArea, QLineEdit, QSpinBox, QCheckBox,
     QMessageBox, QInputDialog, QMenu, QFileDialog, QGridLayout,
-    QGroupBox
+    QGroupBox, QDoubleSpinBox, QTabWidget, QRadioButton, QSizePolicy
 )
-from PyQt6.QtGui import QIcon, QAction, QFont
+from PyQt6.QtGui import QIcon, QAction, QFont, QPixmap, QColor
 from PyQt6.QtCore import Qt, pyqtSignal, QSize, QTimer
 
 from scout.core.automation.automation_service_interface import AutomationServiceInterface
 from scout.core.detection.detection_service_interface import DetectionServiceInterface
 from scout.core.window.window_service_interface import WindowServiceInterface
 from scout.ui.widgets.detection_result_widget import DetectionResultWidget
+from scout.ui.widgets.control_panel_widget import ControlPanelWidget
+from scout.ui.utils.language_manager import tr
+
+# Import action editor and position list
+from .automation_action_editor import AutomationActionEditor
+from .automation_position_list import PositionList
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -59,7 +67,7 @@ class AutomationActionEditor(QWidget):
         main_layout = QVBoxLayout(self)
         
         # Create title label
-        self.title_label = QLabel("Edit Action")
+        self.title_label = QLabel(tr("Edit Action"))
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.title_label.setFont(QFont("Arial", 12, QFont.Weight.Bold))
         main_layout.addWidget(self.title_label)
@@ -75,22 +83,22 @@ class AutomationActionEditor(QWidget):
         scroll_area.setWidget(scroll_content)
         
         # Create common parameters group
-        common_group = QGroupBox("Common Parameters")
+        common_group = QGroupBox(tr("Common Parameters"))
         common_layout = QGridLayout(common_group)
         
         # Action type label & combo
-        common_layout.addWidget(QLabel("Action Type:"), 0, 0)
+        common_layout.addWidget(QLabel(tr("Action Type:")), 0, 0)
         self.action_type_combo = QComboBox()
         self.action_type_combo.addItems([
-            "Click", "Right Click", "Double Click",
-            "Type Text", "Press Key", "Wait",
-            "Wait for Template", "Wait for OCR Text",
-            "Conditional", "Loop", "End Loop"
+            tr("Click"), tr("Right Click"), tr("Double Click"),
+            tr("Type Text"), tr("Press Key"), tr("Wait"),
+            tr("Wait for Template"), tr("Wait for OCR Text"),
+            tr("Conditional"), tr("Loop"), tr("End Loop")
         ])
         common_layout.addWidget(self.action_type_combo, 0, 1)
         
         # Action name label & field
-        common_layout.addWidget(QLabel("Action Name:"), 1, 0)
+        common_layout.addWidget(QLabel(tr("Action Name:")), 1, 0)
         self.action_name_field = QLineEdit()
         common_layout.addWidget(self.action_name_field, 1, 1)
         
@@ -103,7 +111,7 @@ class AutomationActionEditor(QWidget):
         self.params_layout.addWidget(self.specific_params_widget)
         
         # Placeholder for action-specific parameters
-        self.placeholder_label = QLabel("Select an action type to configure parameters")
+        self.placeholder_label = QLabel(tr("Select an action type to configure parameters"))
         self.placeholder_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.specific_params_layout.addWidget(self.placeholder_label)
         
@@ -111,12 +119,12 @@ class AutomationActionEditor(QWidget):
         buttons_layout = QHBoxLayout()
         
         # Apply button
-        self.apply_button = QPushButton("Apply Changes")
+        self.apply_button = QPushButton(tr("Apply Changes"))
         self.apply_button.setEnabled(False)
         buttons_layout.addWidget(self.apply_button)
         
         # Cancel button
-        self.cancel_button = QPushButton("Cancel")
+        self.cancel_button = QPushButton(tr("Cancel"))
         self.cancel_button.setEnabled(False)
         buttons_layout.addWidget(self.cancel_button)
         
@@ -234,42 +242,37 @@ class AutomationActionEditor(QWidget):
             action: Action data dictionary
         """
         # Create group box
-        group = QGroupBox("Click Parameters")
+        group = QGroupBox(tr("Click Parameters"))
         layout = QGridLayout(group)
         
         # X position
-        layout.addWidget(QLabel("X Position:"), 0, 0)
+        layout.addWidget(QLabel(tr("X Position:")), 0, 0)
         self.x_position = QSpinBox()
         self.x_position.setRange(0, 9999)
         self.x_position.setValue(action.get('x', 0))
-        self.x_position.valueChanged.connect(self._on_fields_changed)
         layout.addWidget(self.x_position, 0, 1)
         
         # Y position
-        layout.addWidget(QLabel("Y Position:"), 1, 0)
+        layout.addWidget(QLabel(tr("Y Position:")), 1, 0)
         self.y_position = QSpinBox()
         self.y_position.setRange(0, 9999)
         self.y_position.setValue(action.get('y', 0))
-        self.y_position.valueChanged.connect(self._on_fields_changed)
         layout.addWidget(self.y_position, 1, 1)
         
-        # Use relative position
-        layout.addWidget(QLabel("Relative to Target:"), 2, 0)
-        self.relative_checkbox = QCheckBox()
-        self.relative_checkbox.setChecked(action.get('relative', False))
-        self.relative_checkbox.stateChanged.connect(self._on_fields_changed)
-        layout.addWidget(self.relative_checkbox, 2, 1)
-        
-        # Add optional delay
-        layout.addWidget(QLabel("Delay After (ms):"), 3, 0)
-        self.delay_spinbox = QSpinBox()
-        self.delay_spinbox.setRange(0, 10000)
-        self.delay_spinbox.setValue(action.get('delay_after', 0))
-        self.delay_spinbox.valueChanged.connect(self._on_fields_changed)
-        layout.addWidget(self.delay_spinbox, 3, 1)
+        # Delay
+        layout.addWidget(QLabel(tr("Delay (ms):")), 2, 0)
+        self.delay = QSpinBox()
+        self.delay.setRange(0, 60000)
+        self.delay.setValue(action.get('delay', 500))
+        layout.addWidget(self.delay, 2, 1)
         
         # Add group to layout
         self.specific_params_layout.addWidget(group)
+        
+        # Connect signals
+        self.x_position.valueChanged.connect(self._on_fields_changed)
+        self.y_position.valueChanged.connect(self._on_fields_changed)
+        self.delay.valueChanged.connect(self._on_fields_changed)
     
     def _create_type_text_params(self, action: Dict[str, Any]) -> None:
         """
@@ -279,94 +282,117 @@ class AutomationActionEditor(QWidget):
             action: Action data dictionary
         """
         # Create group box
-        group = QGroupBox("Type Text Parameters")
+        group = QGroupBox(tr("Text Input Parameters"))
         layout = QGridLayout(group)
         
-        # Text to type
-        layout.addWidget(QLabel("Text:"), 0, 0)
-        self.text_field = QLineEdit()
-        self.text_field.setText(action.get('text', ''))
-        self.text_field.textChanged.connect(self._on_fields_changed)
-        layout.addWidget(self.text_field, 0, 1)
+        # Text
+        layout.addWidget(QLabel(tr("Text:")), 0, 0)
+        self.text = QLineEdit()
+        self.text.setText(action.get('text', ''))
+        layout.addWidget(self.text, 0, 1)
         
-        # Typing speed
-        layout.addWidget(QLabel("Typing Speed:"), 1, 0)
-        self.speed_combo = QComboBox()
-        self.speed_combo.addItems(["Fast", "Normal", "Slow"])
-        speed = action.get('speed', 'normal')
-        index = self.speed_combo.findText(speed.capitalize())
-        if index >= 0:
-            self.speed_combo.setCurrentIndex(index)
-        self.speed_combo.currentIndexChanged.connect(self._on_fields_changed)
-        layout.addWidget(self.speed_combo, 1, 1)
+        # Delay
+        layout.addWidget(QLabel(tr("Delay between keys (ms):")), 1, 0)
+        self.delay = QSpinBox()
+        self.delay.setRange(0, 1000)
+        self.delay.setValue(action.get('delay', 50))
+        layout.addWidget(self.delay, 1, 1)
         
-        # Add optional delay
-        layout.addWidget(QLabel("Delay After (ms):"), 2, 0)
-        self.delay_spinbox = QSpinBox()
-        self.delay_spinbox.setRange(0, 10000)
-        self.delay_spinbox.setValue(action.get('delay_after', 0))
-        self.delay_spinbox.valueChanged.connect(self._on_fields_changed)
-        layout.addWidget(self.delay_spinbox, 2, 1)
+        # Enter key
+        layout.addWidget(QLabel(tr("Press Enter after text:")), 2, 0)
+        self.press_enter = QCheckBox()
+        self.press_enter.setChecked(action.get('press_enter', False))
+        layout.addWidget(self.press_enter, 2, 1)
         
         # Add group to layout
         self.specific_params_layout.addWidget(group)
+        
+        # Connect signals
+        self.text.textChanged.connect(self._on_fields_changed)
+        self.delay.valueChanged.connect(self._on_fields_changed)
+        self.press_enter.stateChanged.connect(self._on_fields_changed)
     
     def _create_press_key_params(self, action: Dict[str, Any]) -> None:
         """
-        Create parameters UI for press key actions.
+        Create parameters UI for pressing key actions.
         
         Args:
             action: Action data dictionary
         """
         # Create group box
-        group = QGroupBox("Press Key Parameters")
+        group = QGroupBox(tr("Key Press Parameters"))
         layout = QGridLayout(group)
         
-        # Key to press
-        layout.addWidget(QLabel("Key:"), 0, 0)
-        self.key_combo = QComboBox()
-        self.key_combo.addItems([
-            "Enter", "Escape", "Tab", "Space", "Backspace", "Delete",
-            "Home", "End", "Page Up", "Page Down",
-            "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12",
-            "Arrow Up", "Arrow Down", "Arrow Left", "Arrow Right"
-        ])
-        key = action.get('key', 'Enter')
-        index = self.key_combo.findText(key)
+        # Key
+        layout.addWidget(QLabel(tr("Key:")), 0, 0)
+        self.key = QComboBox()
+        
+        # Add common keys
+        key_groups = {
+            tr("Special Keys"): ['enter', 'tab', 'space', 'backspace', 'escape', 'delete'],
+            tr("Arrow Keys"): ['up', 'down', 'left', 'right'],
+            tr("Function Keys"): [f'f{i}' for i in range(1, 13)],
+            tr("Modifier Keys"): ['shift', 'ctrl', 'alt', 'win'],
+            tr("Common Keys"): ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
+                            'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
+                            '0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
+        }
+        
+        for group_name, keys in key_groups.items():
+            self.key.addItem(group_name, None)  # Add group header
+            for key in keys:
+                self.key.addItem(key, key)  # Add actual key
+        
+        # Set current key if available
+        key_value = action.get('key', 'enter')
+        index = self.key.findData(key_value)
         if index >= 0:
-            self.key_combo.setCurrentIndex(index)
-        self.key_combo.currentIndexChanged.connect(self._on_fields_changed)
-        layout.addWidget(self.key_combo, 0, 1)
+            self.key.setCurrentIndex(index)
+        
+        layout.addWidget(self.key, 0, 1)
         
         # Modifiers
-        layout.addWidget(QLabel("Ctrl:"), 1, 0)
-        self.ctrl_checkbox = QCheckBox()
-        self.ctrl_checkbox.setChecked(action.get('ctrl', False))
-        self.ctrl_checkbox.stateChanged.connect(self._on_fields_changed)
-        layout.addWidget(self.ctrl_checkbox, 1, 1)
+        modifiers_group = QGroupBox(tr("Modifiers"))
+        modifiers_layout = QVBoxLayout(modifiers_group)
         
-        layout.addWidget(QLabel("Alt:"), 2, 0)
-        self.alt_checkbox = QCheckBox()
-        self.alt_checkbox.setChecked(action.get('alt', False))
-        self.alt_checkbox.stateChanged.connect(self._on_fields_changed)
-        layout.addWidget(self.alt_checkbox, 2, 1)
+        self.shift_mod = QCheckBox(tr("Shift"))
+        self.shift_mod.setChecked(action.get('shift', False))
+        modifiers_layout.addWidget(self.shift_mod)
         
-        layout.addWidget(QLabel("Shift:"), 3, 0)
-        self.shift_checkbox = QCheckBox()
-        self.shift_checkbox.setChecked(action.get('shift', False))
-        self.shift_checkbox.stateChanged.connect(self._on_fields_changed)
-        layout.addWidget(self.shift_checkbox, 3, 1)
+        self.ctrl_mod = QCheckBox(tr("Control"))
+        self.ctrl_mod.setChecked(action.get('ctrl', False))
+        modifiers_layout.addWidget(self.ctrl_mod)
         
-        # Add optional delay
-        layout.addWidget(QLabel("Delay After (ms):"), 4, 0)
-        self.delay_spinbox = QSpinBox()
-        self.delay_spinbox.setRange(0, 10000)
-        self.delay_spinbox.setValue(action.get('delay_after', 0))
-        self.delay_spinbox.valueChanged.connect(self._on_fields_changed)
-        layout.addWidget(self.delay_spinbox, 4, 1)
+        self.alt_mod = QCheckBox(tr("Alt"))
+        self.alt_mod.setChecked(action.get('alt', False))
+        modifiers_layout.addWidget(self.alt_mod)
+        
+        layout.addWidget(modifiers_group, 1, 0, 1, 2)
+        
+        # Repeat
+        layout.addWidget(QLabel(tr("Repeat Count:")), 2, 0)
+        self.repeat_count = QSpinBox()
+        self.repeat_count.setRange(1, 100)
+        self.repeat_count.setValue(action.get('repeat', 1))
+        layout.addWidget(self.repeat_count, 2, 1)
+        
+        # Delay
+        layout.addWidget(QLabel(tr("Delay between repeats (ms):")), 3, 0)
+        self.delay = QSpinBox()
+        self.delay.setRange(0, 10000)
+        self.delay.setValue(action.get('delay', 100))
+        layout.addWidget(self.delay, 3, 1)
         
         # Add group to layout
         self.specific_params_layout.addWidget(group)
+        
+        # Connect signals
+        self.key.currentIndexChanged.connect(self._on_fields_changed)
+        self.shift_mod.stateChanged.connect(self._on_fields_changed)
+        self.ctrl_mod.stateChanged.connect(self._on_fields_changed)
+        self.alt_mod.stateChanged.connect(self._on_fields_changed)
+        self.repeat_count.valueChanged.connect(self._on_fields_changed)
+        self.delay.valueChanged.connect(self._on_fields_changed)
     
     def _create_wait_params(self, action: Dict[str, Any]) -> None:
         """
@@ -376,74 +402,93 @@ class AutomationActionEditor(QWidget):
             action: Action data dictionary
         """
         # Create group box
-        group = QGroupBox("Wait Parameters")
+        group = QGroupBox(tr("Wait Parameters"))
         layout = QGridLayout(group)
         
         # Duration
-        layout.addWidget(QLabel("Duration (ms):"), 0, 0)
-        self.duration_spinbox = QSpinBox()
-        self.duration_spinbox.setRange(0, 60000)
-        self.duration_spinbox.setValue(action.get('duration', 1000))
-        self.duration_spinbox.valueChanged.connect(self._on_fields_changed)
-        layout.addWidget(self.duration_spinbox, 0, 1)
+        layout.addWidget(QLabel(tr("Duration (ms):")), 0, 0)
+        self.duration = QSpinBox()
+        self.duration.setRange(0, 3600000)  # Up to 1 hour
+        self.duration.setValue(action.get('duration', 1000))
+        layout.addWidget(self.duration, 0, 1)
         
         # Add group to layout
         self.specific_params_layout.addWidget(group)
+        
+        # Connect signals
+        self.duration.valueChanged.connect(self._on_fields_changed)
     
     def _create_wait_for_params(self, action: Dict[str, Any], action_type: str) -> None:
         """
-        Create parameters UI for wait for template/OCR actions.
+        Create parameters UI for wait for template/text actions.
         
         Args:
             action: Action data dictionary
-            action_type: Action type string
+            action_type: 'wait_for_template' or 'wait_for_ocr_text'
         """
-        # Create group box
-        title = "Wait for Template" if action_type == "wait_for_template" else "Wait for OCR Text"
-        group = QGroupBox(title)
-        layout = QGridLayout(group)
-        
-        if action_type == "wait_for_template":
+        if action_type == 'wait_for_template':
+            # Create group box for template wait
+            group = QGroupBox(tr("Wait for Template Parameters"))
+            layout = QGridLayout(group)
+            
             # Template name
-            layout.addWidget(QLabel("Template:"), 0, 0)
-            self.template_field = QLineEdit()
-            self.template_field.setText(action.get('template', ''))
-            self.template_field.textChanged.connect(self._on_fields_changed)
-            layout.addWidget(self.template_field, 0, 1)
+            layout.addWidget(QLabel(tr("Template Name:")), 0, 0)
+            self.template_name = QComboBox()
+            
+            # Load available templates
+            template_dir = Path('resources/templates')
+            if template_dir.exists():
+                template_files = list(template_dir.glob('*.png'))
+                template_names = [f.stem for f in template_files]
+                if template_names:
+                    self.template_name.addItems(template_names)
+            
+            # Set current template if available
+            template = action.get('template', '')
+            index = self.template_name.findText(template)
+            if index >= 0:
+                self.template_name.setCurrentIndex(index)
+            
+            layout.addWidget(self.template_name, 0, 1)
         else:
-            # OCR text
-            layout.addWidget(QLabel("Text:"), 0, 0)
-            self.text_field = QLineEdit()
-            self.text_field.setText(action.get('text', ''))
-            self.text_field.textChanged.connect(self._on_fields_changed)
-            layout.addWidget(self.text_field, 0, 1)
+            # Create group box for OCR text wait
+            group = QGroupBox(tr("Wait for OCR Text Parameters"))
+            layout = QGridLayout(group)
+            
+            # Text to wait for
+            layout.addWidget(QLabel(tr("Text:")), 0, 0)
+            self.text = QLineEdit()
+            self.text.setText(action.get('text', ''))
+            layout.addWidget(self.text, 0, 1)
         
-        # Confidence threshold
-        layout.addWidget(QLabel("Confidence:"), 1, 0)
-        self.confidence_spinbox = QSpinBox()
-        self.confidence_spinbox.setRange(1, 100)
-        self.confidence_spinbox.setValue(int(action.get('confidence', 0.7) * 100))
-        self.confidence_spinbox.valueChanged.connect(self._on_fields_changed)
-        layout.addWidget(self.confidence_spinbox, 1, 1)
-        
+        # Common parameters
         # Timeout
-        layout.addWidget(QLabel("Timeout (ms):"), 2, 0)
-        self.timeout_spinbox = QSpinBox()
-        self.timeout_spinbox.setRange(0, 60000)
-        self.timeout_spinbox.setValue(action.get('timeout', 5000))
-        self.timeout_spinbox.valueChanged.connect(self._on_fields_changed)
-        layout.addWidget(self.timeout_spinbox, 2, 1)
+        layout.addWidget(QLabel(tr("Timeout (ms):")), 1, 0)
+        self.timeout = QSpinBox()
+        self.timeout.setRange(0, 3600000)  # Up to 1 hour
+        self.timeout.setValue(action.get('timeout', 10000))
+        layout.addWidget(self.timeout, 1, 1)
         
-        # Check interval
-        layout.addWidget(QLabel("Check Interval (ms):"), 3, 0)
-        self.interval_spinbox = QSpinBox()
-        self.interval_spinbox.setRange(100, 5000)
-        self.interval_spinbox.setValue(action.get('interval', 500))
-        self.interval_spinbox.valueChanged.connect(self._on_fields_changed)
-        layout.addWidget(self.interval_spinbox, 3, 1)
+        # Confidence threshold (for template matching)
+        if action_type == 'wait_for_template':
+            layout.addWidget(QLabel(tr("Confidence Threshold:")), 2, 0)
+            self.confidence = QDoubleSpinBox()
+            self.confidence.setRange(0.1, 1.0)
+            self.confidence.setSingleStep(0.05)
+            self.confidence.setValue(action.get('confidence', 0.7))
+            layout.addWidget(self.confidence, 2, 1)
         
         # Add group to layout
         self.specific_params_layout.addWidget(group)
+        
+        # Connect signals
+        if action_type == 'wait_for_template':
+            self.template_name.currentIndexChanged.connect(self._on_fields_changed)
+            self.confidence.valueChanged.connect(self._on_fields_changed)
+        else:
+            self.text.textChanged.connect(self._on_fields_changed)
+        
+        self.timeout.valueChanged.connect(self._on_fields_changed)
     
     def _create_conditional_params(self, action: Dict[str, Any]) -> None:
         """
@@ -453,59 +498,65 @@ class AutomationActionEditor(QWidget):
             action: Action data dictionary
         """
         # Create group box
-        group = QGroupBox("Conditional Parameters")
+        group = QGroupBox(tr("Conditional Parameters"))
         layout = QGridLayout(group)
         
         # Condition type
-        layout.addWidget(QLabel("Condition Type:"), 0, 0)
-        self.condition_combo = QComboBox()
-        self.condition_combo.addItems([
-            "Template Found", "OCR Text Found", "Not Found"
+        layout.addWidget(QLabel(tr("Condition Type:")), 0, 0)
+        self.condition_type = QComboBox()
+        self.condition_type.addItems([
+            tr("Template Found"),
+            tr("OCR Text Found"),
+            tr("Color at Point"),
+            tr("Pixel Comparison")
         ])
-        condition = action.get('condition', 'template_found')
-        if condition == 'template_found':
+        
+        # Set current condition type if available
+        condition_type = action.get('condition_type', 'template_found')
+        index = 0
+        
+        if condition_type == 'template_found':
             index = 0
-        elif condition == 'ocr_text_found':
+        elif condition_type == 'ocr_text_found':
             index = 1
-        else:
+        elif condition_type == 'color_at_point':
             index = 2
-        self.condition_combo.setCurrentIndex(index)
-        self.condition_combo.currentIndexChanged.connect(self._on_fields_changed)
-        layout.addWidget(self.condition_combo, 0, 1)
+        elif condition_type == 'pixel_comparison':
+            index = 3
         
-        # Target (template or text)
-        layout.addWidget(QLabel("Target:"), 1, 0)
-        self.target_field = QLineEdit()
-        self.target_field.setText(action.get('target', ''))
-        self.target_field.textChanged.connect(self._on_fields_changed)
-        layout.addWidget(self.target_field, 1, 1)
+        self.condition_type.setCurrentIndex(index)
+        layout.addWidget(self.condition_type, 0, 1)
         
-        # Confidence threshold
-        layout.addWidget(QLabel("Confidence:"), 2, 0)
-        self.confidence_spinbox = QSpinBox()
-        self.confidence_spinbox.setRange(1, 100)
-        self.confidence_spinbox.setValue(int(action.get('confidence', 0.7) * 100))
-        self.confidence_spinbox.valueChanged.connect(self._on_fields_changed)
-        layout.addWidget(self.confidence_spinbox, 2, 1)
+        # Create container for condition-specific params
+        self.condition_params_widget = QWidget()
+        self.condition_params_layout = QVBoxLayout(self.condition_params_widget)
         
-        # Then action index
-        layout.addWidget(QLabel("Then Jump To:"), 3, 0)
-        self.then_spinbox = QSpinBox()
-        self.then_spinbox.setRange(0, 100)
-        self.then_spinbox.setValue(action.get('then_index', 0))
-        self.then_spinbox.valueChanged.connect(self._on_fields_changed)
-        layout.addWidget(self.then_spinbox, 3, 1)
+        # Create condition-specific params based on type
+        self._create_condition_specific_params(condition_type, action)
         
-        # Else action index
-        layout.addWidget(QLabel("Else Jump To:"), 4, 0)
-        self.else_spinbox = QSpinBox()
-        self.else_spinbox.setRange(0, 100)
-        self.else_spinbox.setValue(action.get('else_index', 0))
-        self.else_spinbox.valueChanged.connect(self._on_fields_changed)
-        layout.addWidget(self.else_spinbox, 4, 1)
+        layout.addWidget(self.condition_params_widget, 1, 0, 1, 2)
+        
+        # True action
+        layout.addWidget(QLabel(tr("If True, Skip to:")), 2, 0)
+        self.true_action = QSpinBox()
+        self.true_action.setRange(0, 999)
+        self.true_action.setValue(action.get('true_action', 0))
+        layout.addWidget(self.true_action, 2, 1)
+        
+        # False action
+        layout.addWidget(QLabel(tr("If False, Skip to:")), 3, 0)
+        self.false_action = QSpinBox()
+        self.false_action.setRange(0, 999)
+        self.false_action.setValue(action.get('false_action', 0))
+        layout.addWidget(self.false_action, 3, 1)
         
         # Add group to layout
         self.specific_params_layout.addWidget(group)
+        
+        # Connect signals
+        self.condition_type.currentIndexChanged.connect(self._on_condition_type_changed)
+        self.true_action.valueChanged.connect(self._on_fields_changed)
+        self.false_action.valueChanged.connect(self._on_fields_changed)
     
     def _create_loop_params(self, action: Dict[str, Any], action_type: str) -> None:
         """
@@ -580,49 +631,47 @@ class AutomationActionEditor(QWidget):
         if action_type in ['click', 'right_click', 'double_click']:
             action['x'] = self.x_position.value()
             action['y'] = self.y_position.value()
-            action['relative'] = self.relative_checkbox.isChecked()
-            action['delay_after'] = self.delay_spinbox.value()
+            action['delay'] = self.delay.value()
             
         elif action_type == 'type_text':
-            action['text'] = self.text_field.text()
-            action['speed'] = self.speed_combo.currentText().lower()
-            action['delay_after'] = self.delay_spinbox.value()
+            action['text'] = self.text.text()
+            action['delay'] = self.delay.value()
+            action['press_enter'] = self.press_enter.isChecked()
             
         elif action_type == 'press_key':
-            action['key'] = self.key_combo.currentText()
-            action['ctrl'] = self.ctrl_checkbox.isChecked()
-            action['alt'] = self.alt_checkbox.isChecked()
-            action['shift'] = self.shift_checkbox.isChecked()
-            action['delay_after'] = self.delay_spinbox.value()
+            action['key'] = self.key.currentText()
+            action['shift'] = self.shift_mod.isChecked()
+            action['ctrl'] = self.ctrl_mod.isChecked()
+            action['alt'] = self.alt_mod.isChecked()
+            action['repeat'] = self.repeat_count.value()
+            action['delay'] = self.delay.value()
             
         elif action_type == 'wait':
-            action['duration'] = self.duration_spinbox.value()
+            action['duration'] = self.duration.value()
             
         elif action_type == 'wait_for_template':
-            action['template'] = self.template_field.text()
-            action['confidence'] = self.confidence_spinbox.value() / 100.0
-            action['timeout'] = self.timeout_spinbox.value()
-            action['interval'] = self.interval_spinbox.value()
+            action['template'] = self.template_name.currentText()
+            action['confidence'] = self.confidence.value()
+            action['timeout'] = self.timeout.value()
             
         elif action_type == 'wait_for_ocr_text':
-            action['text'] = self.text_field.text()
-            action['confidence'] = self.confidence_spinbox.value() / 100.0
-            action['timeout'] = self.timeout_spinbox.value()
-            action['interval'] = self.interval_spinbox.value()
+            action['text'] = self.text.text()
+            action['confidence'] = self.confidence.value()
+            action['timeout'] = self.timeout.value()
             
         elif action_type == 'conditional':
-            index = self.condition_combo.currentIndex()
+            index = self.condition_type.currentIndex()
             if index == 0:
-                action['condition'] = 'template_found'
+                action['condition_type'] = 'template_found'
             elif index == 1:
-                action['condition'] = 'ocr_text_found'
-            else:
-                action['condition'] = 'not_found'
+                action['condition_type'] = 'ocr_text_found'
+            elif index == 2:
+                action['condition_type'] = 'color_at_point'
+            elif index == 3:
+                action['condition_type'] = 'pixel_comparison'
             
-            action['target'] = self.target_field.text()
-            action['confidence'] = self.confidence_spinbox.value() / 100.0
-            action['then_index'] = self.then_spinbox.value()
-            action['else_index'] = self.else_spinbox.value()
+            action['true_action'] = self.true_action.value()
+            action['false_action'] = self.false_action.value()
             
         elif action_type == 'loop':
             index = self.loop_type_combo.currentIndex()
@@ -653,14 +702,201 @@ class AutomationActionEditor(QWidget):
             # Disable apply button
             self.apply_button.setEnabled(False)
 
+    def _create_condition_specific_params(self, condition_type: str, action: Dict[str, Any]) -> None:
+        """
+        Create specific parameters UI for the selected condition type.
+        
+        Args:
+            condition_type: Type of condition
+            action: Action data dictionary
+        """
+        # Clear existing widgets
+        self._clear_condition_params()
+        
+        if condition_type == 'template_found':
+            # Template parameter
+            template_layout = QHBoxLayout()
+            template_layout.addWidget(QLabel(tr("Template:")))
+            self.template_field = QLineEdit()
+            self.template_field.setText(action.get('template', ''))
+            self.template_field.textChanged.connect(self._on_fields_changed)
+            template_layout.addWidget(self.template_field)
+            self.condition_params_layout.addLayout(template_layout)
+            
+            # Confidence parameter
+            confidence_layout = QHBoxLayout()
+            confidence_layout.addWidget(QLabel(tr("Confidence:")))
+            self.confidence_spinbox = QDoubleSpinBox()
+            self.confidence_spinbox.setRange(0.1, 1.0)
+            self.confidence_spinbox.setSingleStep(0.05)
+            self.confidence_spinbox.setValue(action.get('confidence', 0.7))
+            self.confidence_spinbox.valueChanged.connect(self._on_fields_changed)
+            confidence_layout.addWidget(self.confidence_spinbox)
+            self.condition_params_layout.addLayout(confidence_layout)
+            
+        elif condition_type == 'ocr_text_found':
+            # Text parameter
+            text_layout = QHBoxLayout()
+            text_layout.addWidget(QLabel(tr("Text:")))
+            self.text_field = QLineEdit()
+            self.text_field.setText(action.get('text', ''))
+            self.text_field.textChanged.connect(self._on_fields_changed)
+            text_layout.addWidget(self.text_field)
+            self.condition_params_layout.addLayout(text_layout)
+            
+            # Confidence parameter
+            confidence_layout = QHBoxLayout()
+            confidence_layout.addWidget(QLabel(tr("Confidence:")))
+            self.confidence_spinbox = QDoubleSpinBox()
+            self.confidence_spinbox.setRange(0.1, 1.0)
+            self.confidence_spinbox.setSingleStep(0.05)
+            self.confidence_spinbox.setValue(action.get('confidence', 0.7))
+            self.confidence_spinbox.valueChanged.connect(self._on_fields_changed)
+            confidence_layout.addWidget(self.confidence_spinbox)
+            self.condition_params_layout.addLayout(confidence_layout)
+            
+        elif condition_type == 'color_at_point':
+            # X,Y coordinates
+            coord_layout = QHBoxLayout()
+            coord_layout.addWidget(QLabel(tr("X:")))
+            self.x_spinbox = QSpinBox()
+            self.x_spinbox.setRange(0, 9999)
+            self.x_spinbox.setValue(action.get('x', 0))
+            self.x_spinbox.valueChanged.connect(self._on_fields_changed)
+            coord_layout.addWidget(self.x_spinbox)
+            
+            coord_layout.addWidget(QLabel(tr("Y:")))
+            self.y_spinbox = QSpinBox()
+            self.y_spinbox.setRange(0, 9999)
+            self.y_spinbox.setValue(action.get('y', 0))
+            self.y_spinbox.valueChanged.connect(self._on_fields_changed)
+            coord_layout.addWidget(self.y_spinbox)
+            self.condition_params_layout.addLayout(coord_layout)
+            
+            # Color
+            color_layout = QHBoxLayout()
+            color_layout.addWidget(QLabel(tr("Color (R,G,B):")))
+            
+            self.r_spinbox = QSpinBox()
+            self.r_spinbox.setRange(0, 255)
+            self.r_spinbox.setValue(action.get('r', 0))
+            self.r_spinbox.valueChanged.connect(self._on_fields_changed)
+            color_layout.addWidget(self.r_spinbox)
+            
+            self.g_spinbox = QSpinBox()
+            self.g_spinbox.setRange(0, 255)
+            self.g_spinbox.setValue(action.get('g', 0))
+            self.g_spinbox.valueChanged.connect(self._on_fields_changed)
+            color_layout.addWidget(self.g_spinbox)
+            
+            self.b_spinbox = QSpinBox()
+            self.b_spinbox.setRange(0, 255)
+            self.b_spinbox.setValue(action.get('b', 0))
+            self.b_spinbox.valueChanged.connect(self._on_fields_changed)
+            color_layout.addWidget(self.b_spinbox)
+            
+            self.condition_params_layout.addLayout(color_layout)
+            
+            # Tolerance
+            tolerance_layout = QHBoxLayout()
+            tolerance_layout.addWidget(QLabel(tr("Tolerance:")))
+            self.tolerance_spinbox = QSpinBox()
+            self.tolerance_spinbox.setRange(0, 255)
+            self.tolerance_spinbox.setValue(action.get('tolerance', 10))
+            self.tolerance_spinbox.valueChanged.connect(self._on_fields_changed)
+            tolerance_layout.addWidget(self.tolerance_spinbox)
+            self.condition_params_layout.addLayout(tolerance_layout)
+            
+        elif condition_type == 'pixel_comparison':
+            # First point
+            point1_layout = QHBoxLayout()
+            point1_layout.addWidget(QLabel(tr("Point 1 (X,Y):")))
+            self.x1_spinbox = QSpinBox()
+            self.x1_spinbox.setRange(0, 9999)
+            self.x1_spinbox.setValue(action.get('x1', 0))
+            self.x1_spinbox.valueChanged.connect(self._on_fields_changed)
+            point1_layout.addWidget(self.x1_spinbox)
+            
+            point1_layout.addWidget(QLabel(tr("Y:")))
+            self.y1_spinbox = QSpinBox()
+            self.y1_spinbox.setRange(0, 9999)
+            self.y1_spinbox.setValue(action.get('y1', 0))
+            self.y1_spinbox.valueChanged.connect(self._on_fields_changed)
+            point1_layout.addWidget(self.y1_spinbox)
+            self.condition_params_layout.addLayout(point1_layout)
+            
+            # Second point
+            point2_layout = QHBoxLayout()
+            point2_layout.addWidget(QLabel(tr("Point 2 (X,Y):")))
+            self.x2_spinbox = QSpinBox()
+            self.x2_spinbox.setRange(0, 9999)
+            self.x2_spinbox.setValue(action.get('x2', 0))
+            self.x2_spinbox.valueChanged.connect(self._on_fields_changed)
+            point2_layout.addWidget(self.x2_spinbox)
+            
+            point2_layout.addWidget(QLabel(tr("Y:")))
+            self.y2_spinbox = QSpinBox()
+            self.y2_spinbox.setRange(0, 9999)
+            self.y2_spinbox.setValue(action.get('y2', 0))
+            self.y2_spinbox.valueChanged.connect(self._on_fields_changed)
+            point2_layout.addWidget(self.y2_spinbox)
+            self.condition_params_layout.addLayout(point2_layout)
+            
+            # Tolerance
+            tolerance_layout = QHBoxLayout()
+            tolerance_layout.addWidget(QLabel(tr("Tolerance:")))
+            self.tolerance_spinbox = QSpinBox()
+            self.tolerance_spinbox.setRange(0, 255)
+            self.tolerance_spinbox.setValue(action.get('tolerance', 10))
+            self.tolerance_spinbox.valueChanged.connect(self._on_fields_changed)
+            tolerance_layout.addWidget(self.tolerance_spinbox)
+            self.condition_params_layout.addLayout(tolerance_layout)
+
+    def _clear_condition_params(self) -> None:
+        """Clear condition-specific parameters widgets."""
+        while self.condition_params_layout.count():
+            item = self.condition_params_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+            elif item.layout():
+                # Clear the layout
+                while item.layout().count():
+                    child = item.layout().takeAt(0)
+                    if child.widget():
+                        child.widget().deleteLater()
+
+    def _on_condition_type_changed(self, index: int) -> None:
+        """
+        Handle condition type change.
+        
+        Args:
+            index: Selected index
+        """
+        if self._current_action is None:
+            return
+        
+        condition_types = ['template_found', 'ocr_text_found', 'color_at_point', 'pixel_comparison']
+        condition_type = condition_types[index]
+        
+        # Update condition-specific parameters
+        self._create_condition_specific_params(condition_type, self._current_action)
+        
+        # Update current action type
+        self._current_action['condition_type'] = condition_type
+        
+        # Enable apply button
+        self._on_fields_changed()
+
 
 class AutomationTab(QWidget):
     """
-    Tab for configuring and executing automation sequences.
+    Automation Tab for creating and running automation sequences.
     
-    This tab provides an interface for creating, editing, and executing
-    sequences of automation actions such as clicks, key presses, text input,
-    and conditional logic.
+    This tab provides:
+    - Management of automation sequences
+    - Action editing and configuration
+    - Execution controls
+    - Simulation capabilities
     """
     
     def __init__(
@@ -673,9 +909,9 @@ class AutomationTab(QWidget):
         Initialize the automation tab.
         
         Args:
-            automation_service: Service for automation operations
+            automation_service: Service for automation execution
             detection_service: Service for detection operations
-            window_service: Service for window management
+            window_service: Service for window operations
         """
         super().__init__()
         
@@ -685,10 +921,9 @@ class AutomationTab(QWidget):
         self.window_service = window_service
         
         # Initialize state
-        self._current_sequence = []
-        self._current_sequence_path = None
-        self._is_running = False
-        self._current_action_index = -1
+        self._current_sequence = {"name": tr("New Sequence"), "actions": []}
+        self._modified = False
+        self._running = False
         
         # Create UI components
         self._create_ui()
@@ -696,7 +931,7 @@ class AutomationTab(QWidget):
         # Connect signals
         self._connect_signals()
         
-        # Load default actions
+        # Create default sequence
         self._create_default_sequence()
         
         logger.info("Automation tab initialized")
@@ -705,128 +940,104 @@ class AutomationTab(QWidget):
         """Create the UI components."""
         # Create main layout
         main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Create toolbar
-        toolbar = QToolBar()
-        toolbar.setIconSize(QSize(24, 24))
-        
-        # Toolbar actions
-        # TODO: Replace with actual icons
-        self.new_action = QAction("New", self)
-        self.open_action = QAction("Open", self)
-        self.save_action = QAction("Save", self)
-        self.run_action = QAction("Run", self)
-        self.stop_action = QAction("Stop", self)
-        
-        toolbar.addAction(self.new_action)
-        toolbar.addAction(self.open_action)
-        toolbar.addAction(self.save_action)
-        toolbar.addSeparator()
-        toolbar.addAction(self.run_action)
-        toolbar.addAction(self.stop_action)
-        
-        main_layout.addWidget(toolbar)
-        
-        # Create splitter for sequence editor and action editor
+        # Create a splitter for sequence selection and editor
         splitter = QSplitter(Qt.Orientation.Horizontal)
-        main_layout.addWidget(splitter)
         
-        # Left panel - Sequence list
+        # Create left panel for sequence selection and actions
         left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
         
-        # Sequence list
-        left_layout.addWidget(QLabel("Automation Sequence"))
+        # Sequence group
+        sequence_group = QGroupBox(tr("Sequence"))
+        sequence_layout = QVBoxLayout(sequence_group)
         
-        self.sequence_list = QListWidget()
-        left_layout.addWidget(self.sequence_list)
+        # Sequence selection and file operations
+        sequence_header_layout = QHBoxLayout()
+        sequence_header_layout.addWidget(QLabel(tr("Sequence:")))
         
-        # Sequence actions
-        sequence_actions = QHBoxLayout()
+        self.sequence_combo = QComboBox()
+        self.sequence_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.sequence_combo.currentIndexChanged.connect(self._on_sequence_changed)
+        sequence_header_layout.addWidget(self.sequence_combo)
         
-        self.add_btn = QPushButton("Add")
-        sequence_actions.addWidget(self.add_btn)
+        sequence_layout.addLayout(sequence_header_layout)
         
-        self.edit_btn = QPushButton("Edit")
-        self.edit_btn.setEnabled(False)
-        sequence_actions.addWidget(self.edit_btn)
+        # Sequence file operations
+        file_layout = QHBoxLayout()
         
-        self.remove_btn = QPushButton("Remove")
-        self.remove_btn.setEnabled(False)
-        sequence_actions.addWidget(self.remove_btn)
+        self.new_button = QPushButton(tr("New"))
+        self.new_button.clicked.connect(self._on_new_clicked)
+        file_layout.addWidget(self.new_button)
         
-        left_layout.addLayout(sequence_actions)
+        self.open_button = QPushButton(tr("Open"))
+        self.open_button.clicked.connect(self._on_open_clicked)
+        file_layout.addWidget(self.open_button)
         
-        # Move actions
-        move_actions = QHBoxLayout()
+        self.save_button = QPushButton(tr("Save"))
+        self.save_button.clicked.connect(self._on_save_clicked)
+        file_layout.addWidget(self.save_button)
         
-        self.move_up_btn = QPushButton("Move Up")
-        self.move_up_btn.setEnabled(False)
-        move_actions.addWidget(self.move_up_btn)
+        sequence_layout.addLayout(file_layout)
         
-        self.move_down_btn = QPushButton("Move Down")
-        self.move_down_btn.setEnabled(False)
-        move_actions.addWidget(self.move_down_btn)
+        # Add sequence group to left panel
+        left_layout.addWidget(sequence_group)
         
-        left_layout.addLayout(move_actions)
+        # Create actions group
+        actions_group = QGroupBox(tr("Sequence Actions"))
+        actions_layout = QVBoxLayout(actions_group)
         
-        # Add left panel to splitter
-        splitter.addWidget(left_panel)
+        # Action list
+        self.action_list = QListWidget()
+        self.action_list.currentItemChanged.connect(self._on_selection_changed)
+        actions_layout.addWidget(self.action_list)
         
-        # Right panel - Action editor
-        right_panel = QWidget()
-        right_layout = QVBoxLayout(right_panel)
+        # Action management buttons
+        action_buttons_layout = QHBoxLayout()
         
-        # Action editor
-        self.action_editor = AutomationActionEditor()
-        right_layout.addWidget(self.action_editor)
+        self.add_button = QPushButton(tr("Add Action"))
+        self.add_button.clicked.connect(self._on_add_clicked)
+        action_buttons_layout.addWidget(self.add_button)
         
-        # Add right panel to splitter
-        splitter.addWidget(right_panel)
+        self.remove_button = QPushButton(tr("Remove"))
+        self.remove_button.clicked.connect(self._on_remove_clicked)
+        self.remove_button.setEnabled(False)
+        action_buttons_layout.addWidget(self.remove_button)
         
-        # Set initial splitter sizes (40% list, 60% editor)
-        splitter.setSizes([400, 600])
+        actions_layout.addLayout(action_buttons_layout)
         
-        # Status label
-        self.status_label = QLabel("Ready")
-        main_layout.addWidget(self.status_label)
-    
-    def _connect_signals(self) -> None:
-        """Connect UI signals to slots."""
-        # Toolbar actions
-        self.new_action.triggered.connect(self._on_new_clicked)
-        self.open_action.triggered.connect(self._on_open_clicked)
-        self.save_action.triggered.connect(self._on_save_clicked)
-        self.run_action.triggered.connect(self._on_run_clicked)
-        self.stop_action.triggered.connect(self._on_stop_clicked)
+        # Movement buttons
+        move_buttons_layout = QHBoxLayout()
         
-        # Sequence actions
-        self.add_btn.clicked.connect(self._on_add_clicked)
-        self.edit_btn.clicked.connect(self._on_edit_clicked)
-        self.remove_btn.clicked.connect(self._on_remove_clicked)
-        self.move_up_btn.clicked.connect(self._on_move_up_clicked)
-        self.move_down_btn.clicked.connect(self._on_move_down_clicked)
-        
-        # Sequence list selection
-        self.sequence_list.itemSelectionChanged.connect(self._on_selection_changed)
+        self.move_up_button = QPushButton(tr("Move Up"))
+        self.move_up_button.clicked.connect(self._on_move_up_clicked)
+        self.move_up_button.setEnabled(False)
+        self.action_list.itemSelectionChanged.connect(self._on_selection_changed)
         
         # Action editor
         self.action_editor.action_updated.connect(self._on_action_updated)
+        
+        # Loop checkbox
+        self.loop_check.toggled.connect(self._on_loop_toggled)
+        
+        # Connect position list to action editor
+        self.position_list.position_selected.connect(self.action_editor.set_position)
     
     def _create_default_sequence(self) -> None:
         """Create a default empty sequence."""
-        self._current_sequence = []
-        self._current_sequence_path = None
+        self._current_sequence = {"name": tr("New Sequence"), "actions": []}
+        self._update_action_list()
         self._update_sequence_list()
-        self.status_label.setText("New sequence created")
+        self._modified = False
     
-    def _update_sequence_list(self) -> None:
-        """Update the sequence list with current actions."""
+    def _update_action_list(self) -> None:
+        """Update the action list with current actions."""
         # Clear list
-        self.sequence_list.clear()
+        self.action_list.clear()
         
         # Add each action
-        for i, action in enumerate(self._current_sequence):
+        for i, action in enumerate(self._current_sequence["actions"]):
             # Create item text
             action_type = action.get('type', 'unknown')
             action_name = action.get('name', '')
@@ -853,41 +1064,25 @@ class AutomationTab(QWidget):
                 item.setBackground(Qt.GlobalColor.green)
             
             # Highlight current action during execution
-            if i == self._current_action_index and self._is_running:
+            if i == self._current_action_index and self._running:
                 item.setForeground(Qt.GlobalColor.red)
                 item.setFont(QFont("Arial", 10, QFont.Weight.Bold))
             
             # Add to list
-            self.sequence_list.addItem(item)
+            self.action_list.addItem(item)
     
-    def _on_selection_changed(self) -> None:
-        """Handle selection change in sequence list."""
-        # Get selected items
-        selected_items = self.sequence_list.selectedItems()
+    def _on_sequence_changed(self) -> None:
+        """Handle sequence change."""
+        # Get selected sequence
+        selected_sequence = self.sequence_combo.currentText()
         
-        # Update button states
-        self.edit_btn.setEnabled(len(selected_items) > 0)
-        self.remove_btn.setEnabled(len(selected_items) > 0)
-        self.move_up_btn.setEnabled(len(selected_items) > 0 and
-                                    selected_items[0].data(Qt.ItemDataRole.UserRole) > 0)
-        self.move_down_btn.setEnabled(len(selected_items) > 0 and
-                                     selected_items[0].data(Qt.ItemDataRole.UserRole) <
-                                     len(self._current_sequence) - 1)
-        
-        # Update action editor
-        if selected_items:
-            index = selected_items[0].data(Qt.ItemDataRole.UserRole)
-            if 0 <= index < len(self._current_sequence):
-                self.action_editor.set_action(self._current_sequence[index])
-            else:
-                self.action_editor.set_action(None)
-        else:
-            self.action_editor.set_action(None)
+        # Load sequence
+        self._load_sequence(selected_sequence)
     
     def _on_new_clicked(self) -> None:
         """Handle new button click."""
         # Check if sequence is modified
-        if self._current_sequence:
+        if self._current_sequence["actions"]:
             # Ask for confirmation
             result = QMessageBox.question(
                 self,
@@ -906,7 +1101,7 @@ class AutomationTab(QWidget):
     def _on_open_clicked(self) -> None:
         """Handle open button click."""
         # Check if sequence is modified
-        if self._current_sequence:
+        if self._current_sequence["actions"]:
             # Ask for confirmation
             result = QMessageBox.question(
                 self,
@@ -945,9 +1140,9 @@ class AutomationTab(QWidget):
                 raise ValueError("Invalid sequence format")
             
             # Update sequence
-            self._current_sequence = sequence
+            self._current_sequence["actions"] = sequence
             self._current_sequence_path = file_path
-            self._update_sequence_list()
+            self._update_action_list()
             
             # Update status
             self.status_label.setText(f"Loaded sequence from {file_path}")
@@ -966,7 +1161,7 @@ class AutomationTab(QWidget):
     
     def _on_save_clicked(self) -> None:
         """Handle save button click."""
-        if not self._current_sequence:
+        if not self._current_sequence["actions"]:
             # Nothing to save
             return
         
@@ -992,7 +1187,7 @@ class AutomationTab(QWidget):
         # Save sequence
         try:
             with open(self._current_sequence_path, 'w') as f:
-                json.dump(self._current_sequence, f, indent=2)
+                json.dump(self._current_sequence["actions"], f, indent=2)
             
             # Update status
             self.status_label.setText(f"Saved sequence to {self._current_sequence_path}")
@@ -1011,7 +1206,7 @@ class AutomationTab(QWidget):
     
     def _on_run_clicked(self) -> None:
         """Handle run button click."""
-        if not self._current_sequence:
+        if not self._current_sequence["actions"]:
             # Nothing to run
             QMessageBox.information(
                 self,
@@ -1021,11 +1216,11 @@ class AutomationTab(QWidget):
             return
         
         # Update button states
-        self.run_action.setEnabled(False)
-        self.stop_action.setEnabled(True)
+        self.run_btn.setEnabled(False)
+        self.stop_btn.setEnabled(True)
         
         # Set running state
-        self._is_running = True
+        self._running = True
         self._current_action_index = -1
         
         # Start execution
@@ -1034,15 +1229,15 @@ class AutomationTab(QWidget):
     def _on_stop_clicked(self) -> None:
         """Handle stop button click."""
         # Update button states
-        self.run_action.setEnabled(True)
-        self.stop_action.setEnabled(False)
+        self.run_btn.setEnabled(True)
+        self.stop_btn.setEnabled(False)
         
         # Set running state
-        self._is_running = False
+        self._running = False
         self._current_action_index = -1
         
-        # Update sequence list
-        self._update_sequence_list()
+        # Update action list
+        self._update_action_list()
         
         # Update status
         self.status_label.setText("Sequence execution stopped")
@@ -1051,14 +1246,14 @@ class AutomationTab(QWidget):
     
     def _execute_next_action(self) -> None:
         """Execute the next action in the sequence."""
-        if not self._is_running:
+        if not self._running:
             return
         
         # Increment action index
         self._current_action_index += 1
         
         # Check if we reached the end
-        if self._current_action_index >= len(self._current_sequence):
+        if self._current_action_index >= len(self._current_sequence["actions"]):
             # Execution complete
             self._on_stop_clicked()
             
@@ -1075,11 +1270,11 @@ class AutomationTab(QWidget):
             logger.info("Sequence execution completed")
             return
         
-        # Update sequence list to highlight current action
-        self._update_sequence_list()
+        # Update action list to highlight current action
+        self._update_action_list()
         
         # Get current action
-        action = self._current_sequence[self._current_action_index]
+        action = self._current_sequence["actions"][self._current_action_index]
         
         # Update status
         action_name = action.get('name', action.get('type', 'unknown'))
@@ -1096,7 +1291,7 @@ class AutomationTab(QWidget):
         # Create default action
         action = {
             'type': 'click',
-            'name': f'Action {len(self._current_sequence) + 1}',
+            'name': f'Action {len(self._current_sequence["actions"]) + 1}',
             'x': 0,
             'y': 0,
             'relative': False,
@@ -1104,33 +1299,18 @@ class AutomationTab(QWidget):
         }
         
         # Add to sequence
-        self._current_sequence.append(action)
+        self._current_sequence["actions"].append(action)
         
         # Update list
-        self._update_sequence_list()
+        self._update_action_list()
         
         # Select new action
-        self.sequence_list.setCurrentRow(len(self._current_sequence) - 1)
-    
-    def _on_edit_clicked(self) -> None:
-        """Handle edit button click."""
-        # Get selected items
-        selected_items = self.sequence_list.selectedItems()
-        
-        if not selected_items:
-            return
-        
-        # Get action index
-        index = selected_items[0].data(Qt.ItemDataRole.UserRole)
-        
-        # Select action in editor
-        if 0 <= index < len(self._current_sequence):
-            self.action_editor.set_action(self._current_sequence[index])
+        self.action_list.setCurrentRow(len(self._current_sequence["actions"]) - 1)
     
     def _on_remove_clicked(self) -> None:
         """Handle remove button click."""
         # Get selected items
-        selected_items = self.sequence_list.selectedItems()
+        selected_items = self.action_list.selectedItems()
         
         if not selected_items:
             return
@@ -1151,20 +1331,20 @@ class AutomationTab(QWidget):
             return
         
         # Remove action
-        if 0 <= index < len(self._current_sequence):
-            del self._current_sequence[index]
+        if 0 <= index < len(self._current_sequence["actions"]):
+            del self._current_sequence["actions"][index]
             
             # Update list
-            self._update_sequence_list()
+            self._update_action_list()
             
             # Clear selection if list is empty
-            if not self._current_sequence:
+            if not self._current_sequence["actions"]:
                 self.action_editor.set_action(None)
     
     def _on_move_up_clicked(self) -> None:
         """Handle move up button click."""
         # Get selected items
-        selected_items = self.sequence_list.selectedItems()
+        selected_items = self.action_list.selectedItems()
         
         if not selected_items:
             return
@@ -1173,23 +1353,23 @@ class AutomationTab(QWidget):
         index = selected_items[0].data(Qt.ItemDataRole.UserRole)
         
         # Check if movable
-        if index <= 0 or index >= len(self._current_sequence):
+        if index <= 0 or index >= len(self._current_sequence["actions"]):
             return
         
         # Swap actions
-        self._current_sequence[index], self._current_sequence[index - 1] = \
-            self._current_sequence[index - 1], self._current_sequence[index]
+        self._current_sequence["actions"][index], self._current_sequence["actions"][index - 1] = \
+            self._current_sequence["actions"][index - 1], self._current_sequence["actions"][index]
         
         # Update list
-        self._update_sequence_list()
+        self._update_action_list()
         
         # Select moved action
-        self.sequence_list.setCurrentRow(index - 1)
+        self.action_list.setCurrentRow(index - 1)
     
     def _on_move_down_clicked(self) -> None:
         """Handle move down button click."""
         # Get selected items
-        selected_items = self.sequence_list.selectedItems()
+        selected_items = self.action_list.selectedItems()
         
         if not selected_items:
             return
@@ -1198,18 +1378,18 @@ class AutomationTab(QWidget):
         index = selected_items[0].data(Qt.ItemDataRole.UserRole)
         
         # Check if movable
-        if index < 0 or index >= len(self._current_sequence) - 1:
+        if index < 0 or index >= len(self._current_sequence["actions"]) - 1:
             return
         
         # Swap actions
-        self._current_sequence[index], self._current_sequence[index + 1] = \
-            self._current_sequence[index + 1], self._current_sequence[index]
+        self._current_sequence["actions"][index], self._current_sequence["actions"][index + 1] = \
+            self._current_sequence["actions"][index + 1], self._current_sequence["actions"][index]
         
         # Update list
-        self._update_sequence_list()
+        self._update_action_list()
         
         # Select moved action
-        self.sequence_list.setCurrentRow(index + 1)
+        self.action_list.setCurrentRow(index + 1)
     
     def _on_action_updated(self, action: Dict[str, Any]) -> None:
         """
@@ -1219,7 +1399,7 @@ class AutomationTab(QWidget):
             action: Updated action data
         """
         # Get selected items
-        selected_items = self.sequence_list.selectedItems()
+        selected_items = self.action_list.selectedItems()
         
         if not selected_items:
             return
@@ -1228,11 +1408,54 @@ class AutomationTab(QWidget):
         index = selected_items[0].data(Qt.ItemDataRole.UserRole)
         
         # Update action in sequence
-        if 0 <= index < len(self._current_sequence):
-            self._current_sequence[index] = action
+        if 0 <= index < len(self._current_sequence["actions"]):
+            self._current_sequence["actions"][index] = action
             
             # Update list
-            self._update_sequence_list()
+            self._update_action_list()
             
             # Keep selection
+            self.action_list.setCurrentRow(index)
+    
+    def _on_loop_toggled(self, checked: bool) -> None:
+        """Handle loop checkbox toggled."""
+        # Enable/disable iterations spinbox
+        self.iterations_spin.setEnabled(checked)
+    
+    def _on_selection_changed(self) -> None:
+        """Handle selection change in action list."""
+        # Update button states
+        self.remove_action_btn.setEnabled(len(self.action_list.selectedItems()) > 0)
+        self.move_up_btn.setEnabled(len(self.action_list.selectedItems()) > 0 and
+                                    self.action_list.selectedItems()[0].data(Qt.ItemDataRole.UserRole) > 0)
+        self.move_down_btn.setEnabled(len(self.action_list.selectedItems()) > 0 and
+                                     self.action_list.selectedItems()[0].data(Qt.ItemDataRole.UserRole) <
+                                     len(self._current_sequence["actions"]) - 1)
+        
+        # Update action editor
+        if self.action_list.selectedItems():
+            index = self.action_list.selectedItems()[0].data(Qt.ItemDataRole.UserRole)
+            if 0 <= index < len(self._current_sequence["actions"]):
+                self.action_editor.set_action(self._current_sequence["actions"][index])
+            else:
+                self.action_editor.set_action(None)
+        else:
+            self.action_editor.set_action(None)
+    
+    def _on_sequence_changed(self) -> None:
+        """Handle sequence change."""
+        # Get selected sequence
+        selected_sequence = self.sequence_combo.currentText()
+        
+        # Load sequence
+        self._load_sequence(selected_sequence)
+    
+    def _load_sequence(self, sequence_name: str) -> None:
+        """Load a sequence from the sequence directory."""
+        # Construct full path to sequence file
+        sequence_dir = Path("./scout/resources/sequences")
+        sequence_path = sequence_dir / f"{sequence_name}.json"
+        
+        # Check if sequence file exists
+        if not sequence_path.exists():
             self.sequence_list.setCurrentRow(index) 

@@ -24,6 +24,9 @@ from PyQt6.QtCore import Qt, pyqtSignal, QSize, QTimer
 
 from scout.core.game.game_state_service_interface import GameStateServiceInterface
 from scout.core.detection.detection_service_interface import DetectionServiceInterface
+from scout.core.game.game_service_interface import GameServiceInterface
+from scout.ui.widgets.game_state_visualization_widget import GameStateVisualizationWidget
+from scout.ui.utils.language_manager import tr
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -69,20 +72,20 @@ class StateVariableEditor(QWidget):
         toolbar_layout = QHBoxLayout()
         
         # Add variable button
-        self.add_btn = QPushButton("Add Variable")
+        self.add_btn = QPushButton(tr("Add Variable"))
         toolbar_layout.addWidget(self.add_btn)
         
         # Remove variable button
-        self.remove_btn = QPushButton("Remove Variable")
+        self.remove_btn = QPushButton(tr("Remove Variable"))
         self.remove_btn.setEnabled(False)
         toolbar_layout.addWidget(self.remove_btn)
         
         # Save state button
-        self.save_btn = QPushButton("Save State")
+        self.save_btn = QPushButton(tr("Save State"))
         toolbar_layout.addWidget(self.save_btn)
         
         # Load state button
-        self.load_btn = QPushButton("Load State")
+        self.load_btn = QPushButton(tr("Load State"))
         toolbar_layout.addWidget(self.load_btn)
         
         main_layout.addLayout(toolbar_layout)
@@ -171,8 +174,8 @@ class StateVariableEditor(QWidget):
         # Show dialog to enter variable name
         name, ok = QInputDialog.getText(
             self,
-            "Add Variable",
-            "Enter variable name:"
+            tr("Add Variable"),
+            tr("Enter variable name:")
         )
         
         if not ok or not name:
@@ -182,14 +185,14 @@ class StateVariableEditor(QWidget):
         if name in self._current_state:
             QMessageBox.warning(
                 self,
-                "Duplicate Variable",
-                f"Variable '{name}' already exists. Please use a different name."
+                tr("Duplicate Variable"),
+                tr("Variable '{name}' already exists. Please use a different name.")
             )
             return
         
         # Show dialog to select variable type
         type_dialog = QDialog(self)
-        type_dialog.setWindowTitle("Select Variable Type")
+        type_dialog.setWindowTitle(tr("Select Variable Type"))
         type_layout = QVBoxLayout(type_dialog)
         
         type_combo = QComboBox()
@@ -197,11 +200,11 @@ class StateVariableEditor(QWidget):
         type_layout.addWidget(type_combo)
         
         buttons = QHBoxLayout()
-        ok_btn = QPushButton("OK")
+        ok_btn = QPushButton(tr("OK"))
         ok_btn.clicked.connect(type_dialog.accept)
         buttons.addWidget(ok_btn)
         
-        cancel_btn = QPushButton("Cancel")
+        cancel_btn = QPushButton(tr("Cancel"))
         cancel_btn.clicked.connect(type_dialog.reject)
         buttons.addWidget(cancel_btn)
         
@@ -255,8 +258,8 @@ class StateVariableEditor(QWidget):
         # Confirm deletion
         result = QMessageBox.question(
             self,
-            "Remove Variable",
-            f"Are you sure you want to remove variable '{name}'?",
+            tr("Remove Variable"),
+            tr("Are you sure you want to remove variable '{name}'?"),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No
         )
@@ -301,8 +304,8 @@ class StateVariableEditor(QWidget):
             if new_name in self._current_state and new_name != old_name:
                 QMessageBox.warning(
                     self,
-                    "Duplicate Variable",
-                    f"Variable '{new_name}' already exists. Please use a different name."
+                    tr("Duplicate Variable"),
+                    tr("Variable '{new_name}' already exists. Please use a different name.")
                 )
                 
                 # Revert to old name
@@ -333,12 +336,12 @@ class StateVariableEditor(QWidget):
                     elif value_text in ['false', 'no', '0', 'n', 'f']:
                         new_value = False
                     else:
-                        raise ValueError("Invalid boolean value")
+                        raise ValueError(tr("Invalid boolean value"))
                 elif current_type in [list, dict]:
                     # Parse JSON for complex types
                     new_value = json.loads(value_item.text())
                     if not isinstance(new_value, current_type):
-                        raise TypeError(f"Expected {current_type.__name__}, got {type(new_value).__name__}")
+                        raise TypeError(tr("Expected {current_type.__name__}, got {type(new_value).__name__}"))
                 else:
                     # Convert simple types
                     new_value = current_type(value_item.text())
@@ -350,8 +353,8 @@ class StateVariableEditor(QWidget):
                 # Show error message
                 QMessageBox.warning(
                     self,
-                    "Invalid Value",
-                    f"Failed to convert value to {current_type.__name__}: {str(e)}"
+                    tr("Invalid Value"),
+                    tr("Failed to convert value to {current_type.__name__}: {str(e)}")
                 )
                 
                 # Revert to old value
@@ -375,7 +378,7 @@ class StateVariableEditor(QWidget):
         # Open file dialog
         file_path, _ = QFileDialog.getSaveFileName(
             self,
-            "Save State",
+            tr("Save State"),
             str(state_dir / default_filename),
             "State Files (*.json);;All Files (*)"
         )
@@ -390,8 +393,8 @@ class StateVariableEditor(QWidget):
             
             QMessageBox.information(
                 self,
-                "State Saved",
-                f"Game state successfully saved to {file_path}"
+                tr("State Saved"),
+                tr("Game state successfully saved to {file_path}")
             )
             
             logger.info(f"Game state saved to {file_path}")
@@ -399,8 +402,8 @@ class StateVariableEditor(QWidget):
         except Exception as e:
             QMessageBox.critical(
                 self,
-                "Error",
-                f"Failed to save state: {str(e)}"
+                tr("Error"),
+                tr("Failed to save state: {str(e)}")
             )
             
             logger.error(f"Failed to save state: {str(e)}")
@@ -411,8 +414,8 @@ class StateVariableEditor(QWidget):
         if self._current_state:
             result = QMessageBox.question(
                 self,
-                "Load State",
-                "Loading a state will replace current variables. Continue?",
+                tr("Load State"),
+                tr("Loading a state will replace current variables. Continue?"),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No
             )
@@ -428,6 +431,7 @@ class StateVariableEditor(QWidget):
         # Open file dialog
         file_path, _ = QFileDialog.getOpenFileName(
             self,
+            tr("Load State"),
             "Load State",
             str(state_dir),
             "State Files (*.json);;All Files (*)"

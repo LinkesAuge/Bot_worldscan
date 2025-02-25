@@ -26,6 +26,7 @@ from scout.ui.widgets.template_list_widget import TemplateListWidget
 from scout.ui.widgets.detection_result_widget import DetectionResultWidget
 from scout.ui.widgets.detection_history_widget import DetectionHistoryWidget
 from scout.ui.widgets.detection_heatmap_widget import DetectionHeatmapWidget
+from scout.ui.utils.language_manager import tr
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -85,15 +86,15 @@ class DetectionTab(QWidget):
         
         # Create real-time detection tab
         realtime_tab = QWidget()
-        self.view_tabs.addTab(realtime_tab, "Real-time Detection")
+        self.view_tabs.addTab(realtime_tab, tr("Real-time Detection"))
         
         # Create historical view tab
         history_tab = QWidget()
-        self.view_tabs.addTab(history_tab, "Detection History")
+        self.view_tabs.addTab(history_tab, tr("Detection History"))
         
         # Create heatmap tab
         heatmap_tab = QWidget()
-        self.view_tabs.addTab(heatmap_tab, "Detection Heatmap")
+        self.view_tabs.addTab(heatmap_tab, tr("Detection Heatmap"))
         
         # Setup real-time detection tab
         self._setup_realtime_tab(realtime_tab)
@@ -118,7 +119,7 @@ class DetectionTab(QWidget):
         toolbar = QToolBar()
         
         # Detection strategy selector
-        toolbar.addWidget(QLabel("Detection Strategy:"))
+        toolbar.addWidget(QLabel(tr("Detection Strategy:")))
         self.strategy_combo = QComboBox()
         self.strategy_combo.addItems(["Template Matching", "OCR", "YOLO"])
         toolbar.addWidget(self.strategy_combo)
@@ -127,7 +128,8 @@ class DetectionTab(QWidget):
         toolbar.addSeparator()
         
         # Run detection button
-        self.run_btn = QPushButton("Run Detection")
+        self.run_btn = QPushButton(tr("Run Detection"))
+        self.run_btn.setIcon(QIcon.fromTheme("media-playback-start"))
         toolbar.addWidget(self.run_btn)
         
         # Add toolbar to layout
@@ -142,7 +144,7 @@ class DetectionTab(QWidget):
         config_layout = QVBoxLayout(config_panel)
         
         # Create template list
-        self.template_group = QGroupBox("Templates")
+        self.template_group = QGroupBox(tr("Templates"))
         template_layout = QVBoxLayout(self.template_group)
         
         self.template_list = TemplateListWidget(self._template_dir)
@@ -151,11 +153,11 @@ class DetectionTab(QWidget):
         config_layout.addWidget(self.template_group)
         
         # Create detection parameters group
-        params_group = QGroupBox("Detection Parameters")
+        params_group = QGroupBox(tr("Detection Parameters"))
         params_layout = QGridLayout(params_group)
         
         # Confidence threshold
-        params_layout.addWidget(QLabel("Confidence Threshold:"), 0, 0)
+        params_layout.addWidget(QLabel(tr("Confidence Threshold:")), 0, 0)
         self.confidence_spin = QSpinBox()
         self.confidence_spin.setRange(1, 100)
         self.confidence_spin.setValue(70)
@@ -163,38 +165,38 @@ class DetectionTab(QWidget):
         params_layout.addWidget(self.confidence_spin, 0, 1)
         
         # Max results
-        params_layout.addWidget(QLabel("Max Results:"), 1, 0)
+        params_layout.addWidget(QLabel(tr("Max Results:")), 1, 0)
         self.max_results_spin = QSpinBox()
         self.max_results_spin.setRange(1, 100)
         self.max_results_spin.setValue(10)
         params_layout.addWidget(self.max_results_spin, 1, 1)
         
         # Use region checkbox
-        params_layout.addWidget(QLabel("Use Detection Region:"), 2, 0)
+        params_layout.addWidget(QLabel(tr("Use Detection Region:")), 2, 0)
         self.use_region_check = QCheckBox()
         params_layout.addWidget(self.use_region_check, 2, 1)
         
         # Region parameters
-        params_layout.addWidget(QLabel("X:"), 3, 0)
+        params_layout.addWidget(QLabel(tr("X:")), 3, 0)
         self.region_x_spin = QSpinBox()
         self.region_x_spin.setRange(0, 3000)
         self.region_x_spin.setEnabled(False)
         params_layout.addWidget(self.region_x_spin, 3, 1)
         
-        params_layout.addWidget(QLabel("Y:"), 4, 0)
+        params_layout.addWidget(QLabel(tr("Y:")), 4, 0)
         self.region_y_spin = QSpinBox()
         self.region_y_spin.setRange(0, 3000)
         self.region_y_spin.setEnabled(False)
         params_layout.addWidget(self.region_y_spin, 4, 1)
         
-        params_layout.addWidget(QLabel("Width:"), 5, 0)
+        params_layout.addWidget(QLabel(tr("Width:")), 5, 0)
         self.region_width_spin = QSpinBox()
         self.region_width_spin.setRange(10, 3000)
         self.region_width_spin.setValue(500)
         self.region_width_spin.setEnabled(False)
         params_layout.addWidget(self.region_width_spin, 5, 1)
         
-        params_layout.addWidget(QLabel("Height:"), 6, 0)
+        params_layout.addWidget(QLabel(tr("Height:")), 6, 0)
         self.region_height_spin = QSpinBox()
         self.region_height_spin.setRange(10, 3000)
         self.region_height_spin.setValue(500)
