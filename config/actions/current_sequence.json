@@ -14,7 +14,7 @@
         {
             "type": "WAIT",
             "params": {
-                "duration": 1.0,
+                "duration": 0.01,
                 "position_name": null,
                 "timeout": 30.0,
                 "description": null
@@ -33,7 +33,7 @@
         {
             "type": "WAIT",
             "params": {
-                "duration": 1.0,
+                "duration": 0.01,
                 "position_name": null,
                 "timeout": 30.0,
                 "description": null
@@ -55,15 +55,6 @@
                 "duration": 5.0,
                 "update_frequency": 2.0,
                 "min_confidence": 0.9
-            }
-        },
-        {
-            "type": "WAIT",
-            "params": {
-                "duration": 2.0,
-                "position_name": null,
-                "timeout": 30.0,
-                "description": null
             }
         }
     ],
