@@ -8,6 +8,7 @@ import cv2
 import mss
 import time
 import pywintypes
+import win32con
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +132,17 @@ class WindowManager:
                 logger.error(f"Alternative window finding also failed: {ex}")
                 return False
     
+    def is_window_minimized_or_hidden(self) -> bool:
+        """Check if window is minimized or hidden."""
+        try:
+            if not self.hwnd:
+                return True
+            rect = win32gui.GetWindowRect(self.hwnd)
+            return rect[0] <= -32000 or rect[1] <= -32000
+        except Exception as e:
+            logger.error(f"Error checking window state: {e}")
+            return True
+
     def get_window_position(self) -> Optional[Tuple[int, int, int, int]]:
         """
         Get the position and size of the game window.
@@ -146,8 +158,19 @@ class WindowManager:
             # Get window rectangle (includes frame, borders etc)
             rect = win32gui.GetWindowRect(self.hwnd)
             x, y, right, bottom = rect
+            
+            # Check if window is minimized/hidden
+            if x <= -32000 or y <= -32000:
+                logger.debug("Window is minimized or hidden")
+                return None
+                
             width = right - x
             height = bottom - y
+            
+            # Ensure positive dimensions
+            if width <= 0 or height <= 0:
+                logger.warning(f"Invalid window dimensions: {width}x{height}")
+                return None
             
             logger.debug(f"Window position: x={x}, y={y}, width={width}, height={height}")
             return (x, y, width, height)
@@ -155,6 +178,38 @@ class WindowManager:
         except Exception as e:
             logger.error(f"Error getting window position: {e}", exc_info=True)
             return None
+
+    def get_window_frame_offset(self) -> Tuple[int, int]:
+        """
+        Get the offset between window frame and client area.
+        This is needed to properly align coordinates between window and client space.
+        
+        Returns:
+            Tuple[int, int]: (x_offset, y_offset) between window frame and client area
+        """
+        try:
+            if not self.hwnd:
+                return (0, 0)
+                
+            # Get window rect
+            window_rect = win32gui.GetWindowRect(self.hwnd)
+            
+            # Get client rect in screen coordinates
+            client_rect = RECT()
+            win32gui.GetClientRect(self.hwnd, ctypes.byref(client_rect))
+            point = POINT(0, 0)
+            win32gui.ClientToScreen(self.hwnd, ctypes.byref(point))
+            
+            # Calculate offset
+            x_offset = point.x - window_rect[0]
+            y_offset = point.y - window_rect[1]
+            
+            logger.debug(f"Window frame offset: x={x_offset}, y={y_offset}")
+            return (x_offset, y_offset)
+            
+        except Exception as e:
+            logger.error(f"Error getting window frame offset: {e}")
+            return (0, 0)
 
     def get_client_rect(self) -> Optional[Tuple[int, int, int, int]]:
         """
@@ -169,9 +224,11 @@ class WindowManager:
                 logger.warning("Window not found when getting client rect")
                 return None
                 
-            # Get window rect
-            window_rect = win32gui.GetWindowRect(self.hwnd)
-            
+            # Check if window is minimized/hidden
+            if self.is_window_minimized_or_hidden():
+                logger.debug("Window is minimized or hidden")
+                return None
+                
             # Get client rect
             client_rect = RECT()
             if not ctypes.windll.user32.GetClientRect(self.hwnd, ctypes.byref(client_rect)):
@@ -190,12 +247,19 @@ class WindowManager:
             client_right = client_left + (client_rect.right - client_rect.left)
             client_bottom = client_top + (client_rect.bottom - client_rect.top)
             
+            # Ensure positive dimensions
+            width = client_right - client_left
+            height = client_bottom - client_top
+            if width <= 0 or height <= 0:
+                logger.warning(f"Invalid client dimensions: {width}x{height}")
+                return None
+            
             logger.debug(f"Client rect: ({client_left}, {client_top}, {client_right}, {client_bottom})")
             return (client_left, client_top, client_right, client_bottom)
             
         except Exception as e:
             logger.error(f"Error getting client rect: {e}")
-            return None 
+            return None
 
     def client_to_screen(self, x: int, y: int) -> Tuple[int, int]:
         """
@@ -253,6 +317,17 @@ class WindowManager:
             logger.error(f"Error converting coordinates: {e}")
             return screen_x, screen_y
 
+    def is_window_maximized(self) -> bool:
+        """Check if the window is maximized."""
+        try:
+            if not self.hwnd:
+                return False
+            style = win32gui.GetWindowLong(self.hwnd, win32con.GWL_STYLE)
+            return bool(style & win32con.WS_MAXIMIZE)
+        except Exception as e:
+            logger.error(f"Error checking window state: {e}")
+            return False
+
     def capture_screenshot(self) -> Optional[np.ndarray]:
         """
         Capture a screenshot of the game window.
@@ -264,25 +339,33 @@ class WindowManager:
             if not self.find_window():
                 return None
                 
-            # Get the window position
-            window_pos = self.get_window_position()
-            if not window_pos:
+            # Get the client area rectangle - these are already in screen coordinates
+            client_rect = self.get_client_rect()
+            if not client_rect:
                 return None
                 
-            x, y, width, height = window_pos
-            logger.debug(f"Window found at ({x}, {y}) with size {width}x{height}")
+            left, top, right, bottom = client_rect
+            width = right - left
+            height = bottom - top
+            
+            logger.debug(f"Capturing client area: ({left}, {top}) with size {width}x{height}")
+            
+            # Check if window is maximized for logging purposes
+            is_maximized = self.is_window_maximized()
+            if is_maximized:
+                logger.debug("Window is maximized")
             
             # Capture the screen
             with mss.mss() as sct:
-                # Define capture region
+                # Define capture region using client coordinates directly
                 monitor = {
-                    'left': x,
-                    'top': y,
+                    'left': left,
+                    'top': top,
                     'width': width,
                     'height': height
                 }
                 
-                logger.debug(f"Attempting to capture with monitor settings: {monitor}")
+                logger.debug(f"Capturing with monitor settings: {monitor}")
                 
                 # Grab screenshot using MSS
                 screenshot = np.array(sct.grab(monitor))

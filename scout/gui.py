@@ -258,18 +258,6 @@ class OverlayController(QMainWindow):
         color_group.setLayout(color_layout)
         layout.addWidget(color_group)
         
-        # Rectangle Thickness controls
-        self.thickness_slider = QSlider(Qt.Orientation.Horizontal)
-        self.thickness_input = QSpinBox()
-        thickness_layout = self._create_slider_with_range(
-            "Rectangle Thickness:", self.thickness_slider, self.thickness_input,
-            1, 20, settings.get("rect_thickness", 2)
-        )
-        # Connect thickness controls bidirectionally
-        self.thickness_slider.valueChanged.connect(self.thickness_input.setValue)
-        self.thickness_input.valueChanged.connect(self.thickness_slider.setValue)
-        layout.addLayout(thickness_layout)
-        
         # Rectangle Scale controls
         self.scale_slider = QSlider(Qt.Orientation.Horizontal)
         self.scale_input = QDoubleSpinBox()
@@ -278,17 +266,17 @@ class OverlayController(QMainWindow):
         # Left side with label and range
         scale_label_layout = QVBoxLayout()
         scale_label = QLabel("Rectangle Scale:")
-        scale_range = QLabel("Range: 0.5-5.0")
+        scale_range = QLabel("Range: 0.5-10.0")
         scale_range.setStyleSheet("color: gray; font-size: 8pt;")
         scale_label_layout.addWidget(scale_label)
         scale_label_layout.addWidget(scale_range)
         
         # Set up rectangle scale controls (multiply by 10 for slider)
         rect_scale = settings.get("rect_scale", 1.0)
-        self.scale_slider.setRange(5, 50)  # 0.5 to 5.0
+        self.scale_slider.setRange(5, 100)  # 0.5 to 5.0
         self.scale_slider.setValue(int(rect_scale * 10))
         
-        self.scale_input.setRange(0.5, 5.0)
+        self.scale_input.setRange(0.5, 10.0)
         self.scale_input.setSingleStep(0.1)
         self.scale_input.setValue(rect_scale)
         
@@ -296,6 +284,19 @@ class OverlayController(QMainWindow):
         scale_layout.addWidget(self.scale_slider, stretch=1)
         scale_layout.addWidget(self.scale_input)
         layout.addLayout(scale_layout)
+                
+        # Rectangle Thickness controls
+        self.thickness_slider = QSlider(Qt.Orientation.Horizontal)
+        self.thickness_input = QSpinBox()
+        thickness_layout = self._create_slider_with_range(
+            "Rectangle Thickness:", self.thickness_slider, self.thickness_input,
+            1, 20, settings.get("rect_thickness", 6)
+        )
+        
+        # Connect thickness controls bidirectionally
+        self.thickness_slider.valueChanged.connect(self.thickness_input.setValue)
+        self.thickness_input.valueChanged.connect(self.thickness_slider.setValue)
+        layout.addLayout(thickness_layout)
         
         # Cross Scale controls
         self.cross_scale_slider = QSlider(Qt.Orientation.Horizontal)
@@ -305,17 +306,17 @@ class OverlayController(QMainWindow):
         # Left side with label and range
         cross_scale_label_layout = QVBoxLayout()
         cross_scale_label = QLabel("Cross Scale:")
-        cross_scale_range = QLabel("Range: 0.5-5.0")
+        cross_scale_range = QLabel("Range: 0.5-10.0")
         cross_scale_range.setStyleSheet("color: gray; font-size: 8pt;")
         cross_scale_label_layout.addWidget(cross_scale_label)
         cross_scale_label_layout.addWidget(cross_scale_range)
         
         # Set up cross scale controls (multiply by 10 for slider)
         cross_scale = settings.get("cross_scale", 1.0)
-        self.cross_scale_slider.setRange(5, 50)  # 0.5 to 5.0
+        self.cross_scale_slider.setRange(5, 100)  # 0.5 to 5.0
         self.cross_scale_slider.setValue(int(cross_scale * 10))
         
-        self.cross_scale_input.setRange(0.5, 5.0)
+        self.cross_scale_input.setRange(0.5, 10.0)
         self.cross_scale_input.setSingleStep(0.1)
         self.cross_scale_input.setValue(cross_scale)
         
@@ -323,6 +324,27 @@ class OverlayController(QMainWindow):
         cross_scale_layout.addWidget(self.cross_scale_slider, stretch=1)
         cross_scale_layout.addWidget(self.cross_scale_input)
         layout.addLayout(cross_scale_layout)
+        
+        # Cross thickness controls
+        self.cross_thickness_slider = QSlider(Qt.Orientation.Horizontal)
+        self.cross_thickness_input = QSpinBox()
+        cross_thickness_layout = self._create_slider_with_range(
+            "Cross Thickness:", self.cross_thickness_slider, self.cross_thickness_input,
+            1, 10, settings.get("cross_thickness", 1)
+        )
+       
+        # Connect cross thickness controls bidirectionally
+        self.cross_thickness_slider.valueChanged.connect(self.cross_thickness_input.setValue)
+        self.cross_thickness_input.valueChanged.connect(self.cross_thickness_slider.setValue)
+        layout.addLayout(cross_thickness_layout)
+        
+        # Text thickness controls
+        self.text_thickness_slider = QSlider(Qt.Orientation.Horizontal)
+        self.text_thickness_input = QSpinBox()
+        text_thickness_layout = self._create_slider_with_range(
+            "Text Thickness:", self.text_thickness_slider, self.text_thickness_input,
+            1, 10, settings.get("text_thickness", 1)
+        )
         
         # Font size controls
         self.font_size_slider = QSlider(Qt.Orientation.Horizontal)
@@ -336,29 +358,10 @@ class OverlayController(QMainWindow):
         self.font_size_input.valueChanged.connect(self.font_size_slider.setValue)
         layout.addLayout(font_size_layout)
         
-        # Text thickness controls
-        self.text_thickness_slider = QSlider(Qt.Orientation.Horizontal)
-        self.text_thickness_input = QSpinBox()
-        text_thickness_layout = self._create_slider_with_range(
-            "Text Thickness:", self.text_thickness_slider, self.text_thickness_input,
-            1, 10, settings.get("text_thickness", 1)
-        )
         # Connect text thickness controls bidirectionally
         self.text_thickness_slider.valueChanged.connect(self.text_thickness_input.setValue)
         self.text_thickness_input.valueChanged.connect(self.text_thickness_slider.setValue)
         layout.addLayout(text_thickness_layout)
-        
-        # Cross thickness controls
-        self.cross_thickness_slider = QSlider(Qt.Orientation.Horizontal)
-        self.cross_thickness_input = QSpinBox()
-        cross_thickness_layout = self._create_slider_with_range(
-            "Cross Thickness:", self.cross_thickness_slider, self.cross_thickness_input,
-            1, 10, settings.get("cross_thickness", 1)
-        )
-        # Connect cross thickness controls bidirectionally
-        self.cross_thickness_slider.valueChanged.connect(self.cross_thickness_input.setValue)
-        self.cross_thickness_input.valueChanged.connect(self.cross_thickness_slider.setValue)
-        layout.addLayout(cross_thickness_layout)
         
         overlay_group.setLayout(layout)
         parent_layout.addWidget(overlay_group)
@@ -409,7 +412,7 @@ class OverlayController(QMainWindow):
         self.confidence_input = QDoubleSpinBox()
         self.confidence_input.setMinimum(0.1)
         self.confidence_input.setMaximum(1.0)
-        self.confidence_input.setSingleStep(0.05)
+        self.confidence_input.setSingleStep(0.01)
         self.confidence_input.setDecimals(2)
         self.confidence_input.setValue(settings.get("confidence", 0.8))
         confidence_layout.addWidget(self.confidence_input)
@@ -748,7 +751,7 @@ class OverlayController(QMainWindow):
             
             # Save all settings
             self.config_manager.update_overlay_settings(overlay_settings)
-            self.config_manager.update_pattern_matching_settings(pattern_settings)
+            self.config_manager.update_template_matching_settings(pattern_settings)
             self.config_manager.update_ocr_settings(ocr_settings)
             
             logger.debug("All settings saved to config")
@@ -1344,7 +1347,13 @@ class OverlayController(QMainWindow):
             self._update_pattern_button_color(False)
 
     def _toggle_sound(self) -> None:
-        """Toggle sound alerts on/off."""
+        """
+        Toggle sound alerts on/off.
+        
+        This method toggles the sound alert state for template matching.
+        When enabled, sounds will play when matches are found (respecting cooldown timer).
+        The sound state is saved to the configuration.
+        """
         is_enabled = self.sound_btn.text().endswith("ON")
         new_state = not is_enabled
         
@@ -1359,8 +1368,4 @@ class OverlayController(QMainWindow):
         # Save the new state
         self.save_settings()
         
-        # Play test sound if enabled
-        if new_state and hasattr(self.template_matcher, 'sound_manager'):
-            self.template_matcher.sound_manager.play_if_ready()
-            
         logger.info(f"Sound alerts {'enabled' if new_state else 'disabled'}") 

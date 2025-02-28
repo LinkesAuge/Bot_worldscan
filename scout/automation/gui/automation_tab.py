@@ -21,7 +21,7 @@ import logging
 import json
 from pathlib import Path
 from scout.automation.core import AutomationPosition, AutomationSequence
-from scout.automation.actions import ActionType, AutomationAction, ActionParamsCommon
+from scout.automation.actions import ActionType, AutomationAction
 from scout.automation.gui.position_marker import PositionMarker
 from scout.automation.gui.action_params import create_params_widget, BaseParamsWidget, DragParamsWidget
 from scout.automation.executor import SequenceExecutor, ExecutionContext
@@ -237,6 +237,8 @@ class ActionListItem(QListWidgetItem):
             text += f" @ {params.position_name}"
         if params.description:
             text += f" - {params.description}"
+        if getattr(params, 'repeat', 1) > 1:
+            text += f" (x{params.repeat})"
         self.setText(text)
 
 class SequenceBuilder(QWidget):

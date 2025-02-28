@@ -1,11 +1,14 @@
 from typing import NoReturn
 import sys
+import os
+import ctypes
 from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import QTimer
+from PyQt6.QtCore import QTimer, Qt
 import cv2
 import time
 import win32api
 import win32con
+from pathlib import Path
 from scout.overlay import Overlay
 from scout.gui import OverlayController
 from scout.template_matcher import TemplateMatcher
@@ -16,6 +19,23 @@ from scout.config_manager import ConfigManager
 from scout.sound_manager import SoundManager
 from scout.window_manager import WindowManager
 from scout.debug_window import DebugWindow
+
+os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "0"  # Disable Qt's DPI scaling
+
+# Try to set DPI awareness before anything else
+try:
+    # Windows 10 and later
+    awareness = ctypes.c_int()
+    errorCode = ctypes.windll.shcore.GetProcessDpiAwareness(0, ctypes.byref(awareness))
+    if errorCode == 0:  # Success
+        if awareness.value != 2:  # If not already per monitor DPI aware
+            ctypes.windll.shcore.SetProcessDpiAwareness(2)  # PROCESS_PER_MONITOR_DPI_AWARE
+except Exception:
+    try:
+        # Windows 8.1 and earlier
+        ctypes.windll.user32.SetProcessDPIAware()
+    except Exception:
+        pass
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -55,6 +75,7 @@ def is_key_pressed(key_code: int) -> bool:
     """
     return win32api.GetAsyncKeyState(key_code) & 0x8000 != 0
 
+
 def main() -> None:
     """
     Main application entry point that initializes and starts all components.
@@ -73,7 +94,8 @@ def main() -> None:
     """
     logger.info("Starting application")
     
-    try:
+    try:        
+        # Create QApplication
         app = QApplication(sys.argv)
         
         logger.info("Initializing components")

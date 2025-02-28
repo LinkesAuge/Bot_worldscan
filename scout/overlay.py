@@ -18,8 +18,10 @@ from scout.window_manager import WindowManager
 from scout.template_matcher import TemplateMatch, GroupedMatch, TemplateMatcher
 import logging
 from PyQt6.QtWidgets import QWidget
-from PyQt6.QtCore import QTimer
+from PyQt6.QtCore import QTimer, Qt
+from scout.automation.gui.spinning_indicator import SpinningIndicator
 import time
+from scout.game_state import GameState
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +68,13 @@ class Overlay(QWidget):
         self.template_matching_active = False
         self.window_hwnd = None  # Store window handle
         self.window_created = False  # Flag to track if window has been created
+        
+        # Create game state tracker
+        self.game_state = GameState(window_manager)
+        
+        # Animation state
+        self.refreshing = False
+        self.refresh_start_time = 0.0
         
         # Separate timers for template matching and drawing
         self.template_matching_timer = QTimer()
@@ -126,6 +135,11 @@ class Overlay(QWidget):
         if not self.active:
             self._hide_window()
 
+        # Create spinning indicator
+        self.spinning_indicator = SpinningIndicator(self)
+        self.spinning_indicator.hide()  # Initially hidden
+        self.spinning_indicator.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)  # Allow click-through
+
     def create_overlay_window(self) -> None:
         """Create the overlay window with transparency."""
         # Check if we already have a valid window
@@ -136,20 +150,22 @@ class Overlay(QWidget):
             
         logger.info("Creating overlay window")
         
-        # Get window position
-        pos = self.window_manager.get_window_position()
-        if not pos:
+        # Get client area position and size
+        client_rect = self.window_manager.get_client_rect()
+        if not client_rect:
             logger.warning("Target window not found, cannot create overlay")
             return
         
-        x, y, width, height = pos
+        left, top, right, bottom = client_rect
+        width = right - left
+        height = bottom - top
         
         # Validate dimensions
         if width <= 0 or height <= 0:
             logger.error(f"Invalid window dimensions: {width}x{height}")
             return
         
-        logger.debug(f"Creating overlay window at ({x}, {y}) with size {width}x{height}")
+        logger.debug(f"Creating overlay window at ({left}, {top}) with size {width}x{height}")
         
         try:
             # Create initial transparent overlay
@@ -173,7 +189,7 @@ class Overlay(QWidget):
             
             # Set window styles for transparency BEFORE showing content
             style = win32gui.GetWindowLong(hwnd, win32con.GWL_STYLE)
-            style &= ~(win32con.WS_CAPTION | win32con.WS_THICKFRAME | win32con.WS_BORDER)
+            style &= ~(win32con.WS_CAPTION | win32con.WS_THICKFRAME | win32con.WS_BORDER | win32con.WS_SYSMENU)
             style |= win32con.WS_POPUP
             win32gui.SetWindowLong(hwnd, win32con.GWL_STYLE, style)
             
@@ -186,7 +202,7 @@ class Overlay(QWidget):
             win32gui.SetWindowPos(
                 hwnd, win32con.HWND_TOPMOST,
                 -10000, -10000, width, height,  # Position off-screen initially
-                win32con.SWP_NOACTIVATE
+                win32con.SWP_NOACTIVATE | win32con.SWP_NOREDRAW
             )
             
             # Apply transparency color key
@@ -207,8 +223,8 @@ class Overlay(QWidget):
             # Move window to proper position
             win32gui.SetWindowPos(
                 hwnd, win32con.HWND_TOPMOST,
-                x, y, width, height,
-                win32con.SWP_NOACTIVATE
+                left, top, width, height,
+                win32con.SWP_NOACTIVATE | win32con.SWP_NOREDRAW
             )
             
             # Initially hide the window if overlay is not active
@@ -232,20 +248,30 @@ class Overlay(QWidget):
             return
             
         try:
-            # Get current window size
-            pos = self.window_manager.get_window_position()
-            if not pos:
+            # Get current window size from client area
+            client_rect = self.window_manager.get_client_rect()
+            if not client_rect:
                 return
                 
-            _, _, width, height = pos
+            left, top, right, bottom = client_rect
+            width = right - left
+            height = bottom - top
             
             # Create empty magenta background (for transparency)
             overlay = np.zeros((height, width, 3), dtype=np.uint8)
             overlay[:] = (255, 0, 255)  # Set background to magenta
             
-            # Show the empty overlay
+            # Show the empty overlay without forcing a redraw
             cv2.imshow(self.window_name, overlay)
             cv2.waitKey(1)
+            
+            # Ensure window is positioned correctly
+            win32gui.SetWindowPos(
+                self.window_hwnd,
+                win32con.HWND_TOPMOST,
+                left, top, width, height,
+                win32con.SWP_NOACTIVATE | win32con.SWP_NOREDRAW
+            )
             
             # Refresh transparency settings
             win32gui.SetLayeredWindowAttributes(
@@ -483,6 +509,18 @@ class Overlay(QWidget):
     def _update_template_matching(self) -> None:
         """Run template matching update cycle."""
         try:
+            # Calculate actual update frequency
+            current_time = time.time()
+            if self.template_matcher.last_update_time > 0:
+                time_diff = current_time - self.template_matcher.last_update_time
+                if time_diff > 0:
+                    self.template_matcher.update_frequency = 1.0 / time_diff
+            self.template_matcher.last_update_time = current_time
+            
+            # If refreshing and past initial delay, update matches
+            if self.refreshing and time.time() - self.refresh_start_time > self.game_state.drag_start_delay:
+                self.refreshing = False
+                
             logger.debug("Running template matching update")
             
             # Capture window image
@@ -524,6 +562,18 @@ class Overlay(QWidget):
                     f"Group for {group.template_name}: {len(group.matches)} matches, "
                     f"average position: ({avg_x}, {avg_y}), confidence: {confidence:.2f}"
                 )
+            
+            # Check if we have any new matches that weren't in the cache
+            new_matches_found = False
+            for current_match in current_matches:
+                if not any(self._is_same_group(current_match, cached) for cached in self.cached_matches):
+                    new_matches_found = True
+                    break
+            
+            # Play sound if we found new matches and sound is enabled
+            if new_matches_found and self.template_matcher.sound_enabled:
+                logger.debug("New matches found - playing sound alert")
+                self.template_matcher.sound_manager.play_if_ready()
             
             # Handle match persistence based on groups
             all_matches = []
@@ -580,22 +630,30 @@ class Overlay(QWidget):
             self.cached_matches = all_matches
             self.match_counters = new_counters
             
+            # Update game state with new matches
+            self.game_state.update_template_matches(self.cached_matches)
+            
         except Exception as e:
             logger.error(f"Error in template matching update: {e}", exc_info=True)
+            # Reset frequency tracking on error
+            self.template_matcher.update_frequency = 0.0
+            self.template_matcher.last_update_time = 0.0
 
     def _draw_overlay(self) -> None:
         """Draw the overlay with current matches."""
         try:
+            # Update game state
+            self.game_state.update()
+            
+            # Check if we need to start refreshing
+            if self.game_state.is_dragging() and not self.refreshing:
+                self._start_refresh()
+            
             # First log whether conditions for drawing are met
             if not self.active:
                 logger.debug("Not drawing overlay - overlay is not active")
                 return
                 
-            if not self.template_matching_active:
-                logger.debug("Not drawing overlay - template matching is not active")
-                return
-            
-            # Make sure we have a valid window to draw on
             if not self.window_created or not self.window_hwnd or not win32gui.IsWindow(self.window_hwnd):
                 logger.debug("Window not valid for drawing - recreating")
                 self.window_hwnd = None
@@ -605,24 +663,44 @@ class Overlay(QWidget):
                     logger.error("Failed to create overlay window for drawing")
                     return
             
-            # Make sure window is shown
-            self._show_window()
+            # Check if target window is minimized or hidden
+            if self.window_manager.is_window_minimized_or_hidden():
+                logger.debug("Target window is minimized or hidden - not drawing overlay")
+                self._hide_window()
+                return
             
-            # Update window position to track game window
-            pos = self.window_manager.get_window_position()
-            if not pos:
+            # Get client area for drawing
+            client_rect = self.window_manager.get_client_rect()
+            if not client_rect:
                 logger.warning("Target window not found during draw")
                 return
             
-            x, y, width, height = pos
+            left, top, right, bottom = client_rect
+            width = right - left
+            height = bottom - top
             
-            # Ensure position is updated
+            # Only update window position if it has changed significantly
             try:
-                win32gui.SetWindowPos(
-                    self.window_hwnd, win32con.HWND_TOPMOST,
-                    x, y, width, height,
-                    win32con.SWP_SHOWWINDOW | win32con.SWP_NOACTIVATE
+                current_rect = win32gui.GetWindowRect(self.window_hwnd)
+                current_left, current_top, current_right, current_bottom = current_rect
+                current_width = current_right - current_left
+                current_height = current_bottom - current_top
+                
+                # Check if position or size has changed by more than 2 pixels
+                position_changed = (
+                    abs(left - current_left) > 2 or
+                    abs(top - current_top) > 2 or
+                    abs(width - current_width) > 2 or
+                    abs(height - current_height) > 2
                 )
+                
+                if position_changed:
+                    logger.debug("Window position/size changed - updating overlay")
+                    win32gui.SetWindowPos(
+                        self.window_hwnd, win32con.HWND_TOPMOST,
+                        left, top, width, height,
+                        win32con.SWP_NOACTIVATE | win32con.SWP_NOREDRAW
+                    )
             except Exception as e:
                 logger.error(f"Error updating window position: {e}")
                 # Try to recreate window if this fails
@@ -631,171 +709,218 @@ class Overlay(QWidget):
                 self.create_overlay_window()
                 return
                 
-            # Ensure positive coordinates for drawing
-            if x < 0:
-                width += x
-                x = 0
-            if y < 0:
-                height += y
-                y = 0
-            
-            # Always log overlay state for diagnosis
-            logger.debug(f"Drawing overlay: active={self.active}, template_matching_active={self.template_matching_active}, cached_matches={len(self.cached_matches)}")
-            
             # Create magenta background (will be transparent)
             overlay = np.zeros((height, width, 3), dtype=np.uint8)
             overlay[:] = (255, 0, 255)  # Set background to magenta
             
-            # Force draw a simple indicator in the top-left corner to verify drawing is working
-            cv2.circle(overlay, (50, 50), 20, (0, 255, 0), -1)  # Green circle
-            cv2.putText(overlay, "Drawing Active", (80, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+            # Draw status indicators at top center
+            status_y = 30
             
-            # Only draw matches if we have any
-            if self.cached_matches:
+            # Calculate total width of all elements to center them as a group
+            debug_text = "Overlay Active"
+            refresh_text = "Refreshing Overlay"
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            font_scale = 0.5  # Smaller font for debug text
+            refresh_font_scale = 1.0  # Larger font for refresh text
+            thickness = 1
+            refresh_thickness = 2
+            
+            # Get text sizes
+            (debug_width, debug_height), _ = cv2.getTextSize(debug_text, font, font_scale, thickness)
+            (refresh_width, refresh_height), _ = cv2.getTextSize(refresh_text, font, refresh_font_scale, refresh_thickness)
+            
+            # Calculate total width including match count if needed
+            total_width = debug_width + 40  # Add space for circle and gaps
+            match_text = ""
+            match_width = 0
+            
+            if self.template_matching_active and not self.refreshing:
+                match_count = len(self.cached_matches)
+                match_text = f"{match_count} Match{'es' if match_count > 1 else ''} Found"
+                (match_width, _), _ = cv2.getTextSize(match_text, font, font_scale, thickness)
+                total_width += match_width + 40  # Add space for match text
+            
+            if self.refreshing:
+                total_width += refresh_width + self.spinning_indicator.width() + 20  # Add space for refresh text and indicator
+            
+            # Start position for debug elements (shifted left from center)
+            start_x = (width - total_width) // 2
+            
+            # Draw debug circle and "Overlay Active" text
+            circle_x = start_x + 10  # Add some padding
+            cv2.circle(overlay, (circle_x, status_y), 10, (0, 255, 0), -1)  # Keep circle green
+            cv2.putText(
+                overlay,
+                debug_text,
+                (circle_x + 20, status_y + 5),  # Position text next to circle
+                font,
+                font_scale,
+                (0, 255, 0),  # Keep debug text green
+                thickness,
+                cv2.LINE_AA
+            )
+            
+            # Draw template match count if we have matches
+            if self.template_matching_active and not self.refreshing:
+                match_x = start_x + debug_width + 40  # Position after debug text
+                cv2.putText(
+                    overlay,
+                    match_text,
+                    (match_x, status_y + 5),  # Align with debug text
+                    font,
+                    font_scale,
+                    (0, 0, 255),  # Red color
+                    thickness,
+                    cv2.LINE_AA
+                )
+            
+            # Handle refreshing state
+            if self.refreshing:
+                # Calculate position for refresh text (to the right of other elements)
+                refresh_x = start_x + debug_width + 40
+                if match_width > 0:
+                    refresh_x += match_width + 40  # Add space after match text if present
+                
+                # Draw "Refreshing Overlay" text in red
+                cv2.putText(
+                    overlay,
+                    refresh_text,
+                    (refresh_x, status_y + 5),  # Align with other text
+                    font,
+                    refresh_font_scale,
+                    (0, 0, 255),  # Red color
+                    refresh_thickness,
+                    cv2.LINE_AA
+                )
+                
+                # Position spinning indicator next to the text
+                if self.spinning_indicator and self.window_hwnd:
+                    try:
+                        # Get window position
+                        window_rect = win32gui.GetWindowRect(self.window_hwnd)
+                        window_x = window_rect[0]
+                        window_y = window_rect[1]
+                        
+                        # Position indicator to the right of the text
+                        indicator_x = window_x + refresh_x + refresh_width + 10  # Add small gap
+                        indicator_y = window_y + status_y - (self.spinning_indicator.height() // 2) + 5  # Center vertically with text
+                        
+                        logger.debug(f"Positioning spinner at ({indicator_x}, {indicator_y})")
+                        self.spinning_indicator.move(indicator_x, indicator_y)
+                        self.spinning_indicator.show()
+                        self.spinning_indicator.raise_()
+                    except Exception as e:
+                        logger.error(f"Error positioning spinning indicator: {e}")
+            else:
+                self.spinning_indicator.hide()
+            
+            # Draw matches if template matching is active and we're not refreshing
+            if self.template_matching_active and not self.refreshing and self.cached_matches:
                 match_count = len(self.cached_matches)
                 logger.debug(f"Drawing {match_count} matches on overlay")
                 
-                # Log match data for diagnosis
-                for i, match_data in enumerate(self.cached_matches[:3]):  # Log first 3 matches
-                    logger.debug(f"Match {i+1} data: {match_data}")
-                
-                # Draw matches
+                # Draw each match
                 for i, match_data in enumerate(self.cached_matches):
-                    # Make sure match data has the right format
                     if not isinstance(match_data, tuple) or len(match_data) != 6:
-                        logger.warning(f"Invalid match data format for match {i}: {match_data}")
                         continue
                         
                     name, match_x, match_y, match_width, match_height, confidence = match_data
                     
-                    # Verify coordinates are valid integers
-                    try:
-                        match_x = int(match_x)
-                        match_y = int(match_y)
-                        match_width = int(match_width)
-                        match_height = int(match_height)
-                    except (ValueError, TypeError) as e:
-                        logger.warning(f"Invalid coordinates for match {i}: {e}")
-                        continue
-                        
-                    # Ensure coordinates are within the overlay
-                    if match_x < 0 or match_y < 0 or match_x >= width or match_y >= height:
-                        logger.warning(f"Match {i} coordinates outside overlay: ({match_x}, {match_y})")
-                        continue
-                    
-                    # Calculate center point
+                    # Calculate center point and scaled dimensions
                     center_x = match_x + match_width // 2
                     center_y = match_y + match_height // 2
-                    
-                    # Calculate scaled dimensions
                     scaled_width = int(match_width * self.rect_scale)
                     scaled_height = int(match_height * self.rect_scale)
                     
-                    # Calculate new bounds ensuring they're integers
+                    # Calculate bounds relative to client area
                     new_x1 = max(0, min(int(center_x - scaled_width // 2), width - 1))
                     new_y1 = max(0, min(int(center_y - scaled_height // 2), height - 1))
                     new_x2 = max(0, min(int(new_x1 + scaled_width), width - 1))
                     new_y2 = max(0, min(int(new_y1 + scaled_height), height - 1))
                     
-                    # Skip if the rectangle is too small
+                    # Skip if rectangle is too small
                     if new_x2 - new_x1 < 10 or new_y2 - new_y1 < 10:
-                        logger.warning(f"Match {i} rectangle too small: ({new_x1}, {new_y1}) -> ({new_x2}, {new_y2})")
                         continue
-                    
-                    logger.debug(f"Drawing match {i}: {name} at ({new_x1}, {new_y1}) -> ({new_x2}, {new_y2})")
-                    
-                    # Ensure color values are tuples of integers
-                    rect_color = tuple(map(int, self.rect_color))
-                    font_color = tuple(map(int, self.font_color))
-                    cross_color = tuple(map(int, self.cross_color))
                     
                     # Draw rectangle
                     cv2.rectangle(
                         overlay,
                         (new_x1, new_y1),
                         (new_x2, new_y2),
-                        rect_color,
+                        self.rect_color,
                         self.rect_thickness
                     )
                     
-                    # Draw text above the rectangle
+                    # Draw text
                     text = f"{name} ({confidence:.2f})"
                     cv2.putText(
                         overlay,
                         text,
-                        (new_x1, max(5, new_y1 - 5)),  # Ensure text is not cut off
+                        (new_x1, max(5, new_y1 - 5)),
                         cv2.FONT_HERSHEY_SIMPLEX,
                         self.font_size / 30,
-                        font_color,
+                        self.font_color,
                         self.text_thickness
                     )
                     
-                    # Draw cross at center
-                    # Scale the cross size based on cross_scale setting
+                    # Draw cross
                     scaled_cross_size = int(self.cross_size * self.cross_scale)
                     half_size = scaled_cross_size // 2
-                    
-                    # Draw cross with scaled size
                     cv2.line(
                         overlay,
                         (center_x - half_size, center_y),
                         (center_x + half_size, center_y),
-                        cross_color,
+                        self.cross_color,
                         self.cross_thickness
                     )
                     cv2.line(
                         overlay,
                         (center_x, center_y - half_size),
                         (center_x, center_y + half_size),
-                        cross_color,
+                        self.cross_color,
                         self.cross_thickness
                     )
-            else:
-                # No matches to draw - still show diagnostic text
-                cv2.putText(
-                    overlay,
-                    f"No matches in cache (timer active: {self.template_matching_timer.isActive()})",
-                    (80, 80),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.5,
-                    (0, 255, 255),  # Yellow text
-                    1
-                )
-                logger.debug("No matches to draw on overlay")
             
             # Show overlay
             cv2.imshow(self.window_name, overlay)
             cv2.waitKey(1)
             
-            # Make sure window is still topmost
-            win32gui.SetWindowPos(
-                self.window_hwnd,
-                win32con.HWND_TOPMOST,
-                0, 0, 0, 0,  # Ignore position/size - already set above
-                win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE
-            )
-            
-            # Refresh transparency settings
+            # Ensure transparency is maintained
             win32gui.SetLayeredWindowAttributes(
                 self.window_hwnd,
                 win32api.RGB(255, 0, 255),  # Magenta color key
-                0,  # Alpha (0 = fully transparent for non-magenta pixels)
+                0,  # Alpha
                 win32con.LWA_COLORKEY
             )
+            
         except Exception as e:
             logger.error(f"Error updating overlay: {str(e)}", exc_info=True)
 
+    def _start_refresh(self) -> None:
+        """Start the refresh process."""
+        self.refreshing = True
+        self.refresh_start_time = time.time()
+        self.cached_matches = []  # Clear cached matches
+        
+        # Start spinning indicator
+        self.spinning_indicator.start()
+        
+        # Force immediate template matching update
+        self._update_template_matching()
+        
     def stop_template_matching(self) -> None:
         """Stop template matching."""
         logger.info("Stopping template matching")
         self.template_matching_active = False
         
-        # Stop timers
+        # Stop timers and spinning indicator
         if self.template_matching_timer.isActive():
             self.template_matching_timer.stop()
         
         if self.draw_timer.isActive():
             self.draw_timer.stop()
+            
+        self.spinning_indicator.stop()
         
         # Reset template matcher frequency
         self.template_matcher.update_frequency = 0.0

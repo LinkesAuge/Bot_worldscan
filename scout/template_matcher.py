@@ -273,12 +273,22 @@ class TemplateMatcher:
         
     def capture_window(self) -> Optional[np.ndarray]:
         """
-        Capture a screenshot of the game window.
+        Capture a screenshot of the game window using the window manager.
+        
+        This method delegates to the window manager's capture_screenshot() method
+        to ensure consistent coordinate spaces and capture behavior across the application.
         
         Returns:
             Screenshot as numpy array in BGR format, or None if failed
         """
-        return self.window_manager.capture_screenshot()
+        # Use window manager's screenshot method to ensure consistency
+        screenshot = self.window_manager.capture_screenshot()
+        if screenshot is None:
+            logger.warning("Failed to capture window through window manager")
+            return None
+            
+        logger.debug(f"Captured window screenshot with shape: {screenshot.shape}")
+        return screenshot
         
     def find_all_templates(self, image: np.ndarray) -> List[Tuple[str, int, int, int, int, float]]:
         """

@@ -1,4 +1,8 @@
 ---
+description: Everything that is important for our project, code guidelins, structure, features, important notes rules etc.
+globs: 
+---
+---
 description: General rules for the project
 globs: *.py
 ---
@@ -20,6 +24,9 @@ A Python application for automating interactions with the Total Battle browser g
 We develop an App for a browser game called "Total Battle" that can run in browsers like Chrome, Firefox, Internet Explorer etc. but can also run in a dedicated windows app (window name is "Total Battle). 
 The app is a tool to extract information from the game world (the user has a top down view of a map with cities, monsters, armies, points of interests etc.) and to control certain actions (like move the camera, mouse cursor, click on objects etc.).
 To achieve this we take screenshots of the current game state and analyse them with pattern matching and ocr / optical character recognition.
+
+# IMPORTANT NOTES FOR DRAWING / OVERLAY
+The overlay class should handle everything that is drawn on our overlay.
 
 # TECH AND LIBRARIES STACK
 - Python as coding language

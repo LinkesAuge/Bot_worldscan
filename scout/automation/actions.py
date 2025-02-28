@@ -26,18 +26,12 @@ class ActionType(Enum):
     WAIT_FOR_OCR = auto()   # Wait for OCR condition
 
 @dataclass
-class ActionParamsCommon:
-    """Common parameters for all actions."""
-    position_name: Optional[str] = None  # Name of position to act on
-    timeout: float = 30.0  # Timeout in seconds for conditions
-    description: Optional[str] = None  # Optional description
-
-@dataclass
 class ClickParams:
     """Parameters for click actions."""
     position_name: Optional[str] = None  # Name of position to act on
     timeout: float = 30.0  # Timeout in seconds for conditions
     description: Optional[str] = None  # Optional description
+    repeat: int = 1  # Number of times to repeat this action
 
 @dataclass
 class DragParams:
@@ -46,6 +40,7 @@ class DragParams:
     position_name: Optional[str] = None  # Name of position to act on
     timeout: float = 30.0  # Timeout in seconds for conditions
     description: Optional[str] = None  # Optional description
+    repeat: int = 1  # Number of times to repeat this action
     duration: float = 0.5   # Duration of drag operation
 
 @dataclass
@@ -55,6 +50,7 @@ class TypeParams:
     position_name: Optional[str] = None  # Name of position to act on
     timeout: float = 30.0  # Timeout in seconds for conditions
     description: Optional[str] = None  # Optional description
+    repeat: int = 1  # Number of times to repeat this action
 
 @dataclass
 class WaitParams:
@@ -63,11 +59,16 @@ class WaitParams:
     position_name: Optional[str] = None  # Name of position to act on
     timeout: float = 30.0  # Timeout in seconds for conditions
     description: Optional[str] = None  # Optional description
+    repeat: int = 1  # Number of times to repeat this action
 
 @dataclass
-class TemplateSearchParams(ActionParamsCommon):
+class TemplateSearchParams:
     """Parameters for template search action."""
     templates: List[str] = field(default_factory=list)  # List of template names to search for
+    position_name: Optional[str] = None  # Name of position to act on
+    timeout: float = 30.0  # Timeout in seconds for conditions
+    description: Optional[str] = None  # Optional description
+    repeat: int = 1  # Number of times to repeat this action
     use_all_templates: bool = True  # Whether to use all available templates
     overlay_enabled: bool = True  # Whether to show overlay during search
     sound_enabled: bool = True  # Whether to enable sound alerts
@@ -87,7 +88,8 @@ class TemplateSearchParams(ActionParamsCommon):
             'min_confidence': self.min_confidence,
             'position_name': self.position_name,
             'timeout': self.timeout,
-            'description': self.description
+            'description': self.description,
+            'repeat': self.repeat
         }
 
     @classmethod
@@ -102,6 +104,7 @@ class OCRWaitParams:
     position_name: Optional[str] = None  # Name of position to act on
     timeout: float = 30.0  # Timeout in seconds for conditions
     description: Optional[str] = None  # Optional description
+    repeat: int = 1  # Number of times to repeat this action
     partial_match: bool = False  # Whether to accept partial matches
 
 class AutomationAction:

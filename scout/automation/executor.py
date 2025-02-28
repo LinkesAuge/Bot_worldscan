@@ -17,7 +17,7 @@ import win32api
 import win32con
 from scout.automation.core import AutomationPosition, AutomationSequence, ExecutionContext
 from scout.automation.actions import (
-    ActionType, AutomationAction, ActionParamsCommon,
+    ActionType, AutomationAction,
     ClickParams, DragParams, TypeParams, WaitParams,
     TemplateSearchParams, OCRWaitParams
 )
@@ -73,6 +73,7 @@ class SequenceExecutor(QObject):
         self.current_step = 0
         self.is_paused = False
         self.is_running = False
+        self.current_repeat = 0  # Track current repeat count for the current action
         
     def execute_sequence(self, sequence: AutomationSequence) -> None:
         """
@@ -130,6 +131,7 @@ class SequenceExecutor(QObject):
         self.is_paused = False
         self.current_sequence = None
         self.current_step = 0
+        self.current_repeat = 0  # Reset repeat counter
         self._log_debug("Execution stopped")
         
     def _execute_next_step(self) -> None:
@@ -154,22 +156,36 @@ class SequenceExecutor(QObject):
             action_data = self.current_sequence.actions[self.current_step]
             action = AutomationAction.from_dict(action_data)
             
-            self._log_debug(f"Executing step {self.current_step + 1}: {action.action_type.name}")
+            # Get repeat count for current action
+            repeat_count = getattr(action.params, 'repeat', 1)
             
-            # Execute or simulate the action
-            if self.context.simulation_mode:
-                self._simulate_action(action)
-            else:
-                self._execute_action(action)
+            # If we haven't completed all repeats for this action
+            if self.current_repeat < repeat_count:
+                self._log_debug(f"Executing step {self.current_step + 1} (repeat {self.current_repeat + 1}/{repeat_count}): {action.action_type.name}")
                 
-            # Update progress
-            self.step_completed.emit(self.current_step)
-            self.current_step += 1
-            
-            # Schedule next step if not stopped
-            if not self.is_paused and self.is_running:
-                time.sleep(self.context.step_delay)
-                self._execute_next_step()
+                # Execute or simulate the action
+                if self.context.simulation_mode:
+                    self._simulate_action(action)
+                else:
+                    self._execute_action(action)
+                    
+                # Update progress
+                self.step_completed.emit(self.current_step)
+                self.current_repeat += 1
+                
+                # Schedule next repeat if not stopped
+                if not self.is_paused and self.is_running:
+                    time.sleep(self.context.step_delay)
+                    self._execute_next_step()
+            else:
+                # Move to next action
+                self.current_step += 1
+                self.current_repeat = 0  # Reset repeat counter
+                
+                # Schedule next step if not stopped
+                if not self.is_paused and self.is_running:
+                    time.sleep(self.context.step_delay)
+                    self._execute_next_step()
                 
         except Exception as e:
             self._handle_error(f"Failed to execute step {self.current_step + 1}: {e}")
@@ -684,6 +700,7 @@ class SequenceExecutor(QObject):
         if self.context.loop_enabled and self.is_running:
             # Reset step counter and continue execution
             self.current_step = 0
+            self.current_repeat = 0  # Reset repeat counter
             self._log_debug("Sequence completed - restarting due to loop enabled")
             time.sleep(self.context.step_delay)  # Add delay between loops
             self._execute_next_step()

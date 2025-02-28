@@ -5,7 +5,7 @@ This module provides specialized widgets for configuring different types of acti
 Each action type has its own parameter widget that shows relevant configuration options.
 """
 
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Union
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QLineEdit, QSpinBox, QDoubleSpinBox, QCheckBox,
@@ -15,13 +15,15 @@ from PyQt6.QtCore import Qt, pyqtSignal
 import logging
 from pathlib import Path
 from scout.automation.actions import (
-    ActionType, ActionParamsCommon, ClickParams, DragParams,
+    ActionType, ClickParams, DragParams,
     TypeParams, WaitParams, TemplateSearchParams, OCRWaitParams
 )
 from scout.automation.core import AutomationPosition
 from scout.config_manager import ConfigManager
 
 logger = logging.getLogger(__name__)
+
+ParamType = Union[ClickParams, DragParams, TypeParams, WaitParams, TemplateSearchParams, OCRWaitParams]
 
 class BaseParamsWidget(QWidget):
     """Base class for all parameter widgets."""
@@ -33,13 +35,37 @@ class BaseParamsWidget(QWidget):
         super().__init__()
         self._creating_widgets = False
         
-    def get_params(self) -> ActionParamsCommon:
+        # Create base layout
+        self.base_layout = QVBoxLayout()
+        self.setLayout(self.base_layout)
+        
+        # Add repeat count field
+        repeat_layout = QHBoxLayout()
+        repeat_layout.addWidget(QLabel("Repeat Count:"))
+        self.repeat_spin = QSpinBox()
+        self.repeat_spin.setRange(1, 999)
+        self.repeat_spin.setValue(1)
+        self.repeat_spin.valueChanged.connect(self.params_changed.emit)
+        repeat_layout.addWidget(self.repeat_spin)
+        self.base_layout.addLayout(repeat_layout)
+        
+    def get_params(self) -> ParamType:
         """Get the current parameter values."""
         raise NotImplementedError()
         
-    def set_params(self, params: ActionParamsCommon) -> None:
+    def set_params(self, params: ParamType) -> None:
         """Set the parameter values."""
         raise NotImplementedError()
+        
+    def _get_common_params(self) -> Dict[str, Any]:
+        """Get common parameter values."""
+        return {
+            'repeat': self.repeat_spin.value()
+        }
+        
+    def _set_common_params(self, params: ParamType) -> None:
+        """Set common parameter values."""
+        self.repeat_spin.setValue(getattr(params, 'repeat', 1))
 
 class ClickParamsWidget(BaseParamsWidget):
     """Widget for configuring click action parameters."""
@@ -47,8 +73,6 @@ class ClickParamsWidget(BaseParamsWidget):
     def __init__(self):
         """Initialize the click parameters widget."""
         super().__init__()
-        layout = QVBoxLayout()
-        self.setLayout(layout)
         
         # Description field
         desc_layout = QHBoxLayout()
@@ -56,7 +80,7 @@ class ClickParamsWidget(BaseParamsWidget):
         self.description_edit = QLineEdit()
         self.description_edit.textChanged.connect(self.params_changed.emit)
         desc_layout.addWidget(self.description_edit)
-        layout.addLayout(desc_layout)
+        self.base_layout.addLayout(desc_layout)
         
         # Timeout field
         timeout_layout = QHBoxLayout()
@@ -66,13 +90,14 @@ class ClickParamsWidget(BaseParamsWidget):
         self.timeout_spin.setValue(30.0)
         self.timeout_spin.valueChanged.connect(self.params_changed.emit)
         timeout_layout.addWidget(self.timeout_spin)
-        layout.addLayout(timeout_layout)
+        self.base_layout.addLayout(timeout_layout)
         
     def get_params(self) -> ClickParams:
         """Get the current click parameters."""
         return ClickParams(
             description=self.description_edit.text() or None,
-            timeout=self.timeout_spin.value()
+            timeout=self.timeout_spin.value(),
+            **self._get_common_params()  # Include common params
         )
         
     def set_params(self, params: ClickParams) -> None:
@@ -80,6 +105,7 @@ class ClickParamsWidget(BaseParamsWidget):
         self._creating_widgets = True
         self.description_edit.setText(params.description or "")
         self.timeout_spin.setValue(params.timeout)
+        self._set_common_params(params)  # Set common params
         self._creating_widgets = False
 
 class DragParamsWidget(BaseParamsWidget):
@@ -88,8 +114,6 @@ class DragParamsWidget(BaseParamsWidget):
     def __init__(self):
         """Initialize the drag parameters widget."""
         super().__init__()
-        layout = QVBoxLayout()
-        self.setLayout(layout)
         
         # Description field
         desc_layout = QHBoxLayout()
@@ -97,31 +121,25 @@ class DragParamsWidget(BaseParamsWidget):
         self.description_edit = QLineEdit()
         self.description_edit.textChanged.connect(self.params_changed.emit)
         desc_layout.addWidget(self.description_edit)
-        layout.addLayout(desc_layout)
+        self.base_layout.addLayout(desc_layout)
         
-        # Add note about positions
-        note_label = QLabel("Select start position from the main position dropdown above")
-        note_label.setStyleSheet("color: gray; font-style: italic;")
-        layout.addWidget(note_label)
-        
-        # End position field
-        end_pos_layout = QVBoxLayout()  # Changed to vertical layout for better organization
+        # End position selection
+        end_pos_layout = QHBoxLayout()
         end_pos_layout.addWidget(QLabel("End Position:"))
         self.end_position_combo = QComboBox()
-        self.end_position_combo.setMinimumWidth(200)  # Make the combo box wider
         self.end_position_combo.currentTextChanged.connect(self.params_changed.emit)
         end_pos_layout.addWidget(self.end_position_combo)
-        layout.addLayout(end_pos_layout)
+        self.base_layout.addLayout(end_pos_layout)
         
         # Duration field
         duration_layout = QHBoxLayout()
         duration_layout.addWidget(QLabel("Duration (s):"))
         self.duration_spin = QDoubleSpinBox()
-        self.duration_spin.setRange(0.1, 10.0)
+        self.duration_spin.setRange(0.01, 999)
         self.duration_spin.setValue(0.5)
         self.duration_spin.valueChanged.connect(self.params_changed.emit)
         duration_layout.addWidget(self.duration_spin)
-        layout.addLayout(duration_layout)
+        self.base_layout.addLayout(duration_layout)
         
         # Timeout field
         timeout_layout = QHBoxLayout()
@@ -131,7 +149,7 @@ class DragParamsWidget(BaseParamsWidget):
         self.timeout_spin.setValue(30.0)
         self.timeout_spin.valueChanged.connect(self.params_changed.emit)
         timeout_layout.addWidget(self.timeout_spin)
-        layout.addLayout(timeout_layout)
+        self.base_layout.addLayout(timeout_layout)
         
     def get_params(self) -> DragParams:
         """Get the current drag parameters."""
@@ -139,7 +157,8 @@ class DragParamsWidget(BaseParamsWidget):
             description=self.description_edit.text() or None,
             timeout=self.timeout_spin.value(),
             duration=self.duration_spin.value(),
-            end_position_name=self.end_position_combo.currentText()
+            end_position_name=self.end_position_combo.currentText(),
+            **self._get_common_params()
         )
         
     def set_params(self, params: DragParams) -> None:
@@ -153,6 +172,7 @@ class DragParamsWidget(BaseParamsWidget):
         index = self.end_position_combo.findText(params.end_position_name)
         if index >= 0:
             self.end_position_combo.setCurrentIndex(index)
+        self._set_common_params(params)
         self._creating_widgets = False
         
     def update_positions(self, positions: Dict[str, AutomationPosition]) -> None:
@@ -180,8 +200,6 @@ class TypeParamsWidget(BaseParamsWidget):
     def __init__(self):
         """Initialize the type parameters widget."""
         super().__init__()
-        layout = QVBoxLayout()
-        self.setLayout(layout)
         
         # Description field
         desc_layout = QHBoxLayout()
@@ -189,7 +207,7 @@ class TypeParamsWidget(BaseParamsWidget):
         self.description_edit = QLineEdit()
         self.description_edit.textChanged.connect(self.params_changed.emit)
         desc_layout.addWidget(self.description_edit)
-        layout.addLayout(desc_layout)
+        self.base_layout.addLayout(desc_layout)
         
         # Text field
         text_layout = QHBoxLayout()
@@ -197,7 +215,7 @@ class TypeParamsWidget(BaseParamsWidget):
         self.text_edit = QLineEdit()
         self.text_edit.textChanged.connect(self.params_changed.emit)
         text_layout.addWidget(self.text_edit)
-        layout.addLayout(text_layout)
+        self.base_layout.addLayout(text_layout)
         
         # Timeout field
         timeout_layout = QHBoxLayout()
@@ -207,14 +225,15 @@ class TypeParamsWidget(BaseParamsWidget):
         self.timeout_spin.setValue(30.0)
         self.timeout_spin.valueChanged.connect(self.params_changed.emit)
         timeout_layout.addWidget(self.timeout_spin)
-        layout.addLayout(timeout_layout)
+        self.base_layout.addLayout(timeout_layout)
         
     def get_params(self) -> TypeParams:
         """Get the current type parameters."""
         return TypeParams(
             description=self.description_edit.text() or None,
             timeout=self.timeout_spin.value(),
-            text=self.text_edit.text()
+            text=self.text_edit.text(),
+            **self._get_common_params()
         )
         
     def set_params(self, params: TypeParams) -> None:
@@ -223,6 +242,7 @@ class TypeParamsWidget(BaseParamsWidget):
         self.description_edit.setText(params.description or "")
         self.timeout_spin.setValue(params.timeout)
         self.text_edit.setText(params.text)
+        self._set_common_params(params)
         self._creating_widgets = False
 
 class WaitParamsWidget(BaseParamsWidget):
@@ -231,8 +251,6 @@ class WaitParamsWidget(BaseParamsWidget):
     def __init__(self):
         """Initialize the wait parameters widget."""
         super().__init__()
-        layout = QVBoxLayout()
-        self.setLayout(layout)
         
         # Description field
         desc_layout = QHBoxLayout()
@@ -240,7 +258,7 @@ class WaitParamsWidget(BaseParamsWidget):
         self.description_edit = QLineEdit()
         self.description_edit.textChanged.connect(self.params_changed.emit)
         desc_layout.addWidget(self.description_edit)
-        layout.addLayout(desc_layout)
+        self.base_layout.addLayout(desc_layout)
         
         # Duration field
         duration_layout = QHBoxLayout()
@@ -250,13 +268,14 @@ class WaitParamsWidget(BaseParamsWidget):
         self.duration_spin.setValue(1.0)
         self.duration_spin.valueChanged.connect(self.params_changed.emit)
         duration_layout.addWidget(self.duration_spin)
-        layout.addLayout(duration_layout)
+        self.base_layout.addLayout(duration_layout)
         
     def get_params(self) -> WaitParams:
         """Get the current wait parameters."""
         return WaitParams(
             description=self.description_edit.text() or None,
-            duration=self.duration_spin.value()
+            duration=self.duration_spin.value(),
+            **self._get_common_params()
         )
         
     def set_params(self, params: WaitParams) -> None:
@@ -264,6 +283,7 @@ class WaitParamsWidget(BaseParamsWidget):
         self._creating_widgets = True
         self.description_edit.setText(params.description or "")
         self.duration_spin.setValue(params.duration)
+        self._set_common_params(params)
         self._creating_widgets = False
 
 class TemplateSearchParamsWidget(BaseParamsWidget):
@@ -272,93 +292,73 @@ class TemplateSearchParamsWidget(BaseParamsWidget):
     def __init__(self):
         """Initialize the template search parameters widget."""
         super().__init__()
-        layout = QVBoxLayout()
-        self.setLayout(layout)
-        
-        # Template selection
-        template_group = QVBoxLayout()
-        template_group.addWidget(QLabel("Template Selection:"))
-        
-        self.use_all_templates = QCheckBox("Use All Templates")
-        self.use_all_templates.setChecked(True)
-        self.use_all_templates.stateChanged.connect(self._on_use_all_changed)
-        template_group.addWidget(self.use_all_templates)
-        
-        self.template_list = QListWidget()
-        self.template_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
-        template_group.addWidget(self.template_list)
-        layout.addLayout(template_group)
-        
-        # Load available templates
-        self._load_templates()
-        
-        # Add a note about using the overlay directly
-        note_label = QLabel("This action uses the template matching feature to find images on screen.")
-        note_label.setStyleSheet("color: #555; font-style: italic;")
-        layout.addWidget(note_label)
-        
-        # Overlay toggle
-        self.overlay_enabled = QCheckBox("Show Overlay Window (visualize matches on screen)")
-        self.overlay_enabled.setChecked(True)  # Default to showing overlay
-        overlay_note = QLabel("Shows a transparent window over the game displaying matched templates.\n"
-                             "Disable if you only need sound alerts without visual feedback.")
-        overlay_note.setStyleSheet("color: #555; font-style: italic; font-size: 8pt;")
-        layout.addWidget(self.overlay_enabled)
-        layout.addWidget(overlay_note)
-        
-        # Sound toggle
-        self.sound_enabled = QCheckBox("Enable Sound Alerts")
-        self.sound_enabled.setChecked(True)
-        layout.addWidget(self.sound_enabled)
-        
-        # Duration
-        duration_layout = QHBoxLayout()
-        duration_layout.addWidget(QLabel("Duration (s):"))
-        self.duration_spin = QDoubleSpinBox()
-        self.duration_spin.setRange(1.0, 3600.0)  # 1 second to 1 hour
-        self.duration_spin.setValue(30.0)
-        duration_layout.addWidget(self.duration_spin)
-        layout.addLayout(duration_layout)
-        
-        # Update frequency
-        freq_layout = QHBoxLayout()
-        freq_layout.addWidget(QLabel("Updates/sec:"))
-        self.freq_spin = QDoubleSpinBox()
-        self.freq_spin.setRange(0.1, 10.0)
-        self.freq_spin.setValue(1.0)
-        freq_layout.addWidget(self.freq_spin)
-        layout.addLayout(freq_layout)
-        
-        # Confidence
-        conf_layout = QHBoxLayout()
-        conf_layout.addWidget(QLabel("Min Confidence:"))
-        self.confidence_spin = QDoubleSpinBox()
-        self.confidence_spin.setRange(0.1, 1.0)
-        self.confidence_spin.setSingleStep(0.1)
-        self.confidence_spin.setValue(0.8)
-        conf_layout.addWidget(self.confidence_spin)
-        layout.addLayout(conf_layout)
         
         # Description field
         desc_layout = QHBoxLayout()
         desc_layout.addWidget(QLabel("Description:"))
         self.description_edit = QLineEdit()
-        self.description_edit.setPlaceholderText("Description (optional)")
+        self.description_edit.textChanged.connect(self.params_changed.emit)
         desc_layout.addWidget(self.description_edit)
-        layout.addLayout(desc_layout)
+        self.base_layout.addLayout(desc_layout)
         
-        # Load saved settings
-        self._load_settings()
+        # Template list
+        self.template_list = QListWidget()
+        self.template_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
+        self.template_list.itemSelectionChanged.connect(self.params_changed.emit)
+        self.base_layout.addWidget(QLabel("Templates:"))
+        self.base_layout.addWidget(self.template_list)
         
-        # Connect signals
-        self.use_all_templates.stateChanged.connect(self.params_changed)
-        self.template_list.itemSelectionChanged.connect(self.params_changed)
-        self.overlay_enabled.stateChanged.connect(self.params_changed)
-        self.sound_enabled.stateChanged.connect(self.params_changed)
-        self.duration_spin.valueChanged.connect(self.params_changed)
-        self.freq_spin.valueChanged.connect(self.params_changed)
-        self.confidence_spin.valueChanged.connect(self.params_changed)
-        self.description_edit.textChanged.connect(self.params_changed)
+        # Use all templates checkbox
+        self.use_all_templates = QCheckBox("Use All Templates")
+        self.use_all_templates.setChecked(True)
+        self.use_all_templates.stateChanged.connect(self._on_use_all_changed)
+        self.base_layout.addWidget(self.use_all_templates)
+        
+        # Overlay enabled checkbox
+        self.overlay_enabled = QCheckBox("Show Overlay")
+        self.overlay_enabled.setChecked(True)
+        self.overlay_enabled.stateChanged.connect(self.params_changed.emit)
+        self.base_layout.addWidget(self.overlay_enabled)
+        
+        # Sound enabled checkbox
+        self.sound_enabled = QCheckBox("Enable Sound")
+        self.sound_enabled.setChecked(True)
+        self.sound_enabled.stateChanged.connect(self.params_changed.emit)
+        self.base_layout.addWidget(self.sound_enabled)
+        
+        # Duration field
+        duration_layout = QHBoxLayout()
+        duration_layout.addWidget(QLabel("Duration (s):"))
+        self.duration_spin = QDoubleSpinBox()
+        self.duration_spin.setRange(0.01, 999)
+        self.duration_spin.setValue(30.0)
+        self.duration_spin.valueChanged.connect(self.params_changed.emit)
+        duration_layout.addWidget(self.duration_spin)
+        self.base_layout.addLayout(duration_layout)
+        
+        # Update frequency field
+        freq_layout = QHBoxLayout()
+        freq_layout.addWidget(QLabel("Updates/sec:"))
+        self.freq_spin = QDoubleSpinBox()
+        self.freq_spin.setRange(0.1, 60)
+        self.freq_spin.setValue(1.0)
+        self.freq_spin.valueChanged.connect(self.params_changed.emit)
+        freq_layout.addWidget(self.freq_spin)
+        self.base_layout.addLayout(freq_layout)
+        
+        # Confidence threshold field
+        conf_layout = QHBoxLayout()
+        conf_layout.addWidget(QLabel("Min Confidence:"))
+        self.confidence_spin = QDoubleSpinBox()
+        self.confidence_spin.setRange(0.01, 1.0)
+        self.confidence_spin.setValue(0.8)
+        self.confidence_spin.setSingleStep(0.05)
+        self.confidence_spin.valueChanged.connect(self.params_changed.emit)
+        conf_layout.addWidget(self.confidence_spin)
+        self.base_layout.addLayout(conf_layout)
+        
+        # Load available templates
+        self._load_templates()
         
     def _load_templates(self) -> None:
         """Load available templates from templates directory."""
@@ -451,7 +451,8 @@ class TemplateSearchParamsWidget(BaseParamsWidget):
             duration=self.duration_spin.value(),
             update_frequency=self.freq_spin.value(),
             min_confidence=self.confidence_spin.value(),
-            description=self.description_edit.text() or None
+            description=self.description_edit.text() or None,
+            **self._get_common_params()
         )
         
     def set_params(self, params: TemplateSearchParams) -> None:
@@ -473,7 +474,8 @@ class TemplateSearchParamsWidget(BaseParamsWidget):
                 item = self.template_list.item(i)
                 if item.text() in params.templates:
                     item.setSelected(True)
-                    
+        
+        self._set_common_params(params)
         self._creating_widgets = False
 
 class OCRWaitParamsWidget(BaseParamsWidget):
@@ -482,8 +484,6 @@ class OCRWaitParamsWidget(BaseParamsWidget):
     def __init__(self):
         """Initialize the OCR wait parameters widget."""
         super().__init__()
-        layout = QVBoxLayout()
-        self.setLayout(layout)
         
         # Description field
         desc_layout = QHBoxLayout()
@@ -491,7 +491,7 @@ class OCRWaitParamsWidget(BaseParamsWidget):
         self.description_edit = QLineEdit()
         self.description_edit.textChanged.connect(self.params_changed.emit)
         desc_layout.addWidget(self.description_edit)
-        layout.addLayout(desc_layout)
+        self.base_layout.addLayout(desc_layout)
         
         # Expected text field
         text_layout = QHBoxLayout()
@@ -499,7 +499,7 @@ class OCRWaitParamsWidget(BaseParamsWidget):
         self.text_edit = QLineEdit()
         self.text_edit.textChanged.connect(self.params_changed.emit)
         text_layout.addWidget(self.text_edit)
-        layout.addLayout(text_layout)
+        self.base_layout.addLayout(text_layout)
         
         # Partial match checkbox
         match_layout = QHBoxLayout()
@@ -507,7 +507,7 @@ class OCRWaitParamsWidget(BaseParamsWidget):
         self.partial_check = QCheckBox()
         self.partial_check.stateChanged.connect(self.params_changed.emit)
         match_layout.addWidget(self.partial_check)
-        layout.addLayout(match_layout)
+        self.base_layout.addLayout(match_layout)
         
         # Timeout field
         timeout_layout = QHBoxLayout()
@@ -517,7 +517,7 @@ class OCRWaitParamsWidget(BaseParamsWidget):
         self.timeout_spin.setValue(30.0)
         self.timeout_spin.valueChanged.connect(self.params_changed.emit)
         timeout_layout.addWidget(self.timeout_spin)
-        layout.addLayout(timeout_layout)
+        self.base_layout.addLayout(timeout_layout)
         
     def get_params(self) -> OCRWaitParams:
         """Get the current OCR wait parameters."""
@@ -525,7 +525,8 @@ class OCRWaitParamsWidget(BaseParamsWidget):
             description=self.description_edit.text() or None,
             timeout=self.timeout_spin.value(),
             expected_text=self.text_edit.text(),
-            partial_match=self.partial_check.isChecked()
+            partial_match=self.partial_check.isChecked(),
+            **self._get_common_params()
         )
         
     def set_params(self, params: OCRWaitParams) -> None:
@@ -535,6 +536,7 @@ class OCRWaitParamsWidget(BaseParamsWidget):
         self.timeout_spin.setValue(params.timeout)
         self.text_edit.setText(params.expected_text)
         self.partial_check.setChecked(params.partial_match)
+        self._set_common_params(params)
         self._creating_widgets = False
 
 def create_params_widget(action_type: ActionType) -> BaseParamsWidget:
