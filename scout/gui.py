@@ -146,6 +146,12 @@ class OverlayController(QMainWindow):
         self.create_pattern_matching_controls(overlay_layout, template_settings)
         self.create_scan_controls(overlay_layout)
         
+        # Add revert to defaults button
+        revert_btn = QPushButton("Revert to Default Settings")
+        revert_btn.setStyleSheet("background-color: #FFA500; color: white; padding: 8px; font-weight: bold;")  # Orange color
+        revert_btn.clicked.connect(self._handle_revert_to_defaults)
+        overlay_layout.addWidget(revert_btn)
+        
         # Add quit button at the bottom of overlay tab
         quit_btn = QPushButton("Quit")
         quit_btn.setStyleSheet("background-color: #aa0000; color: white; padding: 8px; font-weight: bold;")
@@ -1369,4 +1375,76 @@ class OverlayController(QMainWindow):
         # Save the new state
         self.save_settings()
         
-        logger.info(f"Sound alerts {'enabled' if new_state else 'disabled'}") 
+        logger.info(f"Sound alerts {'enabled' if new_state else 'disabled'}")
+
+    def _handle_revert_to_defaults(self) -> None:
+        """Handle reverting all settings to defaults."""
+        try:
+            # Show confirmation dialog
+            response = QMessageBox.question(
+                self,
+                "Revert to Defaults",
+                "Are you sure you want to revert all settings to their defaults?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            
+            if response == QMessageBox.StandardButton.Yes:
+                # Get default settings from config manager
+                config = ConfigManager()
+                settings = config.revert_to_defaults()
+                
+                # Update overlay settings
+                overlay_settings = settings["overlay"]
+                self.rect_color_btn.setStyleSheet(
+                    f"background-color: rgb({overlay_settings['rect_color'].red()}, "
+                    f"{overlay_settings['rect_color'].green()}, "
+                    f"{overlay_settings['rect_color'].blue()})"
+                )
+                self.font_color_btn.setStyleSheet(
+                    f"background-color: rgb({overlay_settings['font_color'].red()}, "
+                    f"{overlay_settings['font_color'].green()}, "
+                    f"{overlay_settings['font_color'].blue()})"
+                )
+                self.cross_color_btn.setStyleSheet(
+                    f"background-color: rgb({overlay_settings['cross_color'].red()}, "
+                    f"{overlay_settings['cross_color'].green()}, "
+                    f"{overlay_settings['cross_color'].blue()})"
+                )
+                
+                # Update sliders and spinboxes
+                self.thickness_slider.setValue(overlay_settings["rect_thickness"])
+                self.scale_slider.setValue(int(overlay_settings["rect_scale"] * 10))
+                self.scale_input.setValue(overlay_settings["rect_scale"])
+                self.font_size_slider.setValue(overlay_settings["font_size"])
+                self.text_thickness_slider.setValue(overlay_settings["text_thickness"])
+                self.cross_thickness_slider.setValue(overlay_settings["cross_thickness"])
+                self.cross_scale_slider.setValue(int(overlay_settings["cross_scale"] * 10))
+                self.cross_scale_input.setValue(overlay_settings["cross_scale"])
+                
+                # Update template matching settings
+                template_settings = settings["template_matching"]
+                self.confidence_slider.setValue(int(template_settings["confidence"] * 100))
+                self.confidence_input.setValue(template_settings["confidence"])
+                self.freq_slider.setValue(int(template_settings["target_frequency"] * 10))
+                self.freq_input.setValue(template_settings["target_frequency"])
+                self.sound_btn.setText(f"Sound Alert: {'ON' if template_settings['sound_enabled'] else 'OFF'}")
+                
+                # Update template search settings
+                template_search_settings = settings["template_search"]
+                self.template_matcher.target_frequency = template_search_settings["update_frequency"]
+                self.template_matcher.confidence = template_search_settings["min_confidence"]
+                self.template_matcher.sound_enabled = template_search_settings["sound_enabled"]
+                
+                # Save all settings
+                self.save_settings()
+                
+                # Update UI to reflect changes
+                self._update_toggle_button_color(overlay_settings["active"])
+                self._update_pattern_button_color(template_settings["active"])
+                self._update_sound_button_color(template_settings["sound_enabled"])
+                
+                QMessageBox.information(self, "Settings Reverted", "All settings have been reverted to their defaults.")
+                
+        except Exception as e:
+            logger.error(f"Error reverting to defaults: {e}", exc_info=True)
+            QMessageBox.critical(self, "Error", f"Failed to revert settings: {str(e)}") 
