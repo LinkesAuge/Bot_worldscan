@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path
 import cv2
 import pytesseract
+import time
+import mss
 
 from scout.window_manager import WindowManager
 from scout.text_ocr import TextOCR
@@ -151,8 +153,26 @@ class GameWorldCoordinator:
                     })
                     logger.info(f"Set TextOCR region to match coordinate region: {self.text_ocr.region}")
             
+            # Take a screenshot of the coordinate region for debugging
+            window_pos = self.window_manager.get_window_position()
+            if window_pos and self.text_ocr.region:
+                # Ensure the debug directory exists
+                debug_dir = Path('scout/debug_screenshots')
+                debug_dir.mkdir(exist_ok=True, parents=True)
+                
+                # Capture the region
+                with mss.mss() as sct:
+                    screenshot = np.array(sct.grab(self.text_ocr.region))
+                    
+                # Save the screenshot for debugging
+                cv2.imwrite(str(debug_dir / 'coord_region_from_game_world.png'), screenshot)
+                logger.debug("Saved coordinate region screenshot for debugging")
+            
             # Trigger the TextOCR processing
             self.text_ocr._process_region()
+            
+            # Wait a short time for OCR processing to complete
+            time.sleep(0.1)
             
             # The coordinates will be updated via the TextOCR's _extract_coordinates method
             # which emits the coordinates_updated signal and updates the game state

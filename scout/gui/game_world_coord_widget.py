@@ -115,7 +115,30 @@ class CoordinateDisplayWidget(QWidget):
         """Update the coordinate display from OCR."""
         try:
             # Update coordinates from OCR
-            if self.game_coordinator.update_current_position_from_ocr():
+            success = self.game_coordinator.update_current_position_from_ocr()
+            
+            # Get coordinates from game state if available
+            if self.game_coordinator.game_state and self.game_coordinator.game_state.get_coordinates():
+                coords = self.game_coordinator.game_state.get_coordinates()
+                
+                # Format coordinates with a maximum of 3 digits
+                k_str = f"{coords.k:03d}" if coords.k is not None else "---"
+                x_str = f"{coords.x:03d}" if coords.x is not None else "---"
+                y_str = f"{coords.y:03d}" if coords.y is not None else "---"
+                
+                # Update labels
+                self.k_label.setText(k_str)
+                self.x_label.setText(x_str)
+                self.y_label.setText(y_str)
+                
+                # Update time
+                current_time = time.strftime("%H:%M:%S")
+                self.update_time_label.setText(current_time)
+                
+                logger.info(f"Updated coordinate display: K: {k_str}, X: {x_str}, Y: {y_str}")
+                return True
+            elif success:
+                # If game state is not available but update was successful, use the coordinator's current position
                 pos = self.game_coordinator.current_position
                 
                 # Format coordinates with a maximum of 3 digits
@@ -132,7 +155,7 @@ class CoordinateDisplayWidget(QWidget):
                 current_time = time.strftime("%H:%M:%S")
                 self.update_time_label.setText(current_time)
                 
-                logger.info(f"Updated coordinates: {pos}")
+                logger.info(f"Updated coordinates from coordinator: {pos}")
                 return True
             else:
                 logger.warning("Failed to update coordinates from OCR")

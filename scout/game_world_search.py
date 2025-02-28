@@ -368,12 +368,21 @@ class GameWorldSearch:
                 logger.error("Failed to capture screenshot for template matching")
                 return result
                 
-            # Save screenshot if enabled
+            # Always save screenshot for debugging purposes
+            timestamp = int(time.time())
+            debug_dir = Path('scout/debug_screenshots')
+            debug_dir.mkdir(exist_ok=True, parents=True)
+            debug_screenshot_path = str(debug_dir / f"search_debug_{timestamp}.png")
+            cv2.imwrite(debug_screenshot_path, screenshot)
+            
+            # Save screenshot to search results directory if enabled
             screenshot_path = None
             if self.save_screenshots:
-                timestamp = int(time.time())
                 screenshot_path = str(self.screenshot_dir / f"search_{timestamp}.png")
                 cv2.imwrite(screenshot_path, screenshot)
+            else:
+                # Even if save_screenshots is disabled, we still want to have a path for the result
+                screenshot_path = debug_screenshot_path
                 
             # Find matches
             matches = self.template_matcher.find_matches(screenshot, template_names)
@@ -404,6 +413,9 @@ class GameWorldSearch:
                     result.screenshot_path = screenshot_path
                     
                     logger.info(f"Found template {best_match.template_name} with confidence {best_match.confidence:.2f}")
+            else:
+                # Even if no matches were found, still set the screenshot path for debugging
+                result.screenshot_path = screenshot_path
                     
             # Wait a bit to avoid overloading the system
             time.sleep(self.template_search_delay)

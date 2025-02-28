@@ -1,0 +1,27 @@
+## OCR System and Game World Search Integration (2023-07-10)
+
+### Issues Fixed
+- Inconsistent OCR processing paths causing coordinate extraction failures
+- Missing screenshots during template searches making debugging difficult
+- Coordinate display not updating properly in the game world search tab
+- Game world coordinator not properly utilizing the TextOCR system
+
+### Root Cause Analysis
+The main issue was that there were two separate processing paths for OCR:
+1. `TextOCR._process_region()` - Used by the main OCR system
+2. `GameWorldCoordinator.update_current_position_from_ocr()` - Used by the game world search system
+
+This dual approach led to inconsistent results, as the game world search system was not properly integrated with the OCR system. Additionally, screenshots were not being consistently saved during template searches, making it difficult to debug coordinate extraction issues.
+
+### Solutions Implemented
+1. Modified `GameWorldCoordinator.update_current_position_from_ocr()` to use the TextOCR system directly
+2. Enhanced `GameWorldSearch._check_for_templates()` to always save screenshots for debugging
+3. Improved `CoordinateDisplayWidget._update_coordinates()` to handle different coordinate sources
+4. Added additional logging and debug screenshots for better troubleshooting
+5. Ensured the game world search tab properly updates when coordinates change
+
+### Future Prevention
+- Maintain a single source of truth for OCR processing (TextOCR)
+- Ensure consistent naming for debug images to make comparison easier
+- Add more comprehensive logging for coordinate updates
+- Implement better error handling for OCR failures 

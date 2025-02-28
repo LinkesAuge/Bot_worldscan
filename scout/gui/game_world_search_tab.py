@@ -399,9 +399,19 @@ class GameWorldSearchTab(QWidget):
         # from the OCR process, which are centered and consistent
         self.coord_widget._update_coordinates()
         
+        # Log the updated coordinates for debugging
+        if hasattr(coords, 'k') and hasattr(coords, 'x') and hasattr(coords, 'y'):
+            k_str = f"{coords.k:03d}" if coords.k is not None else "---"
+            x_str = f"{coords.x:03d}" if coords.x is not None else "---"
+            y_str = f"{coords.y:03d}" if coords.y is not None else "---"
+            logger.info(f"Game World Search Tab received coordinates update: K: {k_str}, X: {x_str}, Y: {y_str}")
+        
         # Also update the status label with the current coordinates
         if hasattr(coords, 'k') and hasattr(coords, 'x') and hasattr(coords, 'y'):
             k_str = f"{coords.k:03d}" if coords.k is not None else "---"
             x_str = f"{coords.x:03d}" if coords.x is not None else "---"
             y_str = f"{coords.y:03d}" if coords.y is not None else "---"
             self.status_label.setText(f"Current position: K: {k_str}, X: {x_str}, Y: {y_str}")
+            
+        # Force the coordinate display widget to update immediately
+        self.coord_widget.update()
