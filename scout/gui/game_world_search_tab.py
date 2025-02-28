@@ -404,4 +404,4 @@ class GameWorldSearchTab(QWidget):
             k_str = f"{coords.k:03d}" if coords.k is not None else "---"
             x_str = f"{coords.x:03d}" if coords.x is not None else "---"
             y_str = f"{coords.y:03d}" if coords.y is not None else "---"
-            self.status_label.setText(f"Current position: K: {k_str}, X: {x_str}, Y: {y_str}") 
+            self.status_label.setText(f"Current position: K: {k_str}, X: {x_str}, Y: {y_str}")

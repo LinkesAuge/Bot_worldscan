@@ -133,7 +133,7 @@ class TextOCR(QObject):
             debug_dir = Path('scout/debug_screenshots')
             debug_dir.mkdir(exist_ok=True, parents=True)
             cv2.imwrite(str(debug_dir / 'ocr_original.png'), image)
-            
+                
             # Apply multiple preprocessing approaches for better results
             
             # Approach 1: Enhanced contrast with adaptive thresholding
@@ -216,7 +216,7 @@ class TextOCR(QObject):
         except Exception as e:
             logger.error(f"Error extracting text from image: {e}", exc_info=True)
             return ""
-        
+            
     def _select_best_text(self, texts: List[str]) -> str:
         """
         Select the best text from multiple OCR results.
@@ -301,6 +301,9 @@ class TextOCR(QObject):
             debug_dir.mkdir(exist_ok=True, parents=True)
             cv2.imwrite(str(debug_dir / 'OCR Region (Original).png'), screenshot)
             
+            # Also save as coord_region.png for consistency with the old system
+            cv2.imwrite(str(debug_dir / 'coord_region.png'), screenshot)
+            
             # Use our enhanced extract_text method instead of duplicating the OCR logic
             text = self.extract_text(screenshot)
             
@@ -314,7 +317,7 @@ class TextOCR(QObject):
                     metadata={"raw_text": text},
                     save=True
                 )
-                
+            
                 # Also save a copy with a more descriptive name
                 cv2.imwrite(str(debug_dir / 'OCR Region (Processed).png'), processed_image)
             

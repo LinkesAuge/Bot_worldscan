@@ -16,6 +16,20 @@
 - Implemented game world coordinate system and search functionality
 - Created a comprehensive game world search tab with multiple components
 - Integrated game world search tab into the main application
+- Fixed OCR system integration with game world search
+- Unified OCR processing paths to use the same code path for both the "old" OCR system and the game world search
+- Ensured consistent debug screenshots for easier troubleshooting
+- Modified GameWorldCoordinator to use TextOCR's region and processing method instead of duplicating OCR logic
+- Updated TextOCR to save debug images with consistent naming for better comparison
+
+## OCR System Integration Fix
+- **Issue**: The OCR system had two separate processing paths - one in TextOCR._process_region() and another in GameWorldCoordinator.update_current_position_from_ocr(). This caused inconsistent results and made debugging difficult.
+- **Solution**: 
+  - Modified GameWorldCoordinator.update_current_position_from_ocr() to use TextOCR's region and processing method
+  - Updated TextOCR._process_region() to save debug images with consistent naming
+  - Ensured all OCR processing goes through the same code path
+- **Impact**: This fix ensures that both the "old" OCR system and the game world search use the same OCR processing path, reducing redundancy and ensuring consistent results.
+- **Testing**: Verify that the OCR system now produces consistent results and debug screenshots.
 
 ## Search Pattern Functionality
 - Implemented four different search pattern generators:
@@ -73,6 +87,20 @@
 - Added OCR status display
 - Integrated OCR with game world coordinate system for position tracking
 - Implemented coordinate parsing from OCR text
+- Attempted to improve OCR preprocessing by prioritizing Otsu's thresholding, but reverted changes as they made the issue worse
+- Reverted changes to coord_region.png processing as they caused issues with coordinate extraction
+
+## OCR Screenshot Region Issue
+- Fixed issue where OCR debug screenshots were being taken from different regions, causing confusion and making debugging difficult.
+  - Root cause: The code had two separate screenshot capture paths - one in `GameWorldCoordinator` that correctly cropped the coordinate region, and another in `TextOCR._process_region()` that took a separate screenshot using screen coordinates.
+  - Solution: Refactored the OCR processing to centralize all image processing in the `TextOCR.extract_text()` method, ensuring consistent debug screenshots and improving the OCR process.
+  - Implementation:
+    - Enhanced `TextOCR.extract_text()` with multiple preprocessing techniques and a scoring system
+    - Refactored `TextOCR._process_region()` to use the enhanced `extract_text()` method
+    - Improved `TextOCR._extract_coordinates()` to handle more coordinate formats
+    - Added consistent debug image naming and saving
+  - Impact: Debug screenshots now consistently show the same region, making it easier to diagnose OCR issues. The OCR process is also more robust with better preprocessing and coordinate extraction.
+  - Testing: Verified that all debug screenshots (`coord_region.png`, `OCR Region.png`, `OCR Extract.png`, etc.) now show the same region and that the OCR process correctly extracts coordinates.
 
 ## Increment Per Loop Feature
 - Each action can now have "use_increment" flag and "increment" value
@@ -181,43 +209,4 @@
     - Updated the `_update_coordinates_display` method in the `OverlayController` class to format coordinates properly
     - Updated the `_update_coordinates` method in the `CoordinateDisplayWidget` class to format coordinates properly
     - Added the `_on_coordinates_updated` method to the `GameWorldSearchTab` class and connected it to the `coordinates_updated` signal from the `TextOCR` class
-    - Updated the `_parse_coordinates` method in the `GameWorldCoordinator` class to validate coordinates and ensure they are within valid ranges
-  - Impact: These fixes ensure that coordinates are displayed consistently and correctly in both the overlay tab and game world search tab, with proper formatting and validation. The game world search tab now properly updates coordinates when they change.
-  - Testing: Verified that coordinates are displayed in the correct order (K, X, Y) with proper formatting (maximum of 3 digits) in both tabs, and that coordinates are properly updated in the game world search tab.
-
-- **OCR Coordinate Extraction Issues**: Fixed issues with OCR coordinate extraction where the coordinates were not being properly recognized from the game UI.
-  - Root cause: The OCR processing was not optimized for extracting coordinates from the game UI, resulting in poor recognition and parsing. Specific issues included:
-    - Incorrect coordinate region positioning (was targeting bottom right corner instead of bottom center)
-    - Insufficient OCR preprocessing for the specific coordinate text format
-    - Limited coordinate parsing logic that didn't handle various OCR misrecognitions
-    - Redundant OCR processing in `GameWorldCoordinator` that duplicated functionality from `TextOCR`
-  - Solution: Implemented several improvements to the OCR coordinate extraction process:
-    - Updated the default coordinate region in `GameWorldCoordinator` to target the bottom center of the screen where coordinates are typically displayed
-    - Enhanced the OCR preprocessing in `TextOCR.extract_text()` to try multiple approaches (adaptive thresholding, inverse thresholding, Otsu's thresholding)
-    - Added multiple OCR attempts with different PSM modes and character whitelists
-    - Implemented a selection algorithm to choose the best OCR result based on coordinate patterns
-    - Enhanced the coordinate parsing logic in `_parse_coordinates()` to handle various coordinate formats and OCR misrecognitions
-    - Modified `GameWorldCoordinator.update_current_position_from_ocr()` to use the `TextOCR.extract_text()` method instead of duplicating OCR processing
-  - Impact: These improvements significantly enhance the OCR coordinate extraction process, making it more robust and accurate. The application can now better recognize and parse coordinates from the game UI, even with different text formats and OCR misrecognitions.
-  - Testing: Verified that the OCR coordinate extraction works correctly with different game UI states and resolutions, and that coordinates are properly recognized and parsed from the game UI.
-
-- **Coordinate Measurement Consistency**: Fixed issue where coordinate measurements from OCR were inconsistent due to mouse position affecting the visible part of the game world.
-  - Root cause: The mouse position affects what part of the game world is visible, which in turn affects the coordinates displayed in the game UI. Without centering the mouse before taking OCR measurements, the coordinates could be inconsistent even when the game view hasn't changed significantly.
-  - Solution: Added mouse centering before taking OCR measurements to ensure consistent coordinate readings.
-  - Implementation:
-    - Added a new `_center_mouse_for_measurement` method to the `GameWorldCoordinator` class that centers the mouse in the game window before taking OCR measurements
-    - Updated the `update_current_position_from_ocr` method to call this new method before capturing the screenshot
-    - Enhanced the `_on_coordinates_updated` method in the `GameWorldSearchTab` class to display the current coordinates in the status label
-  - Impact: This fix ensures that coordinate measurements are consistent and accurate, improving the reliability of the game world search functionality.
-  - Testing: Verified that coordinates are consistently measured when taken multiple times at the same location, and that the mouse centering works correctly across different window sizes and positions.
-
-- **OCR Screenshot Region Issue**: Fixed issue where OCR debug screenshots were being taken from different regions, causing confusion and making debugging difficult.
-  - Root cause: The code had two separate screenshot capture paths - one in `GameWorldCoordinator` that correctly cropped the coordinate region, and another in `TextOCR._process_region()` that took a separate screenshot using screen coordinates.
-  - Solution: Refactored the OCR processing to centralize all image processing in the `TextOCR.extract_text()` method, ensuring consistent debug screenshots and improving the OCR process.
-  - Implementation:
-    - Enhanced `TextOCR.extract_text()` with multiple preprocessing techniques and a scoring system
-    - Refactored `TextOCR._process_region()` to use the enhanced `extract_text()` method
-    - Improved `TextOCR._extract_coordinates()` to handle more coordinate formats
-    - Added consistent debug image naming and saving
-  - Impact: Debug screenshots now consistently show the same region, making it easier to diagnose OCR issues. The OCR process is also more robust with better preprocessing and coordinate extraction.
-  - Testing: Verified that all debug screenshots (`coord_region.png`, `OCR Region.png`, `OCR Extract.png`, etc.) now show the same region and that the OCR process correctly extracts coordinates.
+    - Updated the `

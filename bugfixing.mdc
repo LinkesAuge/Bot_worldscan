@@ -1,5 +1,37 @@
 # Scout Project Bug Tracking
 
+## OCR System Integration
+
+### Issues Fixed
+- **Inconsistent OCR Processing Paths**: Fixed issue where the OCR system had two separate processing paths, causing inconsistent results and making debugging difficult.
+
+### Root Cause Analysis
+The issue was caused by having two separate OCR processing paths:
+1. In `TextOCR._process_region()`, it takes a screenshot of a region and processes it
+2. In `GameWorldCoordinator.update_current_position_from_ocr()`, it takes a screenshot, crops it to the coordinate region, and uses `TextOCR.extract_text()` to process it
+
+This dual approach led to inconsistent results because:
+- Different regions were being captured
+- Different preprocessing steps were being applied
+- Debug screenshots were saved with different names, making comparison difficult
+- The "old" OCR system was working correctly, but the game world search system was using a different path
+
+### Solutions Implemented
+1. **Unified OCR Processing Path**:
+   - Modified `GameWorldCoordinator.update_current_position_from_ocr()` to use `TextOCR`'s region and processing method
+   - Removed duplicate OCR logic in `GameWorldCoordinator`
+   - Ensured all OCR processing goes through the same code path in `TextOCR._process_region()`
+
+2. **Consistent Debug Screenshots**:
+   - Updated `TextOCR._process_region()` to save the original screenshot as 'coord_region.png' for consistency with the old system
+   - Ensured all debug images use consistent naming for easier comparison
+
+### Future Prevention
+- Maintain a single source of truth for OCR processing
+- Ensure all OCR-related functionality uses the same processing path
+- Use consistent naming for debug images
+- Add more comprehensive logging for OCR processing to aid in debugging
+
 ## Increment Per Loop Feature
 
 ### Potential Issues to Watch For
@@ -141,8 +173,7 @@
 - Use interface classes or abstract base classes to enforce method implementations
 - Add more robust error handling for method calls that might fail
 - Implement more sophisticated OCR preprocessing and text extraction techniques
-- Add more comprehensive logging for OCR processing to aid in debugging
-- Consider adding a calibration process for OCR coordinate region to improve accuracy across different game UI states and resolutions 
+- Add more comprehensive logging for OCR processing to aid in debugging 
 
 ## Missing cv2 Import in GameWorldSearch
 
@@ -209,7 +240,7 @@
 - Ensure all UI components that display coordinates are properly connected to coordinate update signals
 - Implement more sophisticated OCR preprocessing and text extraction techniques specifically optimized for coordinate recognition
 - Add more comprehensive logging for OCR processing to aid in debugging
-- Consider adding a calibration process for OCR coordinate region to improve accuracy across different game UI states and resolutions
+- Consider adding a calibration process for OCR coordinate region to improve accuracy across different game UI states and resolutions 
 
 ## Coordinate Measurement Consistency
 
@@ -234,7 +265,7 @@ The issue was caused by the mouse position affecting what part of the game world
 - Consider adding a visual indicator when coordinates are being measured to make it clear to the user
 - Add more comprehensive logging for coordinate measurements to help with debugging
 - Implement a coordinate history to track changes over time
-- Consider adding a calibration process to improve coordinate accuracy 
+- Consider adding a calibration process to improve coordinate accuracy
 
 ## OCR Screenshot Region Issue
 
@@ -283,4 +314,52 @@ This resulted in inconsistent debug screenshots, where `coord_region.png` showed
 - Centralized OCR processing in the `extract_text()` method to avoid duplication
 - Added comprehensive logging throughout the OCR process
 - Implemented consistent debug image naming and saving
-- Added detailed documentation to clarify the intended flow of data through the OCR system 
+- Added detailed documentation to clarify the intended flow of data through the OCR system
+
+## OCR Coordinate Extraction Issues
+
+### Issues Fixed
+- **OCR Preprocessing Method Selection**: Attempted to fix issue where the OCR was using a suboptimal preprocessing method (adaptive thresholding) by using Otsu's thresholding, but reverted changes as they made the issue worse.
+- **Inconsistent Debug Screenshots**: Attempted to fix issue where `coord_region.png` was showing incorrect output by checking for dimension swapping and adding preprocessing, but reverted changes as they caused issues.
+- **OCR Configuration**: Attempted to update OCR configuration to use Otsu's thresholding for all PSM modes and character whitelist configurations, but reverted changes as they caused issues.
+
+### Potential Issues to Watch For
+- Verify that OCR text extraction works correctly with different image formats and sizes
+- Check that coordinate parsing from extracted text is accurate
+- Test OCR functionality with different game resolutions and UI scales
+- Monitor for any performance issues with frequent OCR processing
+- Ensure proper error handling for OCR failures
+- Check that the current preprocessing approach works well in different lighting conditions and UI themes
+
+### Root Cause Analysis
+1. **OCR Preprocessing Method Issue**: The OCR was using adaptive thresholding (thresh1) as the primary preprocessing method. We attempted to use Otsu's thresholding (thresh3) instead, but this caused issues with coordinate extraction.
+
+2. **Inconsistent Debug Screenshots Issue**: The `coord_region.png` file was showing incorrect output. We attempted to fix this by:
+   - Checking for dimension swapping when cropping the image (height and width reversed)
+   - Adding preprocessing to enhance the text visibility
+   - Ensuring consistent handling of image orientation between different parts of the code
+   However, these changes caused issues with coordinate extraction, so we reverted them.
+
+### Solutions Implemented
+1. **OCR Preprocessing Method Fix**:
+   - Attempted to update `TextOCR.extract_text()` to prioritize Otsu's thresholding (thresh3) for OCR processing
+   - Attempted to modify the OCR result list to try thresh3 first before other preprocessing methods
+   - Attempted to update all PSM modes and character whitelist configurations to use thresh3 instead of thresh1
+   - Attempted to change the debug window visualization to use thresh3 instead of thresh1
+   - Reverted all these changes as they caused issues with coordinate extraction
+
+2. **Inconsistent Debug Screenshots Fix**:
+   - Attempted to add dimension checking and correction in `GameWorldCoordinator.update_current_position_from_ocr()`
+   - Attempted to implement automatic transposition of the image if dimensions appear to be swapped
+   - Attempted to add additional preprocessing for `coord_region.png` using Otsu's thresholding
+   - Attempted to save both the original cropped region and a preprocessed version for better debugging
+   - Attempted to update `TextOCR._process_region()` to use ocr_thresh3.png for the debug window instead of ocr_thresh1.png
+   - Reverted all these changes as they caused issues with coordinate extraction
+
+### Future Prevention
+- Implement comprehensive unit tests for OCR preprocessing to verify which method works best
+- Add more robust dimension checking and orientation correction throughout the OCR pipeline
+- Consider adding a calibration process to automatically determine the best preprocessing method based on the current game UI
+- Implement more sophisticated image quality metrics to select the best preprocessing method dynamically
+- Add more comprehensive logging for OCR processing to aid in debugging
+- Consider adding a visual indicator in the UI to show which preprocessing method is being used 

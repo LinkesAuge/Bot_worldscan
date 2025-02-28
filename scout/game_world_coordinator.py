@@ -132,69 +132,43 @@ class GameWorldCoordinator:
             # First center the mouse to ensure consistent measurements
             self._center_mouse_for_measurement()
             
-            # Take a screenshot of the coordinate region
-            screenshot = self.window_manager.capture_screenshot()
-            if screenshot is None:
-                logger.error("Failed to capture screenshot for OCR")
-                return False
-                
-            # Log the screenshot dimensions for debugging
-            logger.debug(f"Screenshot dimensions: {screenshot.shape}")
+            # Instead of duplicating the OCR logic, use the TextOCR's region and processing method
+            # This ensures we're using the same OCR processing path as the "old" OCR system
             
-            # Crop to coordinate region
-            x, y, width, height = self.coord_region
-            logger.debug(f"Coordinate region: x={x}, y={y}, width={width}, height={height}")
+            # If TextOCR doesn't have a region set, set it to our coordinate region
+            if not self.text_ocr.region:
+                x, y, width, height = self.coord_region
+                window_pos = self.window_manager.get_window_position()
+                if window_pos:
+                    # Convert to screen coordinates
+                    screen_x = window_pos[0] + x
+                    screen_y = window_pos[1] + y
+                    self.text_ocr.set_region({
+                        'left': screen_x,
+                        'top': screen_y,
+                        'width': width,
+                        'height': height
+                    })
+                    logger.info(f"Set TextOCR region to match coordinate region: {self.text_ocr.region}")
             
-            # Ensure the region is within the screenshot bounds
-            if x >= screenshot.shape[1] or y >= screenshot.shape[0]:
-                logger.error(f"Coordinate region is outside screenshot bounds: {screenshot.shape}")
-                return False
-                
-            # Adjust region if it extends beyond screenshot bounds
-            if x + width > screenshot.shape[1]:
-                width = screenshot.shape[1] - x
-                logger.warning(f"Adjusted width to {width} to fit within screenshot bounds")
-            if y + height > screenshot.shape[0]:
-                height = screenshot.shape[0] - y
-                logger.warning(f"Adjusted height to {height} to fit within screenshot bounds")
-                
-            # Crop the region
-            coord_image = screenshot[y:y+height, x:x+width]
-            logger.debug(f"Cropped region dimensions: {coord_image.shape}")
+            # Trigger the TextOCR processing
+            self.text_ocr._process_region()
             
-            # Save the cropped region for debugging
-            debug_dir = Path('scout/debug_screenshots')
-            debug_dir.mkdir(exist_ok=True, parents=True)
-            cv2.imwrite(str(debug_dir / 'coord_region.png'), coord_image)
+            # The coordinates will be updated via the TextOCR's _extract_coordinates method
+            # which emits the coordinates_updated signal and updates the game state
             
-            # Use the TextOCR class to extract text from the image
-            # This ensures we're using the same OCR processing throughout the application
-            text = self.text_ocr.extract_text(coord_image)
-            logger.debug(f"Extracted text from coordinate region: '{text}'")
-            
-            # Parse coordinates from text
-            coords = self._parse_coordinates(text)
-            if coords:
-                x_val, y_val, k_val = coords
-                
-                # Update internal position (only non-None values)
-                if x_val is not None:
-                    self.current_position.x = x_val
-                if y_val is not None:
-                    self.current_position.y = y_val
-                if k_val is not None:
-                    self.current_position.k = k_val
-                
-                # Update GameState if available
-                if self.game_state:
-                    self.game_state.update_coordinates(k_val, x_val, y_val)
-                
+            # Check if coordinates were updated
+            if self.game_state and self.game_state.get_coordinates():
+                coords = self.game_state.get_coordinates()
+                self.current_position.x = coords.x
+                self.current_position.y = coords.y
+                self.current_position.k = coords.k
                 logger.info(f"Updated current position from OCR: {self.current_position}")
                 return True
             else:
-                logger.warning(f"Could not parse coordinates from OCR text: '{text}'")
+                logger.warning("No coordinates were extracted from OCR")
                 return False
-                
+            
         except Exception as e:
             logger.error(f"Error updating position from OCR: {e}", exc_info=True)
             return False
