@@ -509,13 +509,8 @@ class Overlay(QWidget):
     def _update_template_matching(self) -> None:
         """Run template matching update cycle."""
         try:
-            # Calculate actual update frequency
-            current_time = time.time()
-            if self.template_matcher.last_update_time > 0:
-                time_diff = current_time - self.template_matcher.last_update_time
-                if time_diff > 0:
-                    self.template_matcher.update_frequency = 1.0 / time_diff
-            self.template_matcher.last_update_time = current_time
+            # Update frequency tracking
+            self.template_matcher.update_frequency_tracking()
             
             # If refreshing and past initial delay, update matches
             if self.refreshing and time.time() - self.refresh_start_time > self.game_state.drag_start_delay:
@@ -922,9 +917,8 @@ class Overlay(QWidget):
             
         self.spinning_indicator.stop()
         
-        # Reset template matcher frequency
-        self.template_matcher.update_frequency = 0.0
-        self.template_matcher.last_update_time = 0.0
+        # Reset template matcher frequency tracking
+        self.template_matcher.reset_frequency_tracking()
         
         # Clear match cache
         self.cached_matches = []

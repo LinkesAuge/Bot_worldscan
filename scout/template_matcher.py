@@ -14,6 +14,7 @@ from pathlib import Path
 from dataclasses import dataclass
 from scout.window_manager import WindowManager
 from scout.sound_manager import SoundManager
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +58,7 @@ class TemplateMatcher:
         """
         self.window_manager = window_manager
         self.confidence = confidence
-        self.target_frequency = target_frequency
+        self._target_frequency = target_frequency  # Use private variable
         self.sound_enabled = sound_enabled
         
         # Create sound manager
@@ -68,8 +69,11 @@ class TemplateMatcher:
         self.template_sizes: Dict[str, Tuple[int, int]] = {}
         
         # Performance tracking
-        self.update_frequency = 0.0
-        self.last_update_time = 0.0
+        self._update_frequency = 0.0  # Use private variable
+        self._last_update_time = 0.0  # Use private variable
+        self._update_count = 0  # Track number of updates
+        self._frequency_window = 1.0  # Calculate frequency over 1 second window
+        self._update_times = []  # Store update timestamps
         
         # Debug settings
         self.debug_mode = False
@@ -78,6 +82,54 @@ class TemplateMatcher:
         # Load templates
         self.reload_templates()
         
+    @property
+    def target_frequency(self) -> float:
+        """Get target update frequency."""
+        return self._target_frequency
+
+    @target_frequency.setter
+    def target_frequency(self, value: float) -> None:
+        """Set target update frequency."""
+        self._target_frequency = max(0.1, min(60.0, value))  # Clamp between 0.1 and 60 Hz
+        logger.debug(f"Target frequency set to {self._target_frequency} updates/sec")
+
+    @property
+    def update_frequency(self) -> float:
+        """Get actual update frequency."""
+        return self._update_frequency
+
+    def reset_frequency_tracking(self) -> None:
+        """Reset all frequency tracking values."""
+        self._update_frequency = 0.0
+        self._last_update_time = 0.0
+        self._update_count = 0
+        self._update_times.clear()
+        logger.debug("Frequency tracking reset")
+
+    def update_frequency_tracking(self) -> None:
+        """Update the frequency tracking."""
+        current_time = time.time()
+        
+        # Add current update time
+        self._update_times.append(current_time)
+        
+        # Remove old timestamps outside the window
+        window_start = current_time - self._frequency_window
+        self._update_times = [t for t in self._update_times if t >= window_start]
+        
+        # Calculate actual frequency over the window
+        if len(self._update_times) > 1:
+            # Calculate average time between updates
+            time_diffs = [self._update_times[i] - self._update_times[i-1] 
+                         for i in range(1, len(self._update_times))]
+            avg_time_diff = sum(time_diffs) / len(time_diffs)
+            self._update_frequency = 1.0 / avg_time_diff if avg_time_diff > 0 else 0.0
+        else:
+            self._update_frequency = 0.0
+            
+        self._last_update_time = current_time
+        logger.debug(f"Current update frequency: {self._update_frequency:.2f} updates/sec")
+
     def reload_templates(self) -> None:
         """Reload all template images from the templates directory."""
         try:
