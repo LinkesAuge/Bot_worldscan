@@ -32,6 +32,7 @@ from scout.window_manager import WindowManager
 from scout.automation.gui.automation_tab import AutomationTab
 from scout.actions import GameActions
 from scout.game_state import GameState
+from scout.gui.game_world_search_tab import GameWorldSearchTab
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,7 @@ class OverlayController(QMainWindow):
     """
     
     def __init__(self, overlay: Overlay, overlay_settings: Dict[str, Any], template_settings: Dict[str, Any], 
-                 game_actions: GameActions, text_ocr: TextOCR, debug_window: DebugWindow) -> None:
+                 game_actions: GameActions, text_ocr: TextOCR, debug_window: DebugWindow, game_state=None) -> None:
         """
         Initialize the controller window.
         
@@ -52,6 +53,7 @@ class OverlayController(QMainWindow):
             game_actions: GameActions instance for automation
             text_ocr: TextOCR instance for text recognition
             debug_window: DebugWindow instance for debugging
+            game_state: Optional GameState instance for coordinate tracking
         """
         super().__init__()
         
@@ -70,6 +72,7 @@ class OverlayController(QMainWindow):
         self.game_actions = game_actions
         self.text_ocr = text_ocr
         self.debug_window = debug_window
+        self.game_state = game_state
         self.window_manager = self.overlay.window_manager  # Get window_manager from overlay
         self.debug_window.window_closed.connect(self._on_debug_window_closed)
         
@@ -169,6 +172,16 @@ class OverlayController(QMainWindow):
             game_actions=self.game_actions
         )
         self.tab_widget.addTab(self.automation_tab, "Automation")
+        
+        # Create game world search tab
+        self.game_world_search_tab = GameWorldSearchTab(
+            window_manager=self.window_manager,
+            template_matcher=self.template_matcher,
+            text_ocr=self.text_ocr,
+            game_actions=self.game_actions,
+            game_state=game_state
+        )
+        self.tab_widget.addTab(self.game_world_search_tab, "Game World Search")
         
         # Create status bar
         self.status_bar = self.statusBar()
@@ -1153,7 +1166,15 @@ class OverlayController(QMainWindow):
     
     def _update_coordinates_display(self, coords: object) -> None:
         """Update the coordinate display in the GUI."""
-        self.ocr_coords_label.setText(str(coords))
+        # Format coordinates in the order K, X, Y with a maximum of 3 digits
+        if hasattr(coords, 'k') and hasattr(coords, 'x') and hasattr(coords, 'y'):
+            k_str = f"{coords.k:03d}" if coords.k is not None else "---"
+            x_str = f"{coords.x:03d}" if coords.x is not None else "---"
+            y_str = f"{coords.y:03d}" if coords.y is not None else "---"
+            formatted_coords = f"K: {k_str}, X: {x_str}, Y: {y_str}"
+            self.ocr_coords_label.setText(formatted_coords)
+        else:
+            self.ocr_coords_label.setText(str(coords))
 
     def _start_ocr_region_selection(self) -> None:
         """Start the Text OCR region selection process."""

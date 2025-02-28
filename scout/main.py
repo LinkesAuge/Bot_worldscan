@@ -139,7 +139,8 @@ def main() -> None:
             template_settings=template_settings,
             game_actions=game_actions,
             text_ocr=text_ocr,
-            debug_window=debug_window
+            debug_window=debug_window,
+            game_state=game_state
         )
         
         # Set up callbacks

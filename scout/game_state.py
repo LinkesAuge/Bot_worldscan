@@ -34,9 +34,12 @@ class GameCoordinates:
 
     def __str__(self) -> str:
         """String representation of coordinates with timestamp."""
-        coords = f"K: {self.k if self.k is not None else 'None'}, "
-        coords += f"X: {self.x if self.x is not None else 'None'}, "
-        coords += f"Y: {self.y if self.y is not None else 'None'}"
+        # Format coordinates with a maximum of 3 digits
+        k_str = f"{self.k:03d}" if self.k is not None else "---"
+        x_str = f"{self.x:03d}" if self.x is not None else "---"
+        y_str = f"{self.y:03d}" if self.y is not None else "---"
+        
+        coords = f"K: {k_str}, X: {x_str}, Y: {y_str}"
         if self.timestamp:
             coords += f" ({self.timestamp})"
         return coords

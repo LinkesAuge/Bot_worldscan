@@ -1,0 +1,5 @@
+{
+    "min_confidence": 0.9,
+    "max_positions": 100,
+    "save_screenshots": true
+}

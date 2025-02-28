@@ -89,3 +89,198 @@
 - Add more comprehensive logging for UI initialization and component creation
 - Implement proper method stubs for all referenced methods, even if the functionality is not yet implemented
 - Use proper code organization to ensure that all required methods are defined before they are referenced 
+
+## Game World Coordinator OCR Integration
+
+### Issues Fixed
+- **Missing extract_text Method**: Fixed issue where the `GameWorldCoordinator` class was trying to call `extract_text()` on the `TextOCR` object, but this method didn't exist in the `TextOCR` class.
+
+- **OCR Coordinate Extraction Issues**: Fixed issues with OCR coordinate extraction where the coordinates were not being properly recognized from the game UI.
+
+### Potential Issues to Watch For
+- Verify that OCR text extraction works correctly with different image formats and sizes
+- Check that coordinate parsing from extracted text is accurate
+- Test OCR functionality with different game resolutions and UI scales
+- Monitor for any performance issues with frequent OCR processing
+- Ensure proper error handling for OCR failures
+
+### Root Cause Analysis
+1. **Missing extract_text Method Issue**: The issue was caused by a mismatch between the `GameWorldCoordinator` implementation and the `TextOCR` class interface. The `GameWorldCoordinator` expected the `TextOCR` class to have an `extract_text()` method that would take an image and return the extracted text, but this method was not implemented in the `TextOCR` class.
+
+2. **OCR Coordinate Extraction Issues**: The issues were caused by:
+   - Incorrect coordinate region positioning (was targeting bottom right corner instead of bottom center)
+   - Insufficient OCR preprocessing for the specific coordinate text format
+   - Limited coordinate parsing logic that didn't handle various OCR misrecognitions
+   - Redundant OCR processing in `GameWorldCoordinator` that duplicated functionality from `TextOCR`
+
+### Solutions Implemented
+1. **Missing extract_text Method Issue**:
+   - Added a new `extract_text(image: np.ndarray) -> str` method to the `TextOCR` class
+   - Implemented the method to handle image preprocessing (grayscale conversion, contrast enhancement, noise reduction)
+   - Added proper error handling and logging
+   - Included debug visualization support for the extracted text
+
+2. **OCR Coordinate Extraction Issues**:
+   - Updated the default coordinate region to target the bottom center of the screen where coordinates are typically displayed
+   - Enhanced the OCR preprocessing in `TextOCR.extract_text()` to try multiple approaches:
+     - Standard adaptive thresholding
+     - Inverse thresholding (better for light text on dark backgrounds)
+     - Otsu's thresholding (automatically determines optimal threshold)
+   - Added multiple OCR attempts with different PSM modes and character whitelists
+   - Implemented a selection algorithm to choose the best OCR result based on coordinate patterns
+   - Enhanced the coordinate parsing logic in `_parse_coordinates()` to handle:
+     - Standard coordinate formats (K:123 X:456 Y:789)
+     - Unlabeled number sequences (assuming K, X, Y order)
+     - Common OCR misrecognitions (O/0, l/1, etc.)
+   - Modified `GameWorldCoordinator.update_current_position_from_ocr()` to use the `TextOCR.extract_text()` method instead of duplicating OCR processing
+
+### Future Prevention
+- Ensure clear interface definitions between classes
+- Document expected methods and their signatures for classes that will be used by other components
+- Implement comprehensive unit tests to verify class interfaces
+- Use interface classes or abstract base classes to enforce method implementations
+- Add more robust error handling for method calls that might fail
+- Implement more sophisticated OCR preprocessing and text extraction techniques
+- Add more comprehensive logging for OCR processing to aid in debugging
+- Consider adding a calibration process for OCR coordinate region to improve accuracy across different game UI states and resolutions 
+
+## Missing cv2 Import in GameWorldSearch
+
+### Issues Fixed
+- Fixed error in `_check_for_templates` method in `GameWorldSearch` class: `NameError: name 'cv2' is not defined`
+- The method was trying to use cv2.imwrite() to save screenshots, but the cv2 module wasn't imported
+
+### Root Cause Analysis
+- The `cv2` module was being used in the `_check_for_templates` method to save screenshots, but it wasn't imported at the top of the file
+- This caused a runtime error when the screenshot saving functionality was triggered
+
+### Solutions Implemented
+- Added `import cv2` to the imports section at the top of the `game_world_search.py` file
+- This ensures the OpenCV functionality is available when needed for saving screenshots
+
+### Future Prevention
+- Always ensure all required modules are properly imported before using them
+- Consider adding automated tests that verify all imports are properly defined
+- When implementing new functionality that uses external libraries, double-check that the imports are included 
+
+## Coordinate Display Issues
+
+### Issues Fixed
+- **Coordinate Order**: Fixed the order of coordinates in the `CoordinateDisplayWidget` class to display in the order K, X, Y instead of X, Y, K.
+- **Coordinate Formatting**: Updated coordinate display to properly format coordinates with a maximum of 3 digits and consistent formatting.
+- **Coordinate Updates in Game World Search Tab**: Fixed issue where coordinates were not being updated in the game world search tab by connecting to the `coordinates_updated` signal from the `TextOCR` class.
+- **Coordinate Validation**: Added validation to ensure coordinates are within valid ranges (0-999 for X/Y, 1-999 for K).
+- **OCR Coordinate Extraction**: Improved OCR coordinate extraction to better recognize and parse coordinates from the game UI.
+
+### Potential Issues to Watch For
+- Verify that coordinates are properly updated in both the overlay tab and game world search tab
+- Check that coordinates are displayed in the correct order (K, X, Y)
+- Ensure that coordinates are properly formatted with a maximum of 3 digits
+- Monitor for any issues with coordinate updates based on mouse position
+- Test OCR coordinate extraction with different game UI states and resolutions
+
+### Root Cause Analysis
+1. **Coordinate Order Issue**: The `CoordinateDisplayWidget` class was displaying coordinates in the order X, Y, K instead of K, X, Y.
+2. **Coordinate Formatting Issue**: The string representation methods in `GameCoordinates` and `GameWorldPosition` classes were not formatting coordinates with a maximum of 3 digits.
+3. **Coordinate Updates Issue**: The `GameWorldSearchTab` class was not connecting to the `coordinates_updated` signal from the `TextOCR` class.
+4. **Coordinate Validation Issue**: The `_parse_coordinates` method in the `GameWorldCoordinator` class was not validating coordinates to ensure they are within valid ranges.
+5. **OCR Coordinate Extraction Issue**: The OCR processing in both `TextOCR` and `GameWorldCoordinator` classes was not optimized for extracting coordinates from the game UI, resulting in poor recognition and parsing.
+
+### Solutions Implemented
+1. **Coordinate Order Fix**: Updated the `_create_ui` method in the `CoordinateDisplayWidget` class to display coordinates in the order K, X, Y.
+2. **Coordinate Formatting Fix**: 
+   - Updated the `__str__` method in the `GameCoordinates` class to format coordinates with a maximum of 3 digits.
+   - Updated the `__str__` method in the `GameWorldPosition` class to format coordinates with a maximum of 3 digits.
+   - Updated the `_update_coordinates_display` method in the `OverlayController` class to format coordinates properly.
+   - Updated the `_update_coordinates` method in the `CoordinateDisplayWidget` class to format coordinates properly.
+3. **Coordinate Updates Fix**: Added the `_on_coordinates_updated` method to the `GameWorldSearchTab` class and connected it to the `coordinates_updated` signal from the `TextOCR` class.
+4. **Coordinate Validation Fix**: Updated the `_parse_coordinates` method in the `GameWorldCoordinator` class to validate coordinates and ensure they are within valid ranges.
+5. **OCR Coordinate Extraction Fix**:
+   - Enhanced the `extract_text` method in the `TextOCR` class to try multiple preprocessing approaches and OCR configurations.
+   - Implemented a selection algorithm to choose the best OCR result based on coordinate patterns.
+   - Enhanced the coordinate parsing logic in `_parse_coordinates()` to handle various coordinate formats and OCR misrecognitions.
+   - Updated the default coordinate region in `GameWorldCoordinator` to better target the area where coordinates are displayed.
+   - Modified `GameWorldCoordinator.update_current_position_from_ocr()` to use the `TextOCR.extract_text()` method instead of duplicating OCR processing.
+
+### Future Prevention
+- Ensure consistent coordinate formatting across all classes that display coordinates
+- Use a centralized coordinate formatting utility function to ensure consistency
+- Add comprehensive validation for all coordinate values
+- Ensure all UI components that display coordinates are properly connected to coordinate update signals
+- Implement more sophisticated OCR preprocessing and text extraction techniques specifically optimized for coordinate recognition
+- Add more comprehensive logging for OCR processing to aid in debugging
+- Consider adding a calibration process for OCR coordinate region to improve accuracy across different game UI states and resolutions
+
+## Coordinate Measurement Consistency
+
+### Issues Fixed
+- **Inconsistent Coordinate Measurements**: Fixed issue where coordinate measurements from OCR were inconsistent due to mouse position affecting the visible part of the game world.
+
+### Potential Issues to Watch For
+- Verify that coordinate measurements are consistent when taken multiple times at the same location
+- Check that mouse centering works correctly across different window sizes and positions
+- Monitor for any performance issues with frequent mouse movements
+- Ensure the mouse centering doesn't interfere with other mouse operations
+
+### Root Cause Analysis
+The issue was caused by the mouse position affecting what part of the game world is visible, which in turn affects the coordinates displayed in the game UI. Without centering the mouse before taking OCR measurements, the coordinates could be inconsistent even when the game view hasn't changed significantly.
+
+### Solutions Implemented
+- Added a new `_center_mouse_for_measurement` method to the `GameWorldCoordinator` class that centers the mouse in the game window before taking OCR measurements
+- Updated the `update_current_position_from_ocr` method to call this new method before capturing the screenshot
+- Enhanced the `_on_coordinates_updated` method in the `GameWorldSearchTab` class to display the current coordinates in the status label
+
+### Future Prevention
+- Consider adding a visual indicator when coordinates are being measured to make it clear to the user
+- Add more comprehensive logging for coordinate measurements to help with debugging
+- Implement a coordinate history to track changes over time
+- Consider adding a calibration process to improve coordinate accuracy 
+
+## OCR Screenshot Region Issue
+
+### Issues Fixed
+- **Inconsistent OCR Screenshot Regions**: Fixed issue where OCR debug screenshots were being taken from different regions, causing confusion and making debugging difficult.
+
+### Root Cause Analysis
+The issue was caused by two separate screenshot capture paths in the code:
+1. In `GameWorldCoordinator.update_current_position_from_ocr()`, the code correctly:
+   - Takes a full screenshot of the game window
+   - Crops it to the coordinate region
+   - Saves the cropped image as `coord_region.png`
+   - Passes the cropped image to `text_ocr.extract_text()`
+
+2. In `TextOCR._process_region()`, the code was:
+   - Taking a separate screenshot of the region specified in `self.region`
+   - This region was in screen coordinates, not relative to the already cropped image
+   - It then saved this as `OCR Region.png`
+
+This resulted in inconsistent debug screenshots, where `coord_region.png` showed the correct area but other debug screenshots like `OCR Extract.png` were taken from a different area.
+
+### Solutions Implemented
+1. **Refactored TextOCR.extract_text()**: 
+   - Enhanced the method to apply multiple preprocessing techniques
+   - Added saving of the original image and all preprocessed versions
+   - Implemented a scoring system to select the best OCR result
+   - Improved error handling and logging
+
+2. **Refactored TextOCR._process_region()**:
+   - Removed duplicate OCR logic
+   - Made it use the enhanced `extract_text()` method
+   - Ensured consistent debug image saving
+   - Added more descriptive debug image names
+
+3. **Enhanced TextOCR._extract_coordinates()**:
+   - Improved text cleaning to handle more OCR artifacts
+   - Added support for multiple coordinate formats
+   - Enhanced logging for better debugging
+   - Improved error handling
+
+4. **Updated GameWorldCoordinator.update_current_position_from_ocr()**:
+   - Added better documentation
+   - Ensured it properly uses the TextOCR.extract_text method
+
+### Future Prevention
+- Centralized OCR processing in the `extract_text()` method to avoid duplication
+- Added comprehensive logging throughout the OCR process
+- Implemented consistent debug image naming and saving
+- Added detailed documentation to clarify the intended flow of data through the OCR system 
