@@ -18,7 +18,7 @@ import logging
 from scout.config_manager import ConfigManager
 from scout.overlay import Overlay
 from scout.template_matcher import TemplateMatcher
-from scout.world_scanner import WorldScanner, WorldPosition, ScanLogHandler, ScanWorker
+from scout.world_scanner import WorldScanner, ScanLogHandler, ScanWorker
 from scout.debug_window import DebugWindow
 import numpy as np
 from time import sleep
@@ -31,6 +31,7 @@ from scout.text_ocr import TextOCR
 from scout.window_manager import WindowManager
 from scout.automation.gui.automation_tab import AutomationTab
 from scout.actions import GameActions
+from scout.game_state import GameState
 
 logger = logging.getLogger(__name__)
 
@@ -1144,7 +1145,7 @@ class OverlayController(QMainWindow):
         # Stop OCR processing
         self.text_ocr.stop()
     
-    def _update_coordinates_display(self, coords: 'GameCoordinates') -> None:
+    def _update_coordinates_display(self, coords: object) -> None:
         """Update the coordinate display in the GUI."""
         self.ocr_coords_label.setText(str(coords))
 

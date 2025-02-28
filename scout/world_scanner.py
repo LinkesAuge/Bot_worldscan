@@ -14,81 +14,66 @@ from scout.template_matcher import TemplateMatcher
 from scout.config_manager import ConfigManager
 from scout.debug_window import DebugWindow
 from scout.window_manager import WindowManager
+from scout.game_state import GameState
 
 # Set Tesseract executable path
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'  # Adjust path if needed
 
 logger = logging.getLogger(__name__)
 
-@dataclass
-class WorldPosition:
+class WorldScanner(QObject):
     """
-    Represents a location in the game world's coordinate system.
+    Scans the game world for points of interest.
     
-    The game world uses a grid-based coordinate system where each position
-    is defined by:
-    - x: Horizontal position (0-999)
-    - y: Vertical position (0-999)
-    - k: World/kingdom number
-    
-    This class is used to track and navigate between different locations
-    in the game world during scanning operations.
-    """
-    x: int  # 0-999
-    y: int  # 0-999
-    k: int  # World number
-    description: Optional[str] = None
-    
-class WorldScanner:
-    """
-    Automated system for exploring and scanning the game world.
-    
-    This class provides systematic exploration of the game world by:
-    1. Reading current coordinates using OCR (Optical Character Recognition)
-    2. Moving to new positions by simulating coordinate input
-    3. Generating efficient search patterns for exploration
-    4. Working with pattern matching to find specific game elements
-    
-    The scanner uses a spiral search pattern to methodically cover an area
-    around the starting position, ensuring thorough exploration while
-    minimizing travel distance.
-    
-    Key Features:
-    - Coordinate detection using Tesseract OCR
-    - Automated navigation between positions
-    - Spiral search pattern generation
-    - Integration with pattern matching for target detection
+    This class provides functionality to:
+    - Track current position in the game world
+    - Navigate to specific coordinates
+    - Scan regions for points of interest
+    - Process and analyze scan results
     """
     
-    def __init__(self, window_manager: WindowManager):
-        """Initialize the world scanner."""
+    # Signals
+    scan_started = pyqtSignal()
+    scan_completed = pyqtSignal()
+    scan_progress = pyqtSignal(int)  # Progress percentage
+    scan_error = pyqtSignal(str)  # Error message
+    
+    def __init__(self, window_manager: WindowManager, template_matcher: TemplateMatcher,
+                 debug_window: DebugWindow, game_state: GameState):
+        """
+        Initialize the world scanner.
+        
+        Args:
+            window_manager: Window manager instance for window tracking
+            template_matcher: Template matcher instance for finding game elements
+            debug_window: Debug window for visualization
+            game_state: Game state instance for coordinate tracking
+        """
+        super().__init__()
         self.window_manager = window_manager
-        self.config_manager = ConfigManager()
-        self.current_pos = None
-        self.start_pos = None
-        self.scan_step = 50
-        self.move_delay = 1.0
-        self.visited_positions: List[WorldPosition] = []
-        self.minimap_left = 0
-        self.minimap_top = 0
-        self.minimap_width = 0
-        self.minimap_height = 0
-        self.dpi_scale = 1.0
+        self.template_matcher = template_matcher
+        self.debug_window = debug_window
+        self.game_state = game_state
         
-        # Create debug window
-        self.debug_window = DebugWindow()
+        # Load configuration
+        self.config = ConfigManager()
+        scanner_settings = self.config.get_scanner_settings()
         
-        # Signal for debug images (will be connected by worker)
-        self.debug_image = None
+        # Initialize scanning parameters
+        self.minimap_left = scanner_settings.get('minimap_left', 0)
+        self.minimap_top = scanner_settings.get('minimap_top', 0)
+        self.minimap_width = scanner_settings.get('minimap_width', 100)
+        self.minimap_height = scanner_settings.get('minimap_height', 100)
+        self.dpi_scale = scanner_settings.get('dpi_scale', 1.0)
         
-        logger.debug("WorldScanner initialized")
+        # Scanning state
+        self.is_scanning = False
+        self.scan_cancelled = False
         
-    def get_current_position(self) -> Optional[WorldPosition]:
+    def get_current_position(self) -> None:
         """
         Get the current position from the minimap coordinates.
-        
-        Returns:
-            WorldPosition object if coordinates are found, None otherwise
+        Updates the game state with the current position.
         """
         try:
             # Calculate coordinate regions (scaled for DPI)
@@ -118,7 +103,7 @@ class WorldScanner:
             }
             
             # Add visual debug for coordinate regions
-            with mss() as sct:
+            with mss.mss() as sct:
                 # Take screenshot of entire minimap area plus coordinates
                 context_region = {
                     'left': self.minimap_left,
@@ -182,7 +167,7 @@ class WorldScanner:
                         value = int(''.join(filter(str.isdigit, text.strip())))
                         coordinates[coord_type] = value
                     except ValueError:
-                        coordinates[coord_type] = 0
+                        coordinates[coord_type] = None
                         logger.warning(f"Failed to parse {coord_type} coordinate")
                     
                     # Update debug window with processed image
@@ -196,145 +181,168 @@ class WorldScanner:
                         save=True
                     )
                 
-                if all(coord in coordinates for coord in ['x', 'y', 'k']):
-                    position = WorldPosition(
-                        x=coordinates['x'],
-                        y=coordinates['y'],
-                        k=coordinates['k']
-                    )
-                    logger.info(f"Successfully detected position: X={position.x}, Y={position.y}, K={position.k}")
-                    return position
-                
-                return None
+                # Update game state with coordinates
+                self.game_state.update_coordinates(
+                    coordinates.get('k'),
+                    coordinates.get('x'),
+                    coordinates.get('y')
+                )
                 
         except Exception as e:
-            logger.error(f"Error getting current position: {e}", exc_info=True)
-            return None
+            logger.error(f"Error getting current position: {e}")
             
-    def move_to_position(self, target: WorldPosition) -> bool:
+    def navigate_to(self, x: int, y: int) -> bool:
         """
-        Move camera to specific coordinates.
+        Navigate to specific coordinates in the game world.
         
         Args:
-            target: Target position to move to
+            x: X coordinate to navigate to
+            y: Y coordinate to navigate to
             
         Returns:
-            bool: True if move successful
+            bool: True if navigation successful, False otherwise
         """
         try:
-            logger.info(f"Moving to position: X={target.x}, Y={target.y}, K={target.k}")
+            # Get input field position from config
+            scanner_settings = self.config.get_scanner_settings()
+            input_x = scanner_settings.get('input_field_x', 0)
+            input_y = scanner_settings.get('input_field_y', 0)
             
-            # Get input field coordinates from config
-            config = ConfigManager()
-            input_settings = config.get_scanner_settings()
-            input_x = input_settings.get('input_field_x', 0)
-            input_y = input_settings.get('input_field_y', 0)
-            
-            # Click on coordinate input field
-            logger.debug(f"Clicking input field at ({input_x}, {input_y})")
-            pyautogui.click(x=input_x, y=input_y)
-            sleep(0.2)  # Small delay to ensure click registered
+            # Click input field
+            pyautogui.click(input_x, input_y)
+            sleep(0.1)  # Wait for click to register
             
             # Clear existing text
             pyautogui.hotkey('ctrl', 'a')
+            sleep(0.1)
             pyautogui.press('backspace')
+            sleep(0.1)
             
-            # Type coordinates
-            coord_text = f"{target.x},{target.y}"
-            logger.debug(f"Entering coordinates: {coord_text}")
-            pyautogui.write(coord_text)
+            # Input new coordinates
+            pyautogui.write(f"{x},{y}")
             pyautogui.press('enter')
             
-            # Wait for movement and verify position
-            sleep(self.move_delay)
-            current_pos = self.get_current_position()
+            # Wait for navigation
+            sleep(1.0)
             
-            if current_pos:
-                success = (current_pos.x == target.x and 
-                          current_pos.y == target.y and 
-                          current_pos.k == target.k)
-                if success:
-                    logger.info("Successfully moved to target position")
-                else:
-                    logger.warning(
-                        f"Position mismatch - Target: ({target.x}, {target.y}, {target.k}), "
-                        f"Current: ({current_pos.x}, {current_pos.y}, {current_pos.k})"
-                    )
-                return success
+            # Verify position
+            self.get_current_position()
+            current_coords = self.game_state.get_coordinates()
+            
+            if current_coords.x == x and current_coords.y == y:
+                logger.info(f"Successfully navigated to ({x}, {y})")
+                return True
             else:
-                logger.error("Failed to verify position after movement")
+                logger.warning(f"Navigation failed - current position: {current_coords}")
                 return False
-            
+                
         except Exception as e:
-            logger.error(f"Error moving to position: {e}", exc_info=True)
+            logger.error(f"Error navigating to coordinates: {e}")
             return False
             
-    def generate_spiral_pattern(self, max_distance: int) -> List[WorldPosition]:
+    def start_scan(self, start_x: int, start_y: int, end_x: int, end_y: int) -> None:
         """
-        Generate spiral search pattern starting from current position.
-        This ensures methodical coverage of the map.
-        """
-        positions = []
-        x, y = 0, 0
-        dx, dy = self.scan_step, 0
-        steps = 1
-        
-        while abs(x) <= max_distance and abs(y) <= max_distance:
-            if -1 <= x <= 999 and -1 <= y <= 999:  # Check world boundaries
-                new_pos = WorldPosition(
-                    x=self.start_pos.x + x,
-                    y=self.start_pos.y + y,
-                    k=self.start_pos.k
-                )
-                positions.append(new_pos)
-            
-            x, y = x + dx, y + dy
-            
-            if steps % 2 == 0:
-                dx, dy = -dy, dx  # Turn 90 degrees
-                steps = 0
-            steps += 1
-            
-        return positions
-        
-    def scan_world_until_match(self, template_matcher: 'TemplateMatcher',
-                             max_attempts: int = 10) -> Optional[Tuple[int, int]]:
-        """
-        Scan the world until a template match is found.
+        Start scanning a region of the game world.
         
         Args:
-            template_matcher: TemplateMatcher instance to detect matches
-            max_attempts: Maximum number of scan attempts
-            
-        Returns:
-            Tuple of (x, y) coordinates if match found, None otherwise
+            start_x: Starting X coordinate
+            start_y: Starting Y coordinate
+            end_x: Ending X coordinate
+            end_y: Ending Y coordinate
         """
-        attempts = 0
-        while attempts < max_attempts:
+        if self.is_scanning:
+            logger.warning("Scan already in progress")
+            return
+            
+        self.is_scanning = True
+        self.scan_cancelled = False
+        self.scan_started.emit()
+        
+        try:
+            # Calculate scan grid
+            x_range = range(min(start_x, end_x), max(start_x, end_x) + 1)
+            y_range = range(min(start_y, end_y), max(start_y, end_y) + 1)
+            total_points = len(x_range) * len(y_range)
+            points_scanned = 0
+            
+            # Scan each point
+            for x in x_range:
+                for y in y_range:
+                    if self.scan_cancelled:
+                        logger.info("Scan cancelled")
+                        break
+                        
+                    # Navigate to point
+                    if not self.navigate_to(x, y):
+                        logger.warning(f"Failed to navigate to ({x}, {y})")
+                        continue
+                        
+                    # Process point
+                    self._process_scan_point()
+                    
+                    # Update progress
+                    points_scanned += 1
+                    progress = int((points_scanned / total_points) * 100)
+                    self.scan_progress.emit(progress)
+                    
+                if self.scan_cancelled:
+                    break
+                    
+            if not self.scan_cancelled:
+                logger.info("Scan completed successfully")
+                self.scan_completed.emit()
+                
+        except Exception as e:
+            logger.error(f"Error during scan: {e}")
+            self.scan_error.emit(str(e))
+            
+        finally:
+            self.is_scanning = False
+            
+    def stop_scan(self) -> None:
+        """Stop the current scan."""
+        if self.is_scanning:
+            self.scan_cancelled = True
+            logger.info("Scan stop requested")
+            
+    def _process_scan_point(self) -> None:
+        """Process the current scan point for points of interest."""
+        try:
             # Take screenshot
             screenshot = self.window_manager.capture_screenshot()
             if screenshot is None:
-                continue
+                logger.warning("Failed to capture screenshot")
+                return
                 
-            # Look for matches
-            matches = template_matcher.find_matches()
-            if matches:
-                match = matches[0]  # Take first match
-                return (match.bounds[0], match.bounds[1])
-                
-            attempts += 1
+            # Find templates
+            matches = self.template_matcher.find_matches(screenshot)
             
-        return None
+            # Process matches
+            if matches:
+                logger.info(f"Found {len(matches)} matches at current position")
+                current_coords = self.game_state.get_coordinates()
+                
+                # Log matches with coordinates
+                for match in matches:
+                    logger.info(
+                        f"Match: {match.template_name} at "
+                        f"K:{current_coords.k} X:{current_coords.x} Y:{current_coords.y} "
+                        f"(confidence: {match.confidence:.2f})"
+                    )
+                    
+        except Exception as e:
+            logger.error(f"Error processing scan point: {e}")
 
 def test_coordinate_reading():
     """Test function to check coordinate reading."""
-    scanner = WorldScanner(WindowManager())
+    scanner = WorldScanner(WindowManager(), TemplateMatcher(), DebugWindow(), GameState())
     
     logger.info("Starting coordinate reading test...")
-    position = scanner.get_current_position()
+    scanner.get_current_position()
     
-    if position:
-        logger.info(f"Test successful! Found position: X={position.x}, Y={position.y}, K={position.k}")
+    current_coords = scanner.game_state.get_coordinates()
+    if current_coords:
+        logger.info(f"Test successful! Found position: X={current_coords.x}, Y={current_coords.y}, K={current_coords.k}")
     else:
         logger.error("Test failed! Could not read coordinates")
 
@@ -413,15 +421,7 @@ class ScanWorker(QObject):
                         self.last_debug_update = current_time
                     
                     # Try to read current position
-                    current_pos = self.scanner.get_current_position()
-                    if not current_pos:
-                        logger.warning("Failed to read coordinates, retrying in 2 seconds...")
-                        sleep(2)  # Wait before retry
-                        continue
-                    
-                    # Update scanner start position
-                    self.scanner.start_pos = current_pos
-                    logger.info(f"Current position: X={current_pos.x}, Y={current_pos.y}, K={current_pos.k}")
+                    self.scanner.get_current_position()
                     
                     # Start scanning from current position
                     found_pos = self.scanner.scan_world_until_match(
@@ -437,14 +437,14 @@ class ScanWorker(QObject):
                     # If no match found, continue scanning from a new position
                     logger.info("No match found in current area, moving to next area...")
                     # Move to a new starting position
-                    new_x = (current_pos.x + 100) % 1000  # Move 100 units right, wrap around at 1000
-                    new_y = current_pos.y
-                    new_pos = WorldPosition(x=new_x, y=new_y, k=current_pos.k)
+                    new_x = (found_pos[0] + 100) % 1000  # Move 100 units right, wrap around at 1000
+                    new_y = found_pos[1]
+                    new_pos = (new_x, new_y)
                     
                     move_success = False
                     retry_count = 0
                     while not move_success and retry_count < 3 and not self.should_stop:
-                        move_success = self.scanner.move_to_position(new_pos)
+                        move_success = self.scanner.navigate_to(new_x, new_y)
                         if not move_success:
                             retry_count += 1
                             logger.warning(f"Failed to move to new position, retry {retry_count}/3")

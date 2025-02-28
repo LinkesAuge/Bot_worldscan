@@ -19,6 +19,7 @@ from scout.config_manager import ConfigManager
 from scout.sound_manager import SoundManager
 from scout.window_manager import WindowManager
 from scout.debug_window import DebugWindow
+from scout.game_state import GameState
 
 os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "0"  # Disable Qt's DPI scaling
 
@@ -111,13 +112,17 @@ def main() -> None:
         # Create debug window
         debug_window = DebugWindow()
         
+        # Create game state
+        game_state = GameState(window_manager)
+        
         # Create game actions controller
         game_actions = GameActions(window_manager)
         
-        # Create text OCR
+        # Create text OCR with game state
         text_ocr = TextOCR(
             debug_window=debug_window,
-            window_manager=window_manager
+            window_manager=window_manager,
+            game_state=game_state
         )
         
         # Create overlay with window manager and settings

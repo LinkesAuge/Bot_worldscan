@@ -5,6 +5,7 @@ This module provides centralized game state tracking including:
 - Mouse drag operations (camera movement)
 - Template match statistics
 - Game window state
+- Game coordinates
 """
 
 from typing import Optional, List, Dict, Tuple
@@ -14,9 +15,31 @@ import time
 import logging
 import win32api
 import win32con
+from PyQt6.QtCore import QDateTime
 from scout.window_manager import WindowManager
 
 logger = logging.getLogger(__name__)
+
+@dataclass
+class GameCoordinates:
+    """Represents coordinates in the game world."""
+    k: Optional[int] = None  # Kingdom/world number
+    x: Optional[int] = None  # X coordinate
+    y: Optional[int] = None  # Y coordinate
+    timestamp: Optional[str] = None  # When coordinates were captured
+
+    def is_valid(self) -> bool:
+        """Check if all coordinates are present."""
+        return all(isinstance(v, int) for v in [self.k, self.x, self.y])
+
+    def __str__(self) -> str:
+        """String representation of coordinates with timestamp."""
+        coords = f"K: {self.k if self.k is not None else 'None'}, "
+        coords += f"X: {self.x if self.x is not None else 'None'}, "
+        coords += f"Y: {self.y if self.y is not None else 'None'}"
+        if self.timestamp:
+            coords += f" ({self.timestamp})"
+        return coords
 
 class DragButton(Enum):
     """Mouse button used for dragging."""
@@ -55,6 +78,7 @@ class GameState:
     - Mouse drag operations (camera movement)
     - Template match statistics and locations
     - Game window state and activity
+    - Game world coordinates
     
     It uses the Win32 API to track mouse events within the game window.
     """
@@ -69,6 +93,7 @@ class GameState:
         self.window_manager = window_manager
         self.drag_state = DragState()
         self.template_state = TemplateMatchState()
+        self.coordinates = GameCoordinates()  # Current game coordinates
         
         # Configuration
         self.drag_start_delay = 0.1  # seconds
@@ -168,6 +193,32 @@ class GameState:
         self.template_state.count = len(matches)
         self.template_state.locations = matches
         self.template_state.last_update_time = time.time()
+        
+    def update_coordinates(self, k: Optional[int] = None, x: Optional[int] = None, 
+                         y: Optional[int] = None) -> None:
+        """
+        Update game world coordinates.
+        
+        Args:
+            k: Kingdom/world number
+            x: X coordinate
+            y: Y coordinate
+        """
+        # Only update non-None values
+        if k is not None:
+            self.coordinates.k = k
+        if x is not None:
+            self.coordinates.x = x
+        if y is not None:
+            self.coordinates.y = y
+            
+        # Update timestamp
+        self.coordinates.timestamp = QDateTime.currentDateTime().toString("yyyy-MM-dd hh:mm:ss")
+        logger.debug(f"Updated game coordinates: {self.coordinates}")
+        
+    def get_coordinates(self) -> GameCoordinates:
+        """Get current game coordinates."""
+        return self.coordinates
         
     def is_dragging(self) -> bool:
         """Check if drag operation is in progress."""
