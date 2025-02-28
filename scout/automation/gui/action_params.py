@@ -49,6 +49,28 @@ class BaseParamsWidget(QWidget):
         repeat_layout.addWidget(self.repeat_spin)
         self.base_layout.addLayout(repeat_layout)
         
+        # Add increment per loop fields
+        increment_layout = QHBoxLayout()
+        self.use_increment_check = QCheckBox("Use Increment Per Loop")
+        self.use_increment_check.setChecked(False)
+        self.use_increment_check.stateChanged.connect(self._on_use_increment_changed)
+        self.use_increment_check.stateChanged.connect(self.params_changed.emit)
+        increment_layout.addWidget(self.use_increment_check)
+        
+        increment_layout.addWidget(QLabel("Increment Value:"))
+        self.increment_spin = QSpinBox()
+        self.increment_spin.setRange(1, 100)
+        self.increment_spin.setValue(1)
+        self.increment_spin.setEnabled(False)  # Initially disabled
+        self.increment_spin.valueChanged.connect(self.params_changed.emit)
+        increment_layout.addWidget(self.increment_spin)
+        
+        self.base_layout.addLayout(increment_layout)
+        
+    def _on_use_increment_changed(self, state):
+        """Enable/disable increment spin box based on checkbox state."""
+        self.increment_spin.setEnabled(state == Qt.CheckState.Checked)
+        
     def get_params(self) -> ParamType:
         """Get the current parameter values."""
         raise NotImplementedError()
@@ -60,12 +82,17 @@ class BaseParamsWidget(QWidget):
     def _get_common_params(self) -> Dict[str, Any]:
         """Get common parameter values."""
         return {
-            'repeat': self.repeat_spin.value()
+            'repeat': self.repeat_spin.value(),
+            'use_increment': self.use_increment_check.isChecked(),
+            'increment': self.increment_spin.value()
         }
         
     def _set_common_params(self, params: ParamType) -> None:
         """Set common parameter values."""
         self.repeat_spin.setValue(getattr(params, 'repeat', 1))
+        self.use_increment_check.setChecked(getattr(params, 'use_increment', False))
+        self.increment_spin.setValue(getattr(params, 'increment', 1))
+        self.increment_spin.setEnabled(getattr(params, 'use_increment', False))
 
 class ClickParamsWidget(BaseParamsWidget):
     """Widget for configuring click action parameters."""

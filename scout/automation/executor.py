@@ -132,6 +132,10 @@ class SequenceExecutor(QObject):
         self.current_sequence = None
         self.current_step = 0
         self.current_repeat = 0  # Reset repeat counter
+        
+        # Reset loop count in context
+        self.context.reset_loop_count()
+        
         self._log_debug("Execution stopped")
         
     def _execute_next_step(self) -> None:
@@ -156,12 +160,24 @@ class SequenceExecutor(QObject):
             action_data = self.current_sequence.actions[self.current_step]
             action = AutomationAction.from_dict(action_data)
             
-            # Get repeat count for current action
-            repeat_count = getattr(action.params, 'repeat', 1)
+            # Get base repeat count for current action
+            base_repeat_count = getattr(action.params, 'repeat', 1)
+            
+            # Check if we should use increment logic
+            use_increment = getattr(action.params, 'use_increment', False)
+            increment_value = getattr(action.params, 'increment', 1)
+            
+            # Calculate effective repeat count based on increment settings
+            if use_increment and self.context.loop_count > 0:
+                # Multiply base repeat by loop count * increment
+                effective_repeat_count = base_repeat_count * (self.context.loop_count * increment_value)
+                self._log_debug(f"Using incremented repeat count: {base_repeat_count} × ({self.context.loop_count} × {increment_value}) = {effective_repeat_count}")
+            else:
+                effective_repeat_count = base_repeat_count
             
             # If we haven't completed all repeats for this action
-            if self.current_repeat < repeat_count:
-                self._log_debug(f"Executing step {self.current_step + 1} (repeat {self.current_repeat + 1}/{repeat_count}): {action.action_type.name}")
+            if self.current_repeat < effective_repeat_count:
+                self._log_debug(f"Executing step {self.current_step + 1} (repeat {self.current_repeat + 1}/{effective_repeat_count}): {action.action_type.name}")
                 
                 # Execute or simulate the action
                 if self.context.simulation_mode:
@@ -697,18 +713,34 @@ class SequenceExecutor(QObject):
         
     def _complete_sequence(self) -> None:
         """Handle sequence completion."""
-        if self.context.loop_enabled and self.is_running:
-            # Reset step counter and continue execution
+        if not self.is_running:
+            return
+            
+        self._log_debug(f"Sequence completed: {self.current_sequence.name}")
+        
+        # If loop is enabled, restart the sequence
+        if self.context.loop_enabled:
             self.current_step = 0
-            self.current_repeat = 0  # Reset repeat counter
-            self._log_debug("Sequence completed - restarting due to loop enabled")
-            time.sleep(self.context.step_delay)  # Add delay between loops
+            self.current_repeat = 0
+            
+            # Increment the loop count in the context
+            self.context.increment_loop_count()
+            
+            self._log_debug(f"Restarting sequence (loop #{self.context.loop_count})")
+            time.sleep(self.context.step_delay)
             self._execute_next_step()
         else:
-            # Normal completion
-            self.is_running = False
-            self._log_debug("Sequence completed")
+            # Emit completion signal
             self.sequence_completed.emit()
+            
+            # Reset state
+            self.is_running = False
+            self.current_sequence = None
+            self.current_step = 0
+            self.current_repeat = 0
+            
+            # Reset loop count in context
+            self.context.reset_loop_count()
         
     def _handle_error(self, message: str) -> None:
         """Handle execution error."""

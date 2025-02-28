@@ -32,6 +32,8 @@ class ClickParams:
     timeout: float = 30.0  # Timeout in seconds for conditions
     description: Optional[str] = None  # Optional description
     repeat: int = 1  # Number of times to repeat this action
+    use_increment: bool = False  # Whether to use loop increment for repeat count
+    increment: int = 1  # Increment value for repeat count
 
 @dataclass
 class DragParams:
@@ -41,6 +43,8 @@ class DragParams:
     timeout: float = 30.0  # Timeout in seconds for conditions
     description: Optional[str] = None  # Optional description
     repeat: int = 1  # Number of times to repeat this action
+    use_increment: bool = False  # Whether to use loop increment for repeat count
+    increment: int = 1  # Increment value for repeat count
     duration: float = 0.5   # Duration of drag operation
 
 @dataclass
@@ -51,6 +55,8 @@ class TypeParams:
     timeout: float = 30.0  # Timeout in seconds for conditions
     description: Optional[str] = None  # Optional description
     repeat: int = 1  # Number of times to repeat this action
+    use_increment: bool = False  # Whether to use loop increment for repeat count
+    increment: int = 1  # Increment value for repeat count
 
 @dataclass
 class WaitParams:
@@ -60,6 +66,8 @@ class WaitParams:
     timeout: float = 30.0  # Timeout in seconds for conditions
     description: Optional[str] = None  # Optional description
     repeat: int = 1  # Number of times to repeat this action
+    use_increment: bool = False  # Whether to use loop increment for repeat count
+    increment: int = 1  # Increment value for repeat count
 
 @dataclass
 class TemplateSearchParams:
@@ -69,6 +77,8 @@ class TemplateSearchParams:
     timeout: float = 30.0  # Timeout in seconds for conditions
     description: Optional[str] = None  # Optional description
     repeat: int = 1  # Number of times to repeat this action
+    use_increment: bool = False  # Whether to use loop increment for repeat count
+    increment: int = 1  # Increment value for repeat count
     use_all_templates: bool = True  # Whether to use all available templates
     overlay_enabled: bool = True  # Whether to show overlay during search
     sound_enabled: bool = True  # Whether to enable sound alerts
@@ -89,7 +99,9 @@ class TemplateSearchParams:
             'position_name': self.position_name,
             'timeout': self.timeout,
             'description': self.description,
-            'repeat': self.repeat
+            'repeat': self.repeat,
+            'use_increment': self.use_increment,
+            'increment': self.increment
         }
 
     @classmethod
@@ -105,6 +117,8 @@ class OCRWaitParams:
     timeout: float = 30.0  # Timeout in seconds for conditions
     description: Optional[str] = None  # Optional description
     repeat: int = 1  # Number of times to repeat this action
+    use_increment: bool = False  # Whether to use loop increment for repeat count
+    increment: int = 1  # Increment value for repeat count
     partial_match: bool = False  # Whether to accept partial matches
 
 class AutomationAction:

@@ -1,0 +1,91 @@
+# Scout Project Bug Tracking
+
+## Increment Per Loop Feature
+
+### Potential Issues to Watch For
+- Ensure loop count is properly reset when stopping execution
+- Verify that increment logic works correctly with all action types
+- Check that UI correctly displays and updates increment settings
+- Validate that saved sequences with increment settings load correctly
+- Test edge cases like very high increment values or loop counts
+
+### Testing Scenarios
+1. Basic increment: Set repeat=1, increment=1, run for multiple loops
+2. Multiplier effect: Set repeat=2, increment=1, verify repeat count doubles each loop
+3. Custom increment: Set repeat=1, increment=3, verify repeat count increases by 3x each loop
+4. Disabled increment: Verify actions with use_increment=False use base repeat count
+5. Mixed actions: Test sequences with both increment-enabled and regular actions
+
+### Known Issues
+- None identified yet 
+
+## Position Management
+
+### Issues Fixed
+- **Positions Reappearing After Removal**: The `positions.json` file was corrupted with multiple duplicate copies of the same JSON object. This caused positions to reappear after being removed and the application was restarted. The file has been cleaned up to contain only one valid JSON object.
+
+- **Position Name Synchronization**: Fixed issue where position names in the UI were not properly synchronized with the internal name field in the position objects. This caused a mismatch between the UI display and the stored data, resulting in positions not being properly removed or updated.
+
+### Potential Issues to Watch For
+- Verify that position removal works correctly and positions don't reappear after application restart
+- Check for any potential race conditions when multiple parts of the application try to save to the positions.json file simultaneously
+- Monitor for any signs of file corruption in the positions.json file
+- Ensure that position renaming properly updates both the UI and the stored data
+
+### Root Cause Analysis
+1. **Positions Reappearing Issue**: The issue was caused by the positions.json file containing multiple duplicate copies of the same JSON data. This likely happened due to a bug in the file writing process where new data was appended to the file instead of replacing it. When the application loaded the file, it would read the first valid JSON object it found, which still contained the "Down" position even after it was removed from the UI.
+
+2. **Position Name Synchronization Issue**: When positions were created, they were given default names like "Position_1", but when they were displayed in the UI and saved to the JSON file, the UI name (like "Center") was used as the key in the dictionary, while the original name was still stored in the `name` field of the position object. When a position was renamed in the UI, only the dictionary key was updated, not the internal name field, causing a mismatch between the UI and the stored data.
+
+### Solutions Implemented
+1. **Positions Reappearing Issue**: Manually cleaned up the positions.json file to contain only one valid JSON object with the correct positions.
+
+2. **Position Name Synchronization Issue**: 
+   - Updated `_on_details_changed` to set `position.name` when renaming a position
+   - Updated `_on_remove_clicked` to properly save positions after removal
+   - Updated `_load_configurations` and `_load_saved_data` to ensure name synchronization when loading positions
+   - Improved position creation to use unique names and avoid conflicts
+
+### Future Prevention
+- Added validation when reading/writing the positions.json file to detect and prevent corruption
+- Ensured proper synchronization between UI names and internal position names
+- Implemented more robust position saving after any changes 
+
+## Search Pattern Functionality
+
+### Issues Fixed
+- **UI Integration**: Fixed issue where the search pattern button was not appearing in the automation tab UI.
+
+- **Missing OCR Methods**: Fixed issue where the OCR-related methods were referenced in the `create_scan_controls` method but not defined in the `AutomationTab` class.
+
+### Potential Issues to Watch For
+- Verify that search patterns are correctly created and saved
+- Check that the search pattern dialog properly displays all available positions
+- Test that the pattern preview functionality works correctly
+- Ensure that search sequences can be executed properly
+- Monitor for any performance issues with large search patterns
+- Test OCR functionality once it's fully implemented
+
+### Root Cause Analysis
+1. **UI Integration Issue**: The issue was caused by the `create_scan_controls` method being defined in the `AutomationTab` class but not being called during initialization. Additionally, the automation manager was not properly initialized, causing position management to be inconsistent.
+
+2. **Missing OCR Methods Issue**: The `_toggle_ocr` and `_start_ocr_region_selection` methods were referenced in the `create_scan_controls` method but not defined in the `AutomationTab` class. Additionally, the OCR frequency controls layout was not properly structured.
+
+### Solutions Implemented
+1. **UI Integration Issue**:
+   - Updated the `AutomationTab.__init__` method to initialize the `automation_manager`
+   - Modified the `__init__` method to call `create_scan_controls` to add the search pattern button to the UI
+   - Updated all methods to use the `automation_manager` for position management instead of directly manipulating the position list
+   - Ensured proper layout structure to display both the main automation components and the scan controls
+
+2. **Missing OCR Methods Issue**:
+   - Added the missing `_toggle_ocr` and `_start_ocr_region_selection` methods to the `AutomationTab` class
+   - Added the missing `on_ocr_slider_change` and `on_ocr_spinbox_change` methods to handle OCR frequency controls
+   - Fixed the layout structure in `create_scan_controls` to properly add the frequency controls
+
+### Future Prevention
+- Ensure that all UI components are properly initialized and displayed
+- Use a consistent approach to position management through the automation manager
+- Add more comprehensive logging for UI initialization and component creation
+- Implement proper method stubs for all referenced methods, even if the functionality is not yet implemented
+- Use proper code organization to ensure that all required methods are defined before they are referenced 

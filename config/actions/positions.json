@@ -1,26 +1,26 @@
 {
-    "Position_1": {
-        "name": "Position_1",
-        "x": 313,
-        "y": 657,
-        "description": null
+    "Top": {
+        "name": "Top",
+        "x": 1982,
+        "y": 257,
+        "description": ""
     },
-    "Position_2": {
-        "name": "Position_2",
-        "x": 2359,
-        "y": 746,
-        "description": null
+    "Buttom": {
+        "name": "Buttom",
+        "x": 2024,
+        "y": 1743,
+        "description": ""
     },
-    "Position_3": {
-        "name": "Position_3",
-        "x": 1501,
-        "y": 593,
-        "description": null
+    "Left": {
+        "name": "Left",
+        "x": 60,
+        "y": 970,
+        "description": ""
     },
-    "Position_4": {
-        "name": "Position_4",
-        "x": 1141,
-        "y": 655,
-        "description": null
+    "Right": {
+        "name": "Right",
+        "x": 3621,
+        "y": 1122,
+        "description": ""
     }
 }

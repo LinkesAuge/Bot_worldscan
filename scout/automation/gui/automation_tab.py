@@ -26,7 +26,9 @@ from scout.automation.gui.position_marker import PositionMarker
 from scout.automation.gui.action_params import create_params_widget, BaseParamsWidget, DragParamsWidget
 from scout.automation.executor import SequenceExecutor, ExecutionContext
 from scout.config_manager import ConfigManager
+from scout.automation.gui.search_pattern_dialog import SearchPatternDialog
 from PyQt6.QtWidgets import QApplication
+from scout.automation.core import AutomationManager
 
 logger = logging.getLogger(__name__)
 
@@ -155,6 +157,28 @@ class PositionList(QWidget):
                 self.update_positions(self.positions)
                 self.remove_button.setEnabled(False)
                 
+                # Save positions to disk after removal
+                try:
+                    positions_file = Path('config/actions/positions.json')
+                    positions_data = {
+                        name: pos.to_dict() for name, pos in self.positions.items()
+                    }
+                    positions_file.parent.mkdir(parents=True, exist_ok=True)
+                    with open(positions_file, 'w') as f:
+                        json.dump(positions_data, f, indent=4)
+                    logger.debug(f"Position '{name}' removed and positions saved")
+                    
+                    # Update sequence builder's position list if available
+                    if self.sequence_builder:
+                        self.sequence_builder.update_positions(self.positions.copy())
+                    
+                    # Emit positions changed signal
+                    self.positions_changed.emit(self.positions.copy())
+                    
+                except Exception as e:
+                    logger.error(f"Failed to save positions after removal: {e}")
+                    QMessageBox.critical(None, "Error", f"Failed to save position changes: {str(e)}")
+                
     def _on_details_changed(self) -> None:
         """Handle changes to position details."""
         if self._updating_details:
@@ -190,6 +214,8 @@ class PositionList(QWidget):
                     
                 # Rename position
                 self.positions[new_name] = pos
+                # Update the position's name field to match the key in the dictionary
+                pos.name = new_name  # This is the key fix - update the internal name
                 del self.positions[old_name]
                 
                 # Update list item text without triggering a full refresh
@@ -237,8 +263,16 @@ class ActionListItem(QListWidgetItem):
             text += f" @ {params.position_name}"
         if params.description:
             text += f" - {params.description}"
+        
+        # Display repeat count and increment info if applicable
         if getattr(params, 'repeat', 1) > 1:
-            text += f" (x{params.repeat})"
+            text += f" (x{params.repeat}"
+            if getattr(params, 'use_increment', False):
+                text += f" with increment {params.increment}"
+            text += ")"
+        elif getattr(params, 'use_increment', False):
+            text += f" (with increment {params.increment})"
+            
         self.setText(text)
 
 class SequenceBuilder(QWidget):
@@ -821,10 +855,15 @@ class AutomationTab(QWidget):
         self.template_matcher = template_matcher
         self.text_ocr = text_ocr
         self.game_actions = game_actions
+        self.automation_manager = AutomationManager(window_manager)
         
         # Create layout
+        main_layout = QVBoxLayout()
+        self.setLayout(main_layout)
+        
+        # Create horizontal layout for the main components
         layout = QHBoxLayout()
-        self.setLayout(layout)
+        main_layout.addLayout(layout)
         
         # Create position marker
         self.position_marker = PositionMarker(window_manager)
@@ -857,6 +896,9 @@ class AutomationTab(QWidget):
         debug_button.clicked.connect(self._on_debug_clicked)
         layout.addWidget(debug_button)
         
+        # Create scan controls section at the bottom
+        self.create_scan_controls(main_layout)
+        
         # Create sequence executor
         self.executor = None  # Will be created when needed
         
@@ -874,25 +916,14 @@ class AutomationTab(QWidget):
     def _load_saved_data(self) -> None:
         """Load saved positions and sequences from disk."""
         try:
-            # Create actions directory if it doesn't exist
-            actions_dir = Path('config/actions')
-            actions_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Load positions
-            positions_file = actions_dir / 'positions.json'
-            if positions_file.exists():
-                with open(positions_file, 'r') as f:
-                    positions_data = json.load(f)
-                    positions = {
-                        name: AutomationPosition.from_dict(data)
-                        for name, data in positions_data.items()
-                    }
-                    self.position_list.update_positions(positions)
-                    self.sequence_builder.update_positions(positions)
-                    logger.info(f"Loaded {len(positions)} positions")
+            # Use the automation manager to get positions
+            positions = self.automation_manager.positions
+            self.position_list.update_positions(positions)
+            self.sequence_builder.update_positions(positions)
+            logger.info(f"Loaded {len(positions)} positions")
             
             # Load current sequence
-            current_sequence_file = actions_dir / 'current_sequence.json'
+            current_sequence_file = Path('config/actions/current_sequence.json')
             if current_sequence_file.exists():
                 with open(current_sequence_file, 'r') as f:
                     sequence_data = json.load(f)
@@ -930,31 +961,29 @@ class AutomationTab(QWidget):
     def _on_position_marked(self, point) -> None:
         """Handle new position being marked."""
         try:
-            # Create new position with default name
-            name = f"Position_{len(self.position_list.positions) + 1}"
+            # Generate a unique position name
+            base_name = "Position"
+            counter = 1
+            while f"{base_name}_{counter}" in self.automation_manager.positions:
+                counter += 1
+            
+            name = f"{base_name}_{counter}"
             position = AutomationPosition(name, point.x(), point.y())
             
-            # Add to list and update UI
-            self.position_list.positions[name] = position
-            self.position_list.update_positions(self.position_list.positions)
-            self.sequence_builder.update_positions(self.position_list.positions)
+            # Add to automation manager
+            self.automation_manager.add_position(position)
+            
+            # Update UI
+            self.position_list.update_positions(self.automation_manager.positions)
+            self.sequence_builder.update_positions(self.automation_manager.positions)
             
             # Stop marking and re-enable button
             self.position_marker.stop_marking()
             self.position_list.add_button.setEnabled(True)
             
             # Update debug window
-            self.debug_window.update_positions(self.position_list.positions)
+            self.debug_window.update_positions(self.automation_manager.positions)
             
-            # Save positions
-            positions_file = Path('config/actions/positions.json')
-            positions_data = {
-                name: pos.to_dict() for name, pos in self.position_list.positions.items()
-            }
-            positions_file.parent.mkdir(parents=True, exist_ok=True)  # Ensure directory exists
-            with open(positions_file, 'w') as f:
-                json.dump(positions_data, f, indent=4)
-                
             logger.info(f"Saved position {name} at ({point.x()}, {point.y()})")
             
         except Exception as e:
@@ -1027,7 +1056,7 @@ class AutomationTab(QWidget):
                 logger.warning(f"Error finding overlay: {e}")
             
             context = ExecutionContext(
-                positions=self.position_list.positions,
+                positions=self.automation_manager.positions,
                 window_manager=self.window_manager,
                 template_matcher=self.template_matcher,
                 text_ocr=self.text_ocr,
@@ -1116,7 +1145,7 @@ class AutomationTab(QWidget):
             ActionType.TYPE_TEXT
         }:
             if hasattr(action.params, 'position_name'):
-                position = self.position_list.positions.get(action.params.position_name)
+                position = self.automation_manager.positions.get(action.params.position_name)
                 if position:
                     self.debug_window.update_mouse_position(position.x, position.y)
 
@@ -1188,6 +1217,11 @@ class AutomationTab(QWidget):
         self.sequence_btn.clicked.connect(self._toggle_sequence)
         automation_layout.addWidget(self.sequence_btn)
         
+        # Create search pattern button
+        self.search_pattern_btn = QPushButton("Create Search Pattern")
+        self.search_pattern_btn.clicked.connect(self._create_search_pattern)
+        automation_layout.addWidget(self.search_pattern_btn)
+        
         # Create sequence status label
         self.sequence_status = QLabel("Sequence: Inactive")
         automation_layout.addWidget(self.sequence_status)
@@ -1206,12 +1240,11 @@ class AutomationTab(QWidget):
         ocr_layout.addWidget(self.ocr_btn)
         
         # Create OCR frequency controls
-        freq_layout = QVBoxLayout()  # Changed to vertical layout
+        freq_layout = QVBoxLayout()
+        freq_layout.addWidget(QLabel("OCR Frequency:"))
         
         # Create horizontal layout for slider and spinbox
         freq_controls = QHBoxLayout()
-        freq_label = QLabel("OCR Frequency:")
-        freq_controls.addWidget(freq_label)
         
         # Add range label
         range_label = QLabel("(0.1 - 2.0 updates/sec)")
@@ -1235,6 +1268,10 @@ class AutomationTab(QWidget):
         self.ocr_freq_input.valueChanged.connect(self.on_ocr_spinbox_change)
         freq_controls.addWidget(self.ocr_freq_input)
         
+        # Add the freq_controls to the freq_layout
+        freq_layout.addLayout(freq_controls)
+        
+        # Add the freq_layout to the ocr_layout
         ocr_layout.addLayout(freq_layout)
         
         # Create OCR region selection button
@@ -1284,3 +1321,94 @@ class AutomationTab(QWidget):
         """Handle position marking being cancelled."""
         logger.debug("Position marking cancelled")
         self.position_list.add_button.setEnabled(True)
+        
+    def _create_search_pattern(self) -> None:
+        """Open the search pattern dialog to create a new search pattern sequence."""
+        try:
+            logger.debug("Opening search pattern dialog")
+            if SearchPatternDialog.create_search_pattern(self.automation_manager, self):
+                logger.info("Search pattern created successfully")
+                # Refresh the sequence list if a new sequence was created
+                self.sequence_builder._load_sequences()
+        except Exception as e:
+            logger.error(f"Error creating search pattern: {e}", exc_info=True)
+            QMessageBox.critical(self, "Error", f"Failed to create search pattern: {str(e)}")
+
+    def _toggle_ocr(self) -> None:
+        """Toggle OCR functionality on/off."""
+        try:
+            if self.ocr_btn.isChecked():
+                # Start OCR
+                self.ocr_btn.setText("Stop Text OCR")
+                self.ocr_status.setText("Text OCR: Active")
+                logger.info("Text OCR activated")
+                
+                # Here you would typically start the OCR process
+                # For now, we'll just update the UI
+                self.select_ocr_region_btn.setEnabled(False)
+            else:
+                # Stop OCR
+                self.ocr_btn.setText("Start Text OCR")
+                self.ocr_status.setText("Text OCR: Inactive")
+                logger.info("Text OCR deactivated")
+                
+                # Here you would typically stop the OCR process
+                # For now, we'll just update the UI
+                self.select_ocr_region_btn.setEnabled(True)
+        except Exception as e:
+            logger.error(f"Error toggling OCR: {e}", exc_info=True)
+            self.ocr_btn.setChecked(False)
+            self.ocr_btn.setText("Start Text OCR")
+            self.ocr_status.setText("Text OCR: Error")
+            QMessageBox.critical(self, "OCR Error", f"Failed to toggle OCR: {str(e)}")
+            
+    def _start_ocr_region_selection(self) -> None:
+        """Start the OCR region selection process."""
+        try:
+            logger.info("Starting OCR region selection")
+            QMessageBox.information(
+                self,
+                "OCR Region Selection",
+                "OCR region selection is not yet implemented."
+            )
+            # Here you would typically start the region selection process
+            # For now, we'll just show a message
+        except Exception as e:
+            logger.error(f"Error starting OCR region selection: {e}", exc_info=True)
+            QMessageBox.critical(self, "Error", f"Failed to start OCR region selection: {str(e)}")
+            
+    def on_ocr_slider_change(self, value: int) -> None:
+        """Handle OCR frequency slider change."""
+        try:
+            # Convert slider value to frequency (0.1 to 2.0)
+            frequency = value / 10.0
+            
+            # Update spinbox without triggering its valueChanged signal
+            self.ocr_freq_input.blockSignals(True)
+            self.ocr_freq_input.setValue(frequency)
+            self.ocr_freq_input.blockSignals(False)
+            
+            # Save to config
+            config = ConfigManager()
+            config.update_ocr_settings({'frequency': frequency})
+            logger.debug(f"OCR frequency updated to {frequency} updates/sec")
+        except Exception as e:
+            logger.error(f"Error updating OCR frequency: {e}", exc_info=True)
+            
+    def on_ocr_spinbox_change(self, value: float) -> None:
+        """Handle OCR frequency spinbox change."""
+        try:
+            # Convert frequency to slider value (1 to 20)
+            slider_value = int(value * 10)
+            
+            # Update slider without triggering its valueChanged signal
+            self.ocr_freq_slider.blockSignals(True)
+            self.ocr_freq_slider.setValue(slider_value)
+            self.ocr_freq_slider.blockSignals(False)
+            
+            # Save to config
+            config = ConfigManager()
+            config.update_ocr_settings({'frequency': value})
+            logger.debug(f"OCR frequency updated to {value} updates/sec")
+        except Exception as e:
+            logger.error(f"Error updating OCR frequency: {e}", exc_info=True)

@@ -86,6 +86,7 @@ class ExecutionContext:
     simulation_mode: bool = False
     step_delay: float = 0.5
     loop_enabled: bool = False  # Added loop flag
+    loop_count: int = 0  # Track the current loop count
 
     # Store the last result and message
     last_result: bool = False
@@ -114,6 +115,14 @@ class ExecutionContext:
             Tuple of (success, message)
         """
         return (self.last_result, self.last_message)
+        
+    def increment_loop_count(self) -> None:
+        """Increment the loop count when a sequence is repeated."""
+        self.loop_count += 1
+        
+    def reset_loop_count(self) -> None:
+        """Reset the loop count to zero."""
+        self.loop_count = 0
 
 class AutomationManager:
     """
@@ -158,10 +167,12 @@ class AutomationManager:
             if positions_file.exists():
                 with open(positions_file, 'r') as f:
                     positions_data = json.load(f)
-                    self.positions = {
-                        name: AutomationPosition.from_dict(data)
-                        for name, data in positions_data.items()
-                    }
+                    self.positions = {}
+                    for name, data in positions_data.items():
+                        # Ensure the position's name field matches the key in the dictionary
+                        position = AutomationPosition.from_dict(data)
+                        position.name = name  # Synchronize the name field with the dictionary key
+                        self.positions[name] = position
             
             # Load sequences
             sequences_dir = self.actions_dir / 'sequences'

@@ -2,60 +2,135 @@
     "name": "test",
     "actions": [
         {
-            "type": "DRAG",
+            "type": "TEMPLATE_SEARCH",
             "params": {
-                "end_position_name": "Position_2",
-                "position_name": "Position_1",
-                "timeout": 30.0,
-                "description": null,
-                "repeat": 2,
-                "duration": 0.3
-            }
-        },
-        {
-            "type": "WAIT",
-            "params": {
-                "duration": 0.01,
+                "templates": [
+                    "Crypt"
+                ],
                 "position_name": null,
                 "timeout": 30.0,
-                "description": null
+                "description": null,
+                "repeat": 1,
+                "use_increment": false,
+                "increment": 1,
+                "use_all_templates": true,
+                "overlay_enabled": true,
+                "sound_enabled": true,
+                "duration": 3.0,
+                "update_frequency": 2.0,
+                "min_confidence": 0.9
             }
         },
         {
             "type": "DRAG",
             "params": {
-                "end_position_name": "Position_1",
-                "position_name": "Position_2",
-                "timeout": 30.0,
+                "end_position_name": "Left",
+                "position_name": "Right",
+                "timeout": 10.0,
                 "description": null,
+                "repeat": 1,
+                "use_increment": true,
+                "increment": 1,
                 "duration": 0.3
-            }
-        },
-        {
-            "type": "WAIT",
-            "params": {
-                "duration": 0.01,
-                "position_name": null,
-                "timeout": 30.0,
-                "description": null
             }
         },
         {
             "type": "TEMPLATE_SEARCH",
             "params": {
+                "templates": [
+                    "Crypt"
+                ],
                 "position_name": null,
                 "timeout": 30.0,
                 "description": null,
-                "templates": [
-                    "Crypt",
-                    "crypt_small"
-                ],
+                "repeat": 1,
+                "use_increment": false,
+                "increment": 1,
                 "use_all_templates": true,
                 "overlay_enabled": true,
                 "sound_enabled": true,
-                "duration": 5.0,
+                "duration": 3.0,
                 "update_frequency": 2.0,
                 "min_confidence": 0.9
+            }
+        },
+        {
+            "type": "DRAG",
+            "params": {
+                "end_position_name": "Top",
+                "position_name": "Buttom",
+                "timeout": 10.0,
+                "description": null,
+                "repeat": 1,
+                "use_increment": true,
+                "increment": 1,
+                "duration": 0.3
+            }
+        },
+        {
+            "type": "TEMPLATE_SEARCH",
+            "params": {
+                "templates": [
+                    "Crypt"
+                ],
+                "position_name": null,
+                "timeout": 30.0,
+                "description": null,
+                "repeat": 1,
+                "use_increment": false,
+                "increment": 1,
+                "use_all_templates": true,
+                "overlay_enabled": true,
+                "sound_enabled": true,
+                "duration": 3.0,
+                "update_frequency": 2.0,
+                "min_confidence": 0.9
+            }
+        },
+        {
+            "type": "DRAG",
+            "params": {
+                "end_position_name": "Right",
+                "position_name": "Left",
+                "timeout": 10.0,
+                "description": null,
+                "repeat": 1,
+                "use_increment": true,
+                "increment": 1,
+                "duration": 0.3
+            }
+        },
+        {
+            "type": "TEMPLATE_SEARCH",
+            "params": {
+                "templates": [
+                    "Crypt"
+                ],
+                "position_name": null,
+                "timeout": 30.0,
+                "description": null,
+                "repeat": 1,
+                "use_increment": false,
+                "increment": 1,
+                "use_all_templates": true,
+                "overlay_enabled": true,
+                "sound_enabled": true,
+                "duration": 3.0,
+                "update_frequency": 2.0,
+                "min_confidence": 0.9
+            }
+        },
+        {
+            "type": "DRAG",
+            "params": {
+                "end_position_name": "Buttom",
+                "position_name": "Top",
+                "timeout": 10.0,
+                "description": null,
+                "repeat": 1,
+                "use_increment": true,
+                "increment": 1,
+                "duration": 0.3
             }
         }
     ],

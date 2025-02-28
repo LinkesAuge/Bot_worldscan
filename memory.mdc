@@ -1,0 +1,102 @@
+# Scout Project Memory
+
+## Current Task Status
+- Added "increment per loop" functionality to automation actions
+- Implemented in all action parameter classes
+- Updated UI to configure increment settings
+- Modified sequence executor to apply increment logic
+- Fixed issue with positions.json file corruption causing removed positions to reappear
+- Fixed issue with position names not being synchronized between UI and storage
+- Added search pattern functionality for systematic exploration in 2D space
+- Implemented spiral, grid, expanding circles, and quadtree search patterns
+- Created a dialog for configuring and creating search pattern sequences
+- Fixed UI integration of search pattern functionality in the automation tab
+- Fixed missing OCR methods in the automation tab
+- Added interactive visualization for search patterns
+
+## Search Pattern Functionality
+- Implemented four different search pattern generators:
+  - **Spiral Pattern**: Starts from a center point and spirals outward, covering the area in a spiral motion
+  - **Grid Pattern**: Systematically covers a rectangular area in a grid pattern, with optional snake-like traversal
+  - **Expanding Circles Pattern**: Generates points in concentric circles around a center point
+  - **Quadtree Pattern**: Recursively divides the search space into quadrants, checking the center of each quadrant
+- Created a utility class `SearchPatternAutomation` that integrates search patterns with the automation system
+- Added a dialog for configuring and creating search pattern sequences with customizable parameters
+- Implemented pattern visualization for debugging and preview purposes
+- Integrated search pattern creation into the automation tab with a dedicated button
+- Fixed UI integration by properly initializing the automation manager and calling the create_scan_controls method
+- Added an interactive graphical visualizer for search patterns with the following features:
+  - Real-time visualization of pattern points and movement path
+  - Color-coded points to show the order of traversal (blue to red)
+  - Adjustable parameters for each pattern type
+  - Zoom and pan functionality for detailed inspection
+  - Point count display and visualization options
+
+## OCR Functionality
+- Added placeholder methods for OCR functionality in the automation tab
+- Implemented OCR frequency controls with slider and spinbox
+- Added OCR region selection button (functionality not yet implemented)
+- Added OCR status display
+
+## Increment Per Loop Feature
+- Each action can now have "use_increment" flag and "increment" value
+- When enabled, the repeat count is multiplied by (loop_count * increment_value)
+- Example: If repeat=2, loop_count=3, increment=1, effective repeat count is 6
+- The loop count is tracked in the ExecutionContext and incremented each time a sequence completes
+- The UI displays increment information in the action list
+
+## Implementation Details
+- Added use_increment (bool) and increment (int) fields to all parameter classes
+- Updated BaseParamsWidget to include UI controls for these fields
+- Added loop_count tracking to ExecutionContext
+- Modified SequenceExecutor._execute_next_step to calculate effective repeat count
+- Updated ActionListItem to display increment information
+- Created `search_patterns.py` module with generator functions for different search patterns
+- Created `search_automation.py` module with the `SearchPatternAutomation` utility class
+- Created `search_pattern_dialog.py` module with a dialog for configuring search patterns
+- Integrated search pattern functionality into the automation tab
+- Fixed UI integration by updating the AutomationTab class to properly initialize and display the search pattern button
+- Added missing OCR-related methods to the AutomationTab class
+- Created `search_pattern_visualizer.py` module with an interactive graphical visualization of search patterns
+
+## Next Steps
+- Test the increment per loop functionality with various scenarios
+- Consider adding more advanced loop control features if needed
+- Test the search pattern functionality with different patterns and parameters
+- Consider adding more search patterns or optimizing existing ones
+- Add visualization of search patterns directly in the overlay during execution
+- Implement full OCR functionality for text recognition in the game
+- Update documentation to explain the new features to users
+
+## Bug Fixes
+- **Positions Reappearing After Removal**: Fixed issue with positions.json file corruption where the file contained multiple duplicate copies of the same JSON object. This caused positions to reappear after being removed when the application was restarted. The file has been cleaned up to contain only one valid JSON object.
+  - Root cause: The file writing process was likely appending new data to the file instead of replacing it, resulting in duplicate JSON objects.
+  - Solution: Manually cleaned up the positions.json file to contain only one valid JSON object with the correct positions.
+  - Future prevention: Consider adding validation when reading/writing the positions.json file to detect and prevent corruption.
+
+- **Position Name Synchronization**: Fixed issue where position names in the UI were not properly synchronized with the internal name field in the position objects, causing a mismatch between the UI display and the stored data.
+  - Root cause: When positions were renamed in the UI, the key in the positions dictionary was updated, but the internal name field in the position object was not.
+  - Solution: Updated the code to ensure that when a position is renamed, both the dictionary key and the internal name field are updated to match.
+  - Implementation: Modified the position handling code in multiple places to ensure proper synchronization:
+    - Updated _on_details_changed to set position.name when renaming
+    - Updated _on_remove_clicked to properly save positions after removal
+    - Updated _load_configurations and _load_saved_data to ensure name synchronization when loading positions
+    - Improved position creation to use unique names and avoid conflicts
+
+- **Search Pattern UI Integration**: Fixed issue where the search pattern button was not appearing in the automation tab UI.
+  - Root cause: The create_scan_controls method was defined but not called during initialization of the AutomationTab class.
+  - Solution: Updated the AutomationTab.__init__ method to call create_scan_controls and properly initialize the automation manager.
+  - Implementation: Modified the AutomationTab class to:
+    - Initialize the automation_manager in __init__
+    - Call create_scan_controls to add the search pattern button to the UI
+    - Update all methods to use the automation_manager for position management
+
+- **Missing OCR Methods**: Fixed issue where the OCR-related methods were referenced in the create_scan_controls method but not defined in the AutomationTab class.
+  - Root cause: The methods were referenced in the UI setup but not implemented in the class.
+  - Solution: Added the missing methods with placeholder implementations.
+  - Implementation: Added the following methods to the AutomationTab class:
+    - _toggle_ocr: Toggles OCR functionality on/off (placeholder implementation)
+    - _start_ocr_region_selection: Starts OCR region selection (placeholder implementation)
+    - on_ocr_slider_change: Handles OCR frequency slider changes
+    - on_ocr_spinbox_change: Handles OCR frequency spinbox changes
+    - Fixed the layout structure in create_scan_controls to properly add the frequency controls
