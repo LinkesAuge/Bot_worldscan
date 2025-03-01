@@ -10,7 +10,7 @@ import win32api
 import win32con
 from pathlib import Path
 from scout.overlay import Overlay
-from scout.gui import OverlayController
+from scout.gui_controller import OverlayController
 from scout.template_matcher import TemplateMatcher
 from scout.text_ocr import TextOCR
 from scout.actions import GameActions
@@ -124,6 +124,18 @@ def main() -> None:
             window_manager=window_manager,
             game_state=game_state
         )
+        
+        # Load OCR settings but don't start OCR
+        ocr_settings = config_manager.get_ocr_settings()
+        text_ocr.set_region(ocr_settings['region'])
+        text_ocr.set_frequency(ocr_settings['frequency'])
+        text_ocr.set_preferred_method(ocr_settings.get('preferred_method', 'thresh3'))
+        
+        # Ensure OCR starts in inactive state
+        text_ocr._cancellation_requested = True
+        text_ocr.stop()
+        ocr_settings['active'] = False
+        config_manager.update_ocr_settings(ocr_settings)
         
         # Create overlay with window manager and settings
         overlay = Overlay(

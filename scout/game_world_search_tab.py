@@ -14,6 +14,7 @@ import logging
 from pathlib import Path
 import json
 import time
+import cv2
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -22,7 +23,7 @@ from PyQt6.QtWidgets import (
     QListWidget, QListWidgetItem, QTextEdit, QProgressBar
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
-from PyQt6.QtGui import QPixmap, QImage
+from PyQt6.QtGui import QPixmap, QImage, QKeyEvent
 
 from scout.window_manager import WindowManager
 from scout.template_matcher import TemplateMatcher
@@ -32,6 +33,7 @@ from scout.game_world_coordinator import GameWorldCoordinator
 from scout.game_world_search import GameWorldSearch, SearchResult
 from scout.game_world_direction import GameWorldDirection
 from scout.config_manager import ConfigManager
+from scout.game_world_position import GameWorldPosition
 
 from scout.gui.direction_widget import DirectionWidget
 from scout.gui.search_grid_widget import SearchGridWidget
@@ -141,6 +143,24 @@ class GameWorldSearchTab(QWidget):
         
         # Initialize grid with current calibration if available
         self._update_grid_calibration()
+        
+        # Start periodic grid updates
+        self.grid_update_timer = QTimer()
+        self.grid_update_timer.timeout.connect(self._check_calibration)
+        self.grid_update_timer.start(1000)  # Check every second
+        
+        # Update drag info label
+        self._update_drag_info()
+        
+        # Enable key events for the whole tab
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.grabKeyboard()  # Ensure we get all key events
+        
+        # Update search timer interval for smoother updates
+        self.search_timer.setInterval(100)  # Update every 100ms
+        
+        # Store last screenshot for preview
+        self.last_screenshot = None
         
     def _load_settings(self):
         """Load search settings from config."""
@@ -261,24 +281,52 @@ class GameWorldSearchTab(QWidget):
         # Add stretch at bottom
         left_layout.addStretch()
         
-        # Right side - Grid visualization
+        # Right side - Grid and preview
         right_widget = QWidget()
         right_layout = QVBoxLayout()
         right_widget.setLayout(right_layout)
         
+        # Create splitter for grid and preview
+        splitter = QSplitter(Qt.Orientation.Vertical)
+        
         # Grid visualization
+        grid_container = QWidget()
+        grid_layout = QVBoxLayout()
+        grid_container.setLayout(grid_layout)
+        
         self.grid_widget = GameWorldGrid()
-        right_layout.addWidget(self.grid_widget)
+        grid_layout.addWidget(self.grid_widget)
         
         # Add info label for drag distances
         self.drag_info_label = QLabel()
         self.drag_info_label.setWordWrap(True)
-        right_layout.addWidget(self.drag_info_label)
+        grid_layout.addWidget(self.drag_info_label)
         
         # Progress bar
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
-        right_layout.addWidget(self.progress_bar)
+        grid_layout.addWidget(self.progress_bar)
+        
+        splitter.addWidget(grid_container)
+        
+        # Preview widget
+        preview_container = QWidget()
+        preview_layout = QVBoxLayout()
+        preview_container.setLayout(preview_layout)
+        
+        preview_label = QLabel("Live Preview")
+        preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        preview_layout.addWidget(preview_label)
+        
+        self.preview_widget = SearchPreviewWidget()
+        preview_layout.addWidget(self.preview_widget)
+        
+        splitter.addWidget(preview_container)
+        
+        # Set initial sizes (60% grid, 40% preview)
+        splitter.setSizes([600, 400])
+        
+        right_layout.addWidget(splitter)
         
         # Add widgets to search layout
         search_layout.addWidget(left_widget, stretch=1)
@@ -297,8 +345,8 @@ class GameWorldSearchTab(QWidget):
         results_splitter.addWidget(self.results_widget)
         
         # Preview
-        self.preview_widget = SearchPreviewWidget()
-        results_splitter.addWidget(self.preview_widget)
+        self.results_preview_widget = SearchPreviewWidget()
+        results_splitter.addWidget(self.results_preview_widget)
         
         results_layout.addWidget(results_splitter)
         
@@ -339,6 +387,9 @@ class GameWorldSearchTab(QWidget):
     def _start_search(self):
         """Start the search process."""
         try:
+            # Ensure we have focus to receive key events
+            self.setFocus()
+            
             # Start calibration check when search starts
             self.start_calibration_check()
             
@@ -348,11 +399,22 @@ class GameWorldSearchTab(QWidget):
                 logger.error("No direction manager available")
                 return
                 
-            # Get current game position
-            current_pos = direction_manager.get_current_position()
-            if not current_pos:
+            # Get current game position from GameState
+            if not self.game_state:
+                logger.error("No game state available")
+                return
+                
+            coords = self.game_state.get_coordinates()
+            if not coords:
                 logger.error("Could not get current position")
                 return
+                
+            # Convert coordinates to GameWorldPosition
+            current_pos = GameWorldPosition(
+                k=coords.k,
+                x=coords.x,
+                y=coords.y
+            )
                 
             # Get drag distances from direction manager
             drag_distances = direction_manager.get_drag_distances()
@@ -360,20 +422,25 @@ class GameWorldSearchTab(QWidget):
                 logger.warning("Invalid drag distances")
                 return
                 
-            # Calculate grid size based on game world dimensions and screen ratio
+            # Calculate grid size based on game world dimensions
             east_distance, south_distance = drag_distances
             
-            # Calculate how many drags needed to cover the world (999x999)
+            # Calculate cells needed for each axis independently
             grid_width = (self.WORLD_SIZE + 1) // east_distance
             if (self.WORLD_SIZE + 1) % east_distance:
                 grid_width += 1
                 
-            # Height should maintain 2:1 ratio with width
-            grid_height = grid_width // 2
-            if grid_width % 2:
+            grid_height = (self.WORLD_SIZE + 1) // south_distance
+            if (self.WORLD_SIZE + 1) % south_distance:
                 grid_height += 1
                 
             logger.info(f"Calculated grid size: {grid_width}x{grid_height} based on drag distances: {drag_distances}")
+            
+            # Calculate starting cell based on current position
+            start_cell_x = current_pos.x // east_distance
+            start_cell_y = current_pos.y // south_distance
+            
+            logger.info(f"Starting at cell ({start_cell_x}, {start_cell_y}) based on position {current_pos}")
             
             # Get selected templates
             selected_templates = [item.text() for item in self.template_list.selectedItems()]
@@ -388,12 +455,14 @@ class GameWorldSearchTab(QWidget):
                 save_screenshots=self.save_screenshots_check.isChecked(),
                 grid_size=(grid_width, grid_height),
                 start_pos=current_pos,
+                start_cell=(start_cell_x, start_cell_y),
                 drag_distances=drag_distances
             )
             
             # Clear previous search data
             self.grid_widget.clear_search_data()
             self.results_widget.clear_results()
+            self.results_preview_widget.clear_preview()
             
             # Update UI state
             self.start_search_btn.setEnabled(False)
@@ -405,7 +474,7 @@ class GameWorldSearchTab(QWidget):
             # Start search
             self.is_searching = True
             self.stop_requested = False
-            self.search_timer.start(100)  # Update every 100ms
+            self.search_timer.start()
             
             # Start search in background
             self.game_search.start()
@@ -451,9 +520,21 @@ class GameWorldSearchTab(QWidget):
                                 1,  # Count of matches in cell
                                 match.game_position
                             )
+                            
+                            # Add match to results
+                            self.results_widget.add_result(match)
+            
+            # Update preview with current screenshot
+            screenshot = self.window_manager.capture_screenshot()
+            if screenshot is not None:
+                # Update preview directly with OpenCV image
+                self.preview_widget.set_preview(screenshot)
+                
+                # Store last screenshot
+                self.last_screenshot = screenshot
             
             # Check if search is complete
-            if not self.game_search.is_searching:
+            if not self.game_search.is_searching or self.stop_requested:
                 self._stop_search()
                 
         except Exception as e:
@@ -469,6 +550,8 @@ class GameWorldSearchTab(QWidget):
             if not self.is_searching:
                 return
             
+            logger.info("Stopping search...")
+            
             # Set flag to stop search
             self.stop_requested = True
             self.game_search.stop_requested = True
@@ -481,45 +564,100 @@ class GameWorldSearchTab(QWidget):
             self.grid_widget.set_search_in_progress(False)
             self.search_timer.stop()
             
+            # Show final screenshot in preview if available
+            if self.last_screenshot is not None:
+                self.preview_widget.set_preview(self.last_screenshot)
+            
+            logger.info("Search stopped")
+            
         except Exception as e:
             logger.error(f"Error stopping search: {e}")
 
-    def _update_grid_calibration(self):
-        """Update grid with current calibration data."""
+    def _update_drag_info(self):
+        """Update the drag distances info label."""
         try:
             if not self.direction_system:
                 return
                 
-            # Get current position
-            current_pos = self.direction_system.get_current_position()
-            if not current_pos:
-                logger.warning("No current position available for grid")
-                return
-                
-            # Get drag distances
             drag_distances = self.direction_system.get_drag_distances()
             if not all(drag_distances):
-                logger.warning("Invalid drag distances for grid")
                 return
                 
-            # Calculate grid size
             east_distance, south_distance = drag_distances
+            
+            # Calculate grid size
             grid_width = (self.WORLD_SIZE + 1) // east_distance
             if (self.WORLD_SIZE + 1) % east_distance:
                 grid_width += 1
                 
-            grid_height = grid_width // 2
-            if grid_width % 2:
+            grid_height = (self.WORLD_SIZE + 1) // south_distance
+            if (self.WORLD_SIZE + 1) % south_distance:
                 grid_height += 1
                 
+            # Update label
+            self.drag_info_label.setText(
+                f"Each drag covers:\n"
+                f"East: {east_distance} game units\n"
+                f"South: {south_distance} game units\n"
+                f"Grid size: {grid_width}x{grid_height} cells"
+            )
+            
+        except Exception as e:
+            logger.error(f"Error updating drag info: {e}")
+
+    def _update_grid_calibration(self):
+        """Update grid with current calibration data."""
+        try:
+            if not self.direction_system or not self.game_state:
+                return
+                
+            # Get current position from GameState
+            coords = self.game_state.get_coordinates()
+            if not coords:
+                logger.warning("No current position available for grid")
+                return
+                
+            # Convert coordinates to GameWorldPosition
+            current_pos = GameWorldPosition(
+                k=coords.k,
+                x=coords.x,
+                y=coords.y
+            )
+                
+            # Get drag distances
+            drag_distances = self.direction_system.get_drag_distances()
+            if not all(drag_distances):
+                logger.warning("Invalid drag distances")
+                return
+                
+            # Calculate grid size
+            east_distance, south_distance = drag_distances
+            
+            grid_width = (self.WORLD_SIZE + 1) // east_distance
+            if (self.WORLD_SIZE + 1) % east_distance:
+                grid_width += 1
+                
+            grid_height = (self.WORLD_SIZE + 1) // south_distance
+            if (self.WORLD_SIZE + 1) % south_distance:
+                grid_height += 1
+                
+            # Calculate current cell based on position
+            current_cell_x = current_pos.x // east_distance
+            current_cell_y = current_pos.y // south_distance
+            
+            logger.info(f"Updating grid calibration: size={grid_width}x{grid_height}, "
+                       f"current_pos={current_pos}, current_cell=({current_cell_x}, {current_cell_y})")
+            
             # Update grid widget
             self.grid_widget.set_grid_parameters(
                 grid_size=(grid_width, grid_height),
                 start_pos=current_pos,
-                drag_distances=drag_distances
+                drag_distances=drag_distances,
+                current_cell=(current_cell_x, current_cell_y)
             )
             
-            logger.info(f"Updated grid calibration - Size: {grid_width}x{grid_height}, Start: {current_pos}, Drags: {drag_distances}")
+            # Update drag info label
+            self._update_drag_info()
             
         except Exception as e:
             logger.error(f"Error updating grid calibration: {e}")
@@ -549,3 +687,27 @@ class GameWorldSearchTab(QWidget):
                 
         except Exception as e:
             logger.error(f"Error checking calibration: {e}")
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        """Handle key press events."""
+        try:
+            if self.is_searching and (event.key() == Qt.Key.Key_Q or event.key() == Qt.Key.Key_Escape):
+                logger.info("Search stop requested via keyboard (Q/Escape)")
+                self._stop_search()
+            else:
+                super().keyPressEvent(event)
+        except Exception as e:
+            logger.error(f"Error handling key press: {e}")
+            
+    def showEvent(self, event) -> None:
+        """Handle show events."""
+        super().showEvent(event)
+        # Ensure we have focus when shown
+        self.setFocus()
+        self.grabKeyboard()  # Ensure we get all key events
+        
+    def hideEvent(self, event) -> None:
+        """Handle hide events."""
+        super().hideEvent(event)
+        # Release keyboard when hidden
+        self.releaseKeyboard()

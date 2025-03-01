@@ -59,24 +59,22 @@ class TextOCR(QObject):
         self.window_manager = window_manager
         self.game_state = game_state
         self._active = False
+        self._cancellation_requested = False
         self.region: Optional[Dict[str, int]] = None
         self.logical_region: Optional[Dict[str, int]] = None
-        self._cancellation_requested = False  # Flag to indicate cancellation request
         
-        # Load settings from config
+        # Load settings from config but don't start OCR
         config = ConfigManager()
         ocr_settings = config.get_ocr_settings()
         self.update_frequency = ocr_settings.get('frequency', 0.5)  # Default 0.5 updates/sec
         self.max_frequency = ocr_settings.get('max_frequency', 2.0)  # Default max 2.0 updates/sec
+        self.preferred_method = ocr_settings.get('preferred_method', 'thresh3')
         
-        # OCR method preference
-        self.preferred_method = 'thresh3'  # Default to thresh3 as it produces the best results
-        
-        # Create timer for updates
+        # Create timer for updates but don't start it
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self._process_region)
         
-        logger.debug("TextOCR initialized")
+        logger.debug("TextOCR initialized in inactive state")
     
     @property
     def active(self) -> bool:
@@ -84,9 +82,9 @@ class TextOCR(QObject):
         Check if OCR is currently active.
         
         Returns:
-            True if OCR is active, False otherwise
+            True if OCR is active and the update timer is running
         """
-        return self._active
+        return self._active and self.update_timer.isActive()
     
     def set_region(self, region: Dict[str, Any]) -> None:
         """
@@ -174,53 +172,25 @@ class TextOCR(QObject):
         
     def start(self) -> None:
         """Start OCR processing."""
-        if self._active:
-            return
-            
-        self._active = True
-        self._cancellation_requested = False  # Reset cancellation flag
-        interval = int(1000 / self.update_frequency)  # Convert to milliseconds
-        self.update_timer.start(interval)
-        logger.info(f"OCR started with {self.update_frequency} updates/sec (max: {self.max_frequency})")
+        if not self._active:
+            logger.info("Starting OCR processing")
+            self._active = True
+            self._cancellation_requested = False
+            if not self.update_timer.isActive():
+                interval = int(1000 / self.update_frequency) if self.update_frequency > 0 else 1000
+                self.update_timer.start(interval)
+                logger.debug(f"OCR timer started with interval: {interval}ms")
         
     def stop(self) -> None:
         """Stop OCR processing."""
-        if not self._active:
-            return
-            
-        # Set cancellation flag first
-        self._cancellation_requested = True
-        logger.info("OCR cancellation requested")
-        
-        # Stop the timer
-        self._active = False
-        if self.update_timer.isActive():
-            self.update_timer.stop()
-            
-        # Force a small delay to allow any ongoing operations to detect the cancellation flag
-        QTimer.singleShot(100, self._ensure_stopped)
-        
-        logger.info("OCR stopped")
-        
-    def _ensure_stopped(self) -> None:
-        """
-        Ensure OCR is fully stopped.
-        
-        This method is called after a short delay to verify that OCR has been stopped
-        and to log any issues if it hasn't.
-        """
         if self._active:
-            logger.warning("OCR still active after stop request - forcing inactive state")
+            logger.info("Stopping OCR processing")
             self._active = False
+            self._cancellation_requested = True
+            if self.update_timer.isActive():
+                self.update_timer.stop()
+                logger.debug("OCR timer stopped")
             
-        # Double-check timer is stopped
-        if self.update_timer.isActive():
-            logger.warning("OCR timer still active after stop request - forcing stop")
-            self.update_timer.stop()
-            
-        # Log confirmation
-        logger.info("OCR process fully stopped")
-        
     def set_preferred_method(self, method: str) -> None:
         """
         Set the preferred OCR preprocessing method.

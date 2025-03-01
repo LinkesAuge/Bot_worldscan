@@ -524,29 +524,38 @@ class GameWorldSearch:
         save_screenshots: bool,
         grid_size: Tuple[int, int],
         start_pos: GameWorldPosition,
-        drag_distances: Tuple[int, int]
+        start_cell: Tuple[int, int],
+        drag_distances: Tuple[float, float]
     ) -> None:
-        """
-        Configure the search parameters.
+        """Configure the search parameters.
         
         Args:
             templates: List of template names to search for
             min_confidence: Minimum confidence threshold for matches
             save_screenshots: Whether to save screenshots of matches
-            grid_size: (width, height) of the search grid in drag movements
-            start_pos: Starting game world position
-            drag_distances: (east_distance, south_distance) in game units
+            grid_size: Size of the search grid (width, height)
+            start_pos: Starting position in game world coordinates
+            start_cell: Starting cell coordinates (x, y) in the grid
+            drag_distances: Distance covered by each drag (east, south) in game units
         """
         self.templates = templates
         self.min_confidence = min_confidence
         self.save_screenshots = save_screenshots
         self.grid_size = grid_size
         self.start_pos = start_pos
+        self.start_cell = start_cell
         self.drag_distances = drag_distances
         self.total_cells = grid_size[0] * grid_size[1]
         self.positions_checked = 0
-        self.matches.clear()
-        self.current_position = (0, 0)
+        self.matches = []
+        self.current_position = None
+        self.stop_requested = False
+        self.is_searching = False
+        
+        logger.info(f"Search configured with parameters: templates={templates}, "
+                   f"min_confidence={min_confidence}, save_screenshots={save_screenshots}, "
+                   f"grid_size={grid_size}, start_pos={start_pos}, start_cell={start_cell}, "
+                   f"drag_distances={drag_distances}")
         
     def get_game_position(self, x: int, y: int) -> Optional[GameWorldPosition]:
         """
@@ -591,65 +600,74 @@ class GameWorldSearch:
             logger.error(f"Error calculating game position: {e}")
             return None
 
-    def start(self):
-        """Start the search process."""
+    def start(self) -> None:
+        """Start the search process from the configured start position."""
         try:
             if not self.templates:
-                logger.error("No templates selected for search")
+                logger.error("No templates configured")
                 return
                 
-            if not self.start_pos:
-                logger.error("No start position set")
+            if not all(self.grid_size):
+                logger.error("Invalid grid size")
                 return
                 
             if not all(self.drag_distances):
                 logger.error("Invalid drag distances")
                 return
                 
-            # Reset search state
-            self.positions_checked = 0
-            self.matches = []
-            self.visited_positions.clear()
+            if not self.start_pos:
+                logger.error("No start position configured")
+                return
+                
+            if not self.start_cell:
+                logger.error("No start cell configured")
+                return
+                
+            logger.info(f"Starting search from cell {self.start_cell} at position {self.start_pos}")
+            
+            # Initialize search state
             self.is_searching = True
             self.stop_requested = False
+            self.current_position = self.start_cell
             
-            # Log search parameters
-            logger.info(f"Starting search with grid size {self.grid_size}")
-            logger.info(f"Starting position: {self.start_pos}")
-            logger.info(f"Drag distances: {self.drag_distances}")
+            # Start from configured cell
+            current_x, current_y = self.start_cell
             
-            # Iterate through grid positions
-            for x in range(self.grid_size[0]):
-                for y in range(self.grid_size[1]):
-                    if self.stop_requested:
-                        logger.info("Search stopped by user")
-                        return
+            while current_y < self.grid_size[1] and not self.stop_requested:
+                while current_x < self.grid_size[0] and not self.stop_requested:
+                    try:
+                        # Get game world position for current cell
+                        game_pos = self.get_game_position(current_x, current_y)
+                        if not game_pos:
+                            logger.error(f"Could not get game position for cell ({current_x}, {current_y})")
+                            continue
+                            
+                        # Move to position
+                        if not self._move_to_position(game_pos.x, game_pos.y):
+                            logger.error(f"Failed to move to position {game_pos}")
+                            continue
+                            
+                        # Search at current position
+                        self._search_at_position(game_pos)
                         
-                    # Calculate target position
-                    target_pos = self.get_game_position(x, y)
-                    if not target_pos:
-                        logger.error(f"Failed to calculate position for grid {x}, {y}")
-                        continue
+                        # Update progress
+                        self.positions_checked += 1
+                        self.current_position = (current_x, current_y)
                         
-                    # Move to position
-                    if not self._move_to_position(target_pos.x, target_pos.y):
-                        logger.error(f"Failed to move to position {target_pos}")
-                        continue
+                    except Exception as e:
+                        logger.error(f"Error searching at position ({current_x}, {current_y}): {e}")
                         
-                    # Check for templates
-                    result = self._check_for_templates(self.templates)
-                    if result:
-                        result.game_position = target_pos
-                        self.matches.append(result)
-                        
-                    self.positions_checked += 1
+                    current_x += 1
                     
+                current_x = 0
+                current_y += 1
+                
             self.is_searching = False
-            logger.info(f"Search completed. Checked {self.positions_checked} positions, found {len(self.matches)} matches")
+            logger.info("Search completed")
             
         except Exception as e:
-            logger.error(f"Error during search: {e}", exc_info=True)
             self.is_searching = False
+            logger.error(f"Error during search: {e}", exc_info=True)
 
     def _perform_drag(self, start_pos: Tuple[int, int], end_pos: Tuple[int, int]) -> bool:
         """
@@ -683,4 +701,21 @@ class GameWorldSearch:
             
         except Exception as e:
             logger.error(f"Error performing drag: {e}")
-            return False 
+            return False
+
+    def _search_at_position(self, game_pos: GameWorldPosition) -> None:
+        """Search for templates at the current position.
+        
+        Args:
+            game_pos: Current game world position to search at
+        """
+        try:
+            # Check for templates
+            result = self._check_for_templates(self.templates)
+            if result:
+                result.game_position = game_pos
+                self.matches.append(result)
+                logger.info(f"Found match at position {game_pos}: {result}")
+                
+        except Exception as e:
+            logger.error(f"Error searching at position {game_pos}: {e}") 

@@ -12,8 +12,8 @@ from PyQt6.QtWidgets import (
     QTabWidget, QListWidget, QListWidgetItem, QLineEdit, QComboBox,
     QFileDialog, QScrollArea, QCheckBox
 )
-from PyQt6.QtCore import Qt, QTimer, QThread, QObject, pyqtSignal, QPoint
-from PyQt6.QtGui import QPalette, QColor, QIcon, QImage, QPixmap, QPainter, QPen, QBrush, QPaintEvent, QMouseEvent
+from PyQt6.QtCore import Qt, QTimer, QThread, QObject, pyqtSignal, QPoint, QEvent, QDateTime, QSettings
+from PyQt6.QtGui import QPalette, QColor, QIcon, QImage, QPixmap, QPainter, QPen, QBrush, QPaintEvent, QMouseEvent, QKeyEvent
 import logging
 from scout.config_manager import ConfigManager
 from scout.overlay import Overlay
@@ -32,11 +32,10 @@ from scout.window_manager import WindowManager
 from scout.automation.gui.automation_tab import AutomationTab
 from scout.actions import GameActions
 from scout.game_state import GameState
-from scout.gui.game_world_search_tab import GameWorldSearchTab
+from scout.game_world_search_tab import GameWorldSearchTab
 import os
 import sys
 import traceback
-from PyQt6.QtCore import QSettings
 
 logger = logging.getLogger(__name__)
 
@@ -206,7 +205,19 @@ class OverlayController(QMainWindow):
         if ocr_settings['region']['width'] > 0:
             self.text_ocr.set_region(ocr_settings['region'])
             self.text_ocr.set_frequency(ocr_settings['frequency'])
-            self.ocr_status.setText("Text OCR: Inactive")
+            
+            # Update OCR region status
+            region = ocr_settings['region']
+            self.ocr_status.setText(
+                f"OCR region: ({region['left']}, {region['top']}) "
+                f"[Size: {region['width']}x{region['height']}]"
+            )
+        
+        # Initialize OCR button in inactive state
+        self.ocr_btn.setChecked(False)
+        self._update_ocr_button_state(False)
+        self.text_ocr._cancellation_requested = True
+        self.text_ocr.stop()
         
         # Connect OCR frequency controls
         def on_ocr_slider_change(value: int) -> None:
@@ -239,6 +250,12 @@ class OverlayController(QMainWindow):
         self.pattern_update_timer = QTimer()
         self.pattern_update_timer.timeout.connect(self.update_pattern_frequency_display)
         self.pattern_update_timer.start(500)  # Update every 500ms
+        
+        # Enable key events for the whole window
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        
+        # Create keyboard event filter
+        self.installEventFilter(self)
     
     def create_overlay_controls(self, parent_layout: QVBoxLayout, settings: Dict[str, Any]) -> None:
         """
@@ -470,7 +487,6 @@ class OverlayController(QMainWindow):
         self.freq_input.setMinimum(0.1)
         self.freq_input.setMaximum(10.0)
         self.freq_input.setSingleStep(0.1)
-        self.freq_input.setDecimals(1)
         self.freq_input.setValue(settings.get("target_frequency", 1.0))
         freq_controls.addWidget(self.freq_input)
         
@@ -1658,7 +1674,31 @@ class OverlayController(QMainWindow):
             logger.error(f"Error reverting to defaults: {e}", exc_info=True)
             QMessageBox.critical(self, "Error", f"Failed to revert settings: {str(e)}") 
 
-    def keyPressEvent(self, event) -> None:
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:
+        """
+        Global event filter to handle keyboard events even when focus is lost.
+        
+        Args:
+            obj: The object that triggered the event
+            event: The event that was triggered
+            
+        Returns:
+            bool: True if the event was handled, False otherwise
+        """
+        try:
+            if event.type() == QEvent.Type.KeyPress:
+                key_event = QKeyEvent(event)
+                if key_event.key() == Qt.Key.Key_Q or key_event.key() == Qt.Key.Key_Escape:
+                    if hasattr(self, 'game_world_search_tab') and self.game_world_search_tab.is_searching:
+                        logger.info("Search stop requested via keyboard (Q/Escape)")
+                        self.game_world_search_tab._stop_search()
+                        return True
+        except Exception as e:
+            logger.error(f"Error in event filter: {e}")
+        
+        return super().eventFilter(obj, event)
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:
         """
         Handle key press events for the main controller window.
         
@@ -1669,81 +1709,20 @@ class OverlayController(QMainWindow):
         Args:
             event: Key press event
         """
-        # Check for escape key
-        if event.key() == Qt.Key.Key_Escape or event.key() == Qt.Key.Key_Q:
-            logger.info(f"Stop key pressed: {'Escape' if event.key() == Qt.Key.Key_Escape else 'Q'}")
-            processes_stopped = False
-            
-            # Immediately set cancellation flag for OCR if it exists
-            if hasattr(self, 'text_ocr'):
-                self.text_ocr._cancellation_requested = True
-                logger.info("OCR cancellation flag set immediately on key press")
-            
-            # Stop OCR if active (check button state instead of text_ocr.active)
-            if hasattr(self, 'ocr_btn') and self.ocr_btn.isChecked():
-                logger.info("Stopping OCR process due to stop key")
-                # Update button state first
-                self.ocr_btn.setChecked(False)
-                self._update_ocr_button_state(False)
-                
-                # Set cancellation flag directly before calling stop
-                if hasattr(self, 'text_ocr'):
-                    self.text_ocr._cancellation_requested = True
+        try:
+            # Check if search tab is active and searching
+            if hasattr(self, 'game_world_search_tab'):
+                if event.key() == Qt.Key.Key_Q or event.key() == Qt.Key.Key_Escape:
+                    if self.game_world_search_tab.is_searching:
+                        logger.info("Search stop requested via keyboard (Q/Escape)")
+                        self.game_world_search_tab._stop_search()
+                        event.accept()
+                        return
                     
-                # Call stop directly instead of toggle
-                try:
-                    self._stop_ocr()
-                    # Force update the status immediately
-                    self.ocr_status.setText("Text OCR: Inactive (Cancelled)")
-                    self.ocr_status.setStyleSheet("color: red;")
-                    
-                    # Also stop any auto-update in the coordinate widget
-                    if hasattr(self, 'game_world_search_tab') and hasattr(self.game_world_search_tab, 'coord_widget'):
-                        logger.info("Stopping coordinate auto-update due to stop key")
-                        self.game_world_search_tab.coord_widget._stop_auto_update()
-                        self.game_world_search_tab.coord_widget.auto_update_cb.setChecked(False)
-                except Exception as e:
-                    logger.error(f"Error stopping OCR: {e}", exc_info=True)
-                processes_stopped = True
+            super().keyPressEvent(event)
             
-            # Stop template matching if active
-            if self.overlay.active:
-                logger.info("Stopping template matching due to stop key")
-                # Update pattern button state
-                if hasattr(self, 'pattern_btn'):
-                    self.pattern_btn.setText("Template Matching: OFF")
-                    self._update_pattern_button_color(False)
-                # Stop template matching directly
-                self.overlay.stop_template_matching()
-                # Update settings to reflect the stopped state
-                settings = self.config_manager.get_template_matching_settings()
-                settings["active"] = False
-                self.config_manager.update_template_matching_settings(settings)
-                processes_stopped = True
-            
-            # Stop any active automation sequence
-            if hasattr(self, 'automation_tab') and hasattr(self.automation_tab, 'is_sequence_running') and self.automation_tab.is_sequence_running():
-                logger.info("Stopping automation sequence due to stop key")
-                # Update sequence button state
-                if hasattr(self, 'sequence_btn') and self.sequence_btn.isChecked():
-                    self.sequence_btn.setChecked(False)
-                self.automation_tab.stop_sequence()
-                processes_stopped = True
-            
-            # Stop any active game world search
-            if hasattr(self, 'game_world_search_tab') and hasattr(self.game_world_search_tab, 'is_searching') and self.game_world_search_tab.is_searching:
-                logger.info("Stopping game world search due to stop key")
-                self.game_world_search_tab._stop_search()
-                processes_stopped = True
-            
-            # Update status
-            if processes_stopped:
-                self.status_bar.showMessage("Processes stopped by user (Stop key pressed)", 3000)
-            else:
-                self.status_bar.showMessage("No active processes to stop", 3000)
-        
-        # Pass event to parent class
-        super().keyPressEvent(event) 
+        except Exception as e:
+            logger.error(f"Error handling key press: {e}")
 
     def _on_ocr_method_changed(self, method: str) -> None:
         """
