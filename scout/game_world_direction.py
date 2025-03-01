@@ -22,6 +22,7 @@ from scout.actions import GameActions
 from scout.game_world_position import GameWorldPosition
 from scout.game_world_coordinator import GameWorldCoordinator
 from scout.game_state import GameState
+from scout.config_manager import ConfigManager
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,13 @@ class DirectionDefinition:
     
     Stores the screen coordinates for the drag operation and the game world
     coordinates at start and end points.
+    
+    Attributes:
+        name: Direction name ("North" or "East")
+        screen_start: Start point for drag (x, y)
+        screen_end: End point for drag (x, y)
+        game_start: Game position at start
+        game_end: Game position at end
     """
     name: str  # "North" or "East"
     screen_start: Tuple[int, int]  # Start point for drag (x, y)
@@ -112,7 +120,7 @@ class GameWorldDirection:
         window_manager: WindowManager,
         text_ocr: TextOCR,
         game_actions: GameActions,
-        config_dir: str = "scout/config"
+        config_manager: ConfigManager
     ):
         """
         Initialize the direction system.
@@ -121,12 +129,12 @@ class GameWorldDirection:
             window_manager: For capturing screenshots and window info
             text_ocr: For reading game coordinates
             game_actions: For performing mouse actions
-            config_dir: Directory for saving/loading definitions
+            config_manager: For managing configuration settings
         """
         self.window_manager = window_manager
         self.text_ocr = text_ocr
         self.game_actions = game_actions
-        self.config_dir = Path(config_dir)
+        self.config_manager = config_manager
         
         # Use game_state from text_ocr
         self.game_state = text_ocr.game_state
@@ -145,6 +153,7 @@ class GameWorldDirection:
         self.pixels_per_game_unit_y = 0.0
         
         # Ensure config directory exists
+        self.config_dir = Path('scout/config')  # Use fixed path relative to workspace
         self.config_dir.mkdir(parents=True, exist_ok=True)
         
         # Load saved definitions
@@ -339,6 +348,7 @@ class GameWorldDirection:
                     logger.error("No valid X measurements for East direction")
                     return False
                 
+                # Calculate average ratios from all measurements
                 self.pixels_per_game_unit_y = np.mean(y_values)
                 self.pixels_per_game_unit_x = np.mean(x_values)
                 
@@ -395,13 +405,17 @@ class GameWorldDirection:
                     logger.error("Invalid East game positions")
                     return False
                 
-                # Log calibration results
+                # Log calibration results using the averaged measurements
                 logger.info("Calibration Results:")
+                logger.info(f"Average ratios from {num_runs} calibration runs:")
                 logger.info(f"X Ratio (pixels per game unit): {self.pixels_per_game_unit_x:.2f}")
                 logger.info(f"Y Ratio (pixels per game unit): {self.pixels_per_game_unit_y:.2f}")
-                logger.info(f"Map to Pixel Translation:")
-                logger.info(f"  North: {north_screen_dy} pixels = {abs(north_game_dy)} game units (ratio: {north_screen_dy/abs(north_game_dy):.2f})")
-                logger.info(f"  East: {east_screen_dx} pixels = {abs(east_game_dx)} game units (ratio: {east_screen_dx/abs(east_game_dx):.2f})")
+                logger.info(f"Individual run measurements:")
+                logger.info(f"North measurements: {y_values}")
+                logger.info(f"East measurements: {x_values}")
+                logger.info(f"Final movement measurements:")
+                logger.info(f"  North: {north_screen_dy} pixels = {abs(north_game_dy)} game units")
+                logger.info(f"  East: {east_screen_dx} pixels = {abs(east_game_dx)} game units")
                 
                 # Save definitions with updated game positions
                 self._save_definitions()
@@ -438,6 +452,15 @@ class GameWorldDirection:
             return self.east_definition
         return None
     
+    def get_current_position(self) -> Optional[GameWorldPosition]:
+        """
+        Get the current game world position.
+        
+        Returns:
+            The current GameWorldPosition or None if not available
+        """
+        return self._get_current_position()
+
     def _get_current_position(self) -> Optional[GameWorldPosition]:
         """
         Get current game world position with retries.
@@ -488,17 +511,53 @@ class GameWorldDirection:
             bool: True if drag was successful
         """
         try:
+            # Get current window position and ensure it's active
+            window_rect = self.window_manager.get_window_position()
+            if not window_rect:
+                logger.error("Could not get window position")
+                return False
+                
+            # Get client area for proper bounds checking
+            client_rect = self.window_manager.get_client_rect()
+            if not client_rect:
+                logger.error("Could not get client area")
+                return False
+                
+            # Ensure window is active before performing drag
+            if not self.window_manager.activate_window():
+                logger.error("Failed to activate game window")
+                return False
+                
+            # Wait a short moment for window activation
+            time.sleep(0.1)
+            
+            # Convert client rect to relative coordinates
+            client_left, client_top, client_right, client_bottom = client_rect
+            client_width = client_right - client_left
+            client_height = client_bottom - client_top
+            
+            # Log coordinates for debugging
+            logger.info(f"Window-relative coordinates - Start: {start}, End: {end}")
+            logger.info(f"Client area dimensions: {client_width}x{client_height}")
+            
             # Convert window-relative coordinates to screen coordinates
             start_screen_x, start_screen_y = self.window_manager.client_to_screen(start[0], start[1])
             end_screen_x, end_screen_y = self.window_manager.client_to_screen(end[0], end[1])
             
-            logger.debug(f"Dragging from window ({start[0]}, {start[1]}) to ({end[0]}, {end[1]})")
-            logger.debug(f"Screen coordinates: ({start_screen_x}, {start_screen_y}) to ({end_screen_x}, {end_screen_y})")
+            # Log converted screen coordinates
+            logger.info(f"Screen coordinates - Start: ({start_screen_x}, {start_screen_y}), End: ({end_screen_x}, {end_screen_y})")
             
             # Store initial position for validation
             initial_pos = self._get_current_position()
             if not initial_pos:
                 logger.error("Failed to get initial position before drag")
+                return False
+            
+            logger.info(f"Initial game position: {initial_pos}")
+            
+            # Double-check window is still active
+            if not self.window_manager.is_window_active():
+                logger.error("Game window lost focus before drag")
                 return False
             
             # Perform drag using screen coordinates
@@ -530,8 +589,8 @@ class GameWorldDirection:
                 
             if final_pos.k == initial_pos.k and final_pos.x == initial_pos.x and final_pos.y == initial_pos.y:
                 logger.warning("No position change detected after drag")
-                
-            logger.debug(f"Drag complete: {initial_pos} -> {final_pos}")
+            
+            logger.info(f"Final game position: {final_pos}")
             return True
             
         except Exception as e:
@@ -675,43 +734,239 @@ class GameWorldDirection:
             return False
     
     def _save_definitions(self) -> None:
-        """Save direction definitions to file."""
+        """Save direction definitions to config."""
         try:
-            definitions = {
-                'north': self.north_definition.to_dict() if self.north_definition else None,
-                'east': self.east_definition.to_dict() if self.east_definition else None,
+            # Convert definitions to serializable format
+            data = {
+                'north': {
+                    'screen_start': self.north_definition.screen_start if self.north_definition else None,
+                    'screen_end': self.north_definition.screen_end if self.north_definition else None,
+                    'game_start': self._game_coords_to_dict(self.north_definition.game_start) if self.north_definition else None,
+                    'game_end': self._game_coords_to_dict(self.north_definition.game_end) if self.north_definition else None
+                },
+                'east': {
+                    'screen_start': self.east_definition.screen_start if self.east_definition else None,
+                    'screen_end': self.east_definition.screen_end if self.east_definition else None,
+                    'game_start': self._game_coords_to_dict(self.east_definition.game_start) if self.east_definition else None,
+                    'game_end': self._game_coords_to_dict(self.east_definition.game_end) if self.east_definition else None
+                },
                 'calibration': {
                     'pixels_per_game_unit_x': self.pixels_per_game_unit_x,
                     'pixels_per_game_unit_y': self.pixels_per_game_unit_y
                 }
             }
             
-            with open(self.config_dir / 'direction_definitions.json', 'w') as f:
-                json.dump(definitions, f)
+            # Save to file
+            definitions_file = self.config_dir / 'direction_definitions.json'
+            with open(definitions_file, 'w') as f:
+                json.dump(data, f, indent=4)
                 
-            logger.info("Saved direction definitions to scout/config/direction_definitions.json")
+            logger.info("Saved direction definitions to config")
             
         except Exception as e:
-            logger.error(f"Error saving definitions: {e}")
-    
+            logger.error(f"Error saving direction definitions: {e}", exc_info=True)
+            
     def _load_definitions(self) -> None:
-        """Load direction definitions from file."""
+        """Load direction definitions from config."""
         try:
-            if (self.config_dir / 'direction_definitions.json').exists():
-                with open(self.config_dir / 'direction_definitions.json', 'r') as f:
-                    definitions = json.load(f)
+            definitions_file = self.config_dir / 'direction_definitions.json'
+            if definitions_file.exists():
+                with open(definitions_file, 'r') as f:
+                    data = json.load(f)
                     
-                if definitions.get('north'):
-                    self.north_definition = DirectionDefinition.from_dict(definitions['north'])
+                # Load North definition
+                if data.get('north'):
+                    north = data['north']
+                    if all(v is not None for v in [north['screen_start'], north['screen_end']]):
+                        self.north_definition = DirectionDefinition(
+                            name="North",
+                            screen_start=tuple(north['screen_start']),
+                            screen_end=tuple(north['screen_end']),
+                            game_start=self._dict_to_game_coords(north['game_start']),
+                            game_end=self._dict_to_game_coords(north['game_end'])
+                        )
+                        
+                # Load East definition
+                if data.get('east'):
+                    east = data['east']
+                    if all(v is not None for v in [east['screen_start'], east['screen_end']]):
+                        self.east_definition = DirectionDefinition(
+                            name="East",
+                            screen_start=tuple(east['screen_start']),
+                            screen_end=tuple(east['screen_end']),
+                            game_start=self._dict_to_game_coords(east['game_start']),
+                            game_end=self._dict_to_game_coords(east['game_end'])
+                        )
+                        
+                # Load calibration values
+                if data.get('calibration'):
+                    self.pixels_per_game_unit_x = data['calibration']['pixels_per_game_unit_x']
+                    self.pixels_per_game_unit_y = data['calibration']['pixels_per_game_unit_y']
                     
-                if definitions.get('east'):
-                    self.east_definition = DirectionDefinition.from_dict(definitions['east'])
-                    
-                if definitions.get('calibration'):
-                    self.pixels_per_game_unit_x = definitions['calibration']['pixels_per_game_unit_x']
-                    self.pixels_per_game_unit_y = definitions['calibration']['pixels_per_game_unit_y']
-                    
-                logger.info("Loaded direction definitions from scout/config/direction_definitions.json")
+                logger.info("Loaded direction definitions from config")
                 
         except Exception as e:
-            logger.error(f"Error loading definitions: {e}") 
+            logger.error(f"Error loading direction definitions: {e}", exc_info=True)
+            
+    def _game_coords_to_dict(self, position: Optional[GameWorldPosition]) -> Optional[Dict[str, int]]:
+        """
+        Convert GameWorldPosition to dictionary format.
+        
+        Args:
+            position: GameWorldPosition to convert
+            
+        Returns:
+            Dictionary with k, x, y coordinates or None if position is None
+        """
+        if position is None:
+            return None
+        return {'k': position.k, 'x': position.x, 'y': position.y}
+        
+    def _dict_to_game_coords(self, data: Optional[Dict[str, int]]) -> Optional[GameWorldPosition]:
+        """
+        Convert dictionary to GameWorldPosition.
+        
+        Args:
+            data: Dictionary containing k, x, y coordinates
+            
+        Returns:
+            GameWorldPosition instance or None if data is None
+        """
+        if data is None:
+            return None
+        return GameWorldPosition(k=data['k'], x=data['x'], y=data['y'])
+
+    def perform_drag(self, direction: str) -> bool:
+        """
+        Perform a drag operation in the specified direction.
+        
+        Args:
+            direction: Direction name ("North", "South", "East", or "West")
+            
+        Returns:
+            bool: True if drag was successful
+        """
+        try:
+            # Get current window position
+            window_rect = self.window_manager.get_window_position()
+            if not window_rect:
+                logger.error("Could not get window position")
+                return False
+            
+            # Get direction definition and window-relative coordinates
+            if direction == "North":
+                if not self.north_definition:
+                    logger.error("North direction not defined")
+                    return False
+                # Use screen coordinates directly
+                start = self.north_definition.screen_start
+                end = self.north_definition.screen_end
+                logger.info(f"Using North definition - Start: {start}, End: {end}")
+            elif direction == "South":
+                if not self.north_definition:
+                    logger.error("North direction not defined (needed for South)")
+                    return False
+                # Use inverse of North coordinates
+                start = self.north_definition.screen_end
+                end = self.north_definition.screen_start
+                logger.info(f"Using South (inverse North) - Start: {start}, End: {end}")
+            elif direction == "East":
+                if not self.east_definition:
+                    logger.error("East direction not defined")
+                    return False
+                # Use screen coordinates directly
+                start = self.east_definition.screen_start
+                end = self.east_definition.screen_end
+                logger.info(f"Using East definition - Start: {start}, End: {end}")
+            elif direction == "West":
+                if not self.east_definition:
+                    logger.error("East direction not defined (needed for West)")
+                    return False
+                # Use inverse of East coordinates
+                start = self.east_definition.screen_end
+                end = self.east_definition.screen_start
+                logger.info(f"Using West (inverse East) - Start: {start}, End: {end}")
+            else:
+                logger.error(f"Invalid direction: {direction}")
+                return False
+            
+            # Log window position for reference
+            logger.info(f"Current window position: {window_rect}")
+            
+            # Perform drag with screen coordinates
+            return self._perform_drag(start, end)
+            
+        except Exception as e:
+            logger.error(f"Error performing drag in direction {direction}: {e}")
+            return False
+
+    def calculate_wrapped_distance(self, start_pos: GameWorldPosition, end_pos: GameWorldPosition) -> Tuple[int, int]:
+        """
+        Calculate wrapped distances between two positions in both X and Y directions.
+        
+        Args:
+            start_pos: Starting position
+            end_pos: Ending position
+            
+        Returns:
+            Tuple[int, int]: (x_distance, y_distance) where each is the shortest wrapped distance
+                            Positive values indicate East/South movement, negative for West/North
+        """
+        try:
+            if not (start_pos and end_pos and start_pos.is_valid() and end_pos.is_valid()):
+                logger.error("Invalid positions for distance calculation")
+                return (0, 0)
+                
+            # Calculate X distance with wrapping
+            x_diff = end_pos.x - start_pos.x
+            x_distance = x_diff % 1000
+            if x_distance > 500:
+                x_distance = -(1000 - x_distance)
+                
+            # Calculate Y distance with wrapping
+            y_diff = end_pos.y - start_pos.y
+            y_distance = y_diff % 1000
+            if y_distance > 500:
+                y_distance = -(1000 - y_distance)
+                
+            logger.debug(f"Wrapped distances from {start_pos} to {end_pos}: dx={x_distance}, dy={y_distance}")
+            return (x_distance, y_distance)
+            
+        except Exception as e:
+            logger.error(f"Error calculating wrapped distances: {e}")
+            return (0, 0)
+
+    def get_drag_distances(self) -> Tuple[int, int]:
+        """
+        Get the current drag distances for East and South movements.
+        
+        Returns:
+            Tuple[int, int]: (east_distance, south_distance) in game units
+        """
+        try:
+            east_distance = 0
+            south_distance = 0
+            
+            # Calculate East distance
+            if (self.east_definition and self.east_definition.game_start and 
+                self.east_definition.game_end):
+                x_distance, _ = self.calculate_wrapped_distance(
+                    self.east_definition.game_start,
+                    self.east_definition.game_end
+                )
+                east_distance = abs(x_distance)  # Use absolute value for grid movement
+                
+            # Calculate South distance (inverse of North)
+            if (self.north_definition and self.north_definition.game_start and 
+                self.north_definition.game_end):
+                _, y_distance = self.calculate_wrapped_distance(
+                    self.north_definition.game_start,
+                    self.north_definition.game_end
+                )
+                south_distance = abs(y_distance)  # Use absolute value for grid movement
+                
+            return (east_distance, south_distance)
+            
+        except Exception as e:
+            logger.error(f"Error getting drag distances: {e}")
+            return (0, 0) 

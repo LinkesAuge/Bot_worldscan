@@ -1212,4 +1212,12 @@ Fixed inconsistency in calibration result display across different parts of the 
    - Add calibration verification tools
    - Implement automatic recalibration detection
 
+## Recent Changes
+- Added "Use All Templates" checkbox to GameWorldSearchTab
+  - Default state is checked
+  - Automatically selects all available templates when checked
+  - Clears template selection when unchecked
+  - Integrated with template loading to maintain selection state
+  - Located in search settings section above template list
+
 [Rest of the document remains unchanged...] 

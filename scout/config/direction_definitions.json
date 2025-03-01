@@ -1,1 +1,46 @@
-{"north": {"name": "North", "screen_start": [800, 177], "screen_end": [800, 2029], "game_start": {"k": 89, "x": 396, "y": 458}, "game_end": {"k": 89, "x": 438, "y": 442}}, "east": {"name": "East", "screen_start": [3738, 1155], "screen_end": [74, 1155], "game_start": {"k": 89, "x": 438, "y": 442}, "game_end": {"k": 89, "x": 467, "y": 461}}, "calibration": {"pixels_per_game_unit_x": 126.34482758620689, "pixels_per_game_unit_y": 115.75}}
+{
+    "north": {
+        "screen_start": [
+            800,
+            177
+        ],
+        "screen_end": [
+            800,
+            2029
+        ],
+        "game_start": {
+            "k": 89,
+            "x": 898,
+            "y": 84
+        },
+        "game_end": {
+            "k": 89,
+            "x": 868,
+            "y": 64
+        }
+    },
+    "east": {
+        "screen_start": [
+            3738,
+            1155
+        ],
+        "screen_end": [
+            74,
+            1155
+        ],
+        "game_start": {
+            "k": 89,
+            "x": 868,
+            "y": 64
+        },
+        "game_end": {
+            "k": 89,
+            "x": 898,
+            "y": 84
+        }
+    },
+    "calibration": {
+        "pixels_per_game_unit_x": 122.13333333333334,
+        "pixels_per_game_unit_y": 102.88888888888887
+    }
+}

@@ -31,6 +31,7 @@ from scout.actions import GameActions
 from scout.game_world_coordinator import GameWorldCoordinator
 from scout.game_world_search import GameWorldSearch, SearchResult
 from scout.game_world_direction import GameWorldDirection
+from scout.config_manager import ConfigManager
 
 from scout.gui.direction_widget import DirectionWidget
 from scout.gui.search_grid_widget import SearchGridWidget
@@ -57,12 +58,16 @@ class GameWorldSearchTab(QWidget):
     # Overlap percentage between moves (to ensure we don't miss anything)
     OVERLAP_PERCENT = 20
     
+    # World size (999x999)
+    WORLD_SIZE = 999
+    
     def __init__(
         self,
         window_manager: WindowManager,
         template_matcher: TemplateMatcher,
         text_ocr: TextOCR,
         game_actions: GameActions,
+        config_manager: ConfigManager,
         game_state=None
     ):
         """
@@ -73,6 +78,7 @@ class GameWorldSearchTab(QWidget):
             template_matcher: The template matcher instance
             text_ocr: The text OCR instance
             game_actions: The game actions instance
+            config_manager: The configuration manager instance
             game_state: Optional GameState instance for coordinate tracking
         """
         super().__init__()
@@ -82,6 +88,7 @@ class GameWorldSearchTab(QWidget):
         self.template_matcher = template_matcher
         self.text_ocr = text_ocr
         self.game_actions = game_actions
+        self.config_manager = config_manager
         self.game_state = game_state
         
         # Create game world coordinator and search
@@ -104,6 +111,60 @@ class GameWorldSearchTab(QWidget):
         self.search_timer.timeout.connect(self._update_search_status)
         self.stop_requested = False
         
+        # Load settings
+        self._load_settings()
+        
+        # Calibration state tracking
+        self.last_calibration_state = {
+            'position': None,
+            'drag_distances': (0, 0)
+        }
+        
+        # Initialize update timer but don't start it
+        self.update_timer = QTimer()
+        self.update_timer.timeout.connect(self._check_calibration)
+        self.is_calibration_check_active = False
+        
+    def _load_settings(self):
+        """Load search settings from config."""
+        settings = self.config_manager.get_search_settings()
+        
+        # Update UI with loaded settings
+        self.use_all_templates_check.setChecked(settings['use_all_templates'])
+        self.confidence_spin.setValue(settings['min_confidence'])
+        self.save_screenshots_check.setChecked(settings['save_screenshots'])
+        
+        # Update template selection based on use_all_templates setting
+        if settings['use_all_templates']:
+            self.template_list.selectAll()
+            
+    def _save_settings(self):
+        """Save search settings to config."""
+        settings = {
+            'use_all_templates': self.use_all_templates_check.isChecked(),
+            'min_confidence': self.confidence_spin.value(),
+            'save_screenshots': self.save_screenshots_check.isChecked()
+        }
+        self.config_manager.update_search_settings(settings)
+        
+    def _on_use_all_templates_changed(self, state):
+        """Handle changes to the 'Use All Templates' checkbox."""
+        if state == Qt.CheckState.Checked.value:
+            self.template_list.selectAll()
+        else:
+            self.template_list.clearSelection()
+            
+        # Save settings when changed
+        self._save_settings()
+        
+    def _on_confidence_changed(self, value):
+        """Handle changes to the confidence spinbox."""
+        self._save_settings()
+        
+    def _on_save_screenshots_changed(self, state):
+        """Handle changes to the save screenshots checkbox."""
+        self._save_settings()
+        
     def _create_ui(self):
         """Create the tab UI."""
         main_layout = QVBoxLayout()
@@ -124,9 +185,11 @@ class GameWorldSearchTab(QWidget):
         
         # Direction widget
         self.direction_widget = DirectionWidget(
-            self.window_manager,
-            self.text_ocr,
-            self.game_actions
+            window_manager=self.window_manager,
+            text_ocr=self.text_ocr,
+            game_actions=self.game_actions,
+            config_manager=self.config_manager,
+            parent=left_widget  # Pass the parent widget
         )
         left_layout.addWidget(self.direction_widget)
         
@@ -135,27 +198,17 @@ class GameWorldSearchTab(QWidget):
         settings_layout = QFormLayout()
         settings_group.setLayout(settings_layout)
         
-        # Grid size
-        grid_layout = QHBoxLayout()
-        self.grid_width_spin = QSpinBox()
-        self.grid_width_spin.setRange(1, 100)
-        self.grid_width_spin.setValue(10)
-        self.grid_width_spin.valueChanged.connect(self._on_grid_size_changed)
-        self.grid_height_spin = QSpinBox()
-        self.grid_height_spin.setRange(1, 100)
-        self.grid_height_spin.setValue(5)  # Default to half the width due to 2:1 ratio
-        self.grid_height_spin.valueChanged.connect(self._on_grid_size_changed)
-        grid_layout.addWidget(QLabel("Width:"))
-        grid_layout.addWidget(self.grid_width_spin)
-        grid_layout.addWidget(QLabel("Height:"))
-        grid_layout.addWidget(self.grid_height_spin)
-        settings_layout.addRow("Grid Size:", grid_layout)
-        
         # Add ratio info label
         ratio_label = QLabel(f"View area has {self.VIEW_RATIO}:1 ratio (width:height)\n"
                            f"with {self.OVERLAP_PERCENT}% overlap between moves")
         ratio_label.setWordWrap(True)
         settings_layout.addRow("", ratio_label)
+        
+        # Use all templates checkbox
+        self.use_all_templates_check = QCheckBox("Use All Templates")
+        self.use_all_templates_check.setChecked(True)  # Default to checked
+        self.use_all_templates_check.stateChanged.connect(self._on_use_all_templates_changed)
+        settings_layout.addRow("", self.use_all_templates_check)
         
         # Template selection
         self.template_list = QListWidget()
@@ -167,10 +220,12 @@ class GameWorldSearchTab(QWidget):
         self.confidence_spin.setRange(0.1, 1.0)
         self.confidence_spin.setSingleStep(0.1)
         self.confidence_spin.setValue(0.8)
+        self.confidence_spin.valueChanged.connect(self._on_confidence_changed)
         settings_layout.addRow("Min Confidence:", self.confidence_spin)
         
         # Save screenshots
         self.save_screenshots_check = QCheckBox("Save Screenshots")
+        self.save_screenshots_check.stateChanged.connect(self._on_save_screenshots_changed)
         settings_layout.addRow("", self.save_screenshots_check)
         
         left_layout.addWidget(settings_group)
@@ -245,265 +300,217 @@ class GameWorldSearchTab(QWidget):
         self.template_list.clear()
         for name in sorted(self.template_matcher.templates.keys()):
             self.template_list.addItem(name)
+        
+        # Select all templates if the checkbox is checked
+        if self.use_all_templates_check.isChecked():
+            self.template_list.selectAll()
             
-    def _on_grid_size_changed(self):
-        """Handle grid size changes."""
-        width = self.grid_width_spin.value()
-        height = self.grid_height_spin.value()
-        
-        # Update grid visualization
-        self.grid_widget.set_grid_size(width, height)
-        
-        # Log the effective search area
-        east_moves = max(1, int(width * (100 - self.OVERLAP_PERCENT) / 100))
-        south_moves = max(1, int(height * (100 - self.OVERLAP_PERCENT) / 100 / self.VIEW_RATIO))
-        logger.info(f"Grid size changed to {width}x{height} with {east_moves} east moves and {south_moves} south moves")
-        
+    def start_calibration_check(self):
+        """Start the calibration check timer."""
+        if not self.is_calibration_check_active:
+            self.update_timer.start(1000)  # Check every second
+            self.is_calibration_check_active = True
+            logger.info("Started calibration check timer")
+
+    def stop_calibration_check(self):
+        """Stop the calibration check timer."""
+        if self.is_calibration_check_active:
+            self.update_timer.stop()
+            self.is_calibration_check_active = False
+            logger.info("Stopped calibration check timer")
+
     def _start_search(self):
         """Start the search process."""
-        if self.is_searching:
-            logger.warning("Search already in progress")
-            return
-            
-        # Verify we have direction definitions
-        if not (self.direction_widget.direction_manager.north_definition and 
-                self.direction_widget.direction_manager.east_definition):
-            QMessageBox.warning(
-                self,
-                "No Direction Definitions",
-                "Please define North and East directions before starting search."
-            )
-            return
-            
-        # Get current game position
-        start_pos = self.game_coordinator.current_position
-        if not start_pos:
-            QMessageBox.warning(
-                self,
-                "No Position",
-                "Please ensure OCR is active and current position is available."
-            )
-            return
-            
-        # Calculate drag distances in game units
-        east_def = self.direction_widget.direction_manager.east_definition
-        north_def = self.direction_widget.direction_manager.north_definition
-        
-        if not (east_def.game_start and east_def.game_end and 
-                north_def.game_start and north_def.game_end):
-            QMessageBox.warning(
-                self,
-                "Incomplete Direction Data",
-                "Please test directions to establish game unit distances."
-            )
-            return
-            
-        # Calculate distances with wrapping
-        east_distance = (east_def.game_end.x - east_def.game_start.x) % (GameWorldGrid.WORLD_SIZE + 1)
-        south_distance = (north_def.game_end.y - north_def.game_start.y) % (GameWorldGrid.WORLD_SIZE + 1)
-        
-        # Update grid parameters
-        width = self.grid_width_spin.value()
-        height = self.grid_height_spin.value()
-        self.grid_widget.set_grid_parameters(
-            grid_size=(width, height),
-            start_pos=start_pos,
-            drag_distances=(east_distance, south_distance)
-        )
-        
-        # Update drag info label
-        self.drag_info_label.setText(
-            f"Each drag covers:\n"
-            f"East: {east_distance} game units\n"
-            f"South: {south_distance} game units"
-        )
-        
-        # Reset stop flag
-        self.stop_requested = False
-        
-        # Get selected templates
-        template_names = [item.text() for item in self.template_list.selectedItems()]
-        if not template_names:
-            QMessageBox.warning(
-                self,
-                "No Templates Selected",
-                "Please select at least one template to search for."
-            )
-            return
-            
-        # Update search settings
-        self.game_search.min_confidence = self.confidence_spin.value()
-        self.game_search.save_screenshots = self.save_screenshots_check.isChecked()
-        
-        # Clear previous results
-        self.results_widget.clear_results()
-        self.grid_widget.clear_searched_positions()
-        
-        # Update UI
-        self.is_searching = True
-        self.start_search_btn.setEnabled(False)
-        self.stop_search_btn.setEnabled(True)
-        self.progress_bar.setVisible(True)
-        self.progress_bar.setValue(0)
-        self.grid_widget.set_search_in_progress(True)
-        
-        # Start search in a separate thread
-        import threading
-        self.search_thread = threading.Thread(
-            target=self._search_thread,
-            args=(template_names,)
-        )
-        self.search_thread.daemon = True
-        self.search_thread.start()
-        
-        # Start timer to update UI
-        self.search_timer.start(100)  # Update every 100ms
-        
-    def _search_thread(self, template_names: List[str]):
-        """
-        Thread function for template search.
-        
-        The search pattern is based on actual drag movements and accounts for:
-        1. Game world coordinate system (0-999 with wrapping)
-        2. Actual distances covered by drag movements
-        3. Efficient movement pattern to minimize travel distance
-        
-        Args:
-            template_names: List of template names to search for
-        """
         try:
-            width = self.grid_width_spin.value()
-            height = self.grid_height_spin.value()
-            total_cells = width * height
-            cells_checked = 0
-            start_time = time.time()
+            # Start calibration check when search starts
+            self.start_calibration_check()
             
-            # Get current position as reference
-            start_pos = self.game_coordinator.current_position
-            if not start_pos:
-                logger.error("No current position available")
-                return
-                
             # Get direction definitions
-            east_def = self.direction_widget.direction_manager.east_definition
-            north_def = self.direction_widget.direction_manager.north_definition
-            if not (east_def and north_def):
-                logger.error("Missing direction definitions")
+            direction_manager = self.direction_widget.direction_manager
+            if not direction_manager:
+                logger.error("No direction manager available")
                 return
                 
-            # Search each cell in the grid
-            for y in range(height):
-                for x in range(width):
-                    # Check if stop was requested
-                    if self.stop_requested:
-                        return
-                        
-                    # Update current position in visualization
-                    self.grid_widget.set_current_position(x, y)
-                    
-                    # Get expected game world position
-                    game_pos = self.grid_widget.get_game_position(x, y)
-                    if game_pos:
-                        logger.info(f"Searching at game position: ({game_pos.x}, {game_pos.y})")
-                    
-                    # Check for templates at this position
-                    result = self.game_search._check_for_templates(template_names)
-                    cells_checked += 1
-                    
-                    # Mark position as searched
-                    self.grid_widget.add_searched_position(x, y)
-                    
-                    # Update progress
-                    self._current_result = SearchResult(
-                        template_name="",
-                        screen_position=(0, 0),
-                        game_position=game_pos,  # Include game position in result
-                        confidence=0.0,
-                        positions_checked=cells_checked,
-                        search_time=time.time() - start_time,
-                        success=False
-                    )
-                    
-                    if result:
-                        # Found a match
-                        result.positions_checked = cells_checked
-                        result.search_time = time.time() - start_time
-                        result.game_position = game_pos  # Add game position to result
-                        self._current_result = result
-                        return
-                        
-                    # Move to next position if not at the end of row
-                    if x < width - 1:
-                        # Move East
-                        if not self.game_search._perform_drag(east_def.screen_start, east_def.screen_end):
-                            logger.error("Failed to move East")
-                            return
-                            
-                    # Move to start of next row if at end of row
-                    elif y < height - 1:
-                        # Move South (inverse of North)
-                        south_start, south_end = self.direction_widget.direction_manager.get_inverse_direction("North")
-                        if not self.game_search._perform_drag(south_start, south_end):
-                            logger.error("Failed to move South")
-                            return
-                            
-                        # Move back to start of row
-                        for _ in range(width - 1):
-                            # Move West (inverse of East)
-                            west_start, west_end = self.direction_widget.direction_manager.get_inverse_direction("East")
-                            if not self.game_search._perform_drag(west_start, west_end):
-                                logger.error("Failed to move West")
-                                return
-                            
-        except Exception as e:
-            logger.error(f"Error in search thread: {e}", exc_info=True)
+            # Get current game position
+            current_pos = direction_manager.get_current_position()
+            if not current_pos:
+                logger.error("Could not get current position")
+                return
+                
+            # Get drag distances from direction manager
+            drag_distances = direction_manager.get_drag_distances()
+            if not all(drag_distances):
+                logger.warning("Invalid drag distances")
+                return
+                
+            # Calculate grid size based on game world dimensions and screen ratio
+            east_distance, south_distance = drag_distances
             
-        finally:
-            # Update UI
-            self.is_searching = False
+            # Calculate how many drags needed to cover the world (999x999)
+            grid_width = (self.WORLD_SIZE + 1) // east_distance
+            if (self.WORLD_SIZE + 1) % east_distance:
+                grid_width += 1
+                
+            # Height should maintain 2:1 ratio with width
+            grid_height = grid_width // 2
+            if grid_width % 2:
+                grid_height += 1
+                
+            logger.info(f"Calculated grid size: {grid_width}x{grid_height} based on drag distances: {drag_distances}")
+            
+            # Get selected templates
+            selected_templates = [item.text() for item in self.template_list.selectedItems()]
+            if not selected_templates:
+                logger.error("No templates selected")
+                return
+                
+            # Configure search
+            self.game_search.configure(
+                templates=selected_templates,
+                min_confidence=self.confidence_spin.value(),
+                save_screenshots=self.save_screenshots_check.isChecked(),
+                grid_size=(grid_width, grid_height),
+                start_pos=current_pos,
+                drag_distances=drag_distances
+            )
+            
+            # Clear previous search data
+            self.grid_widget.clear_search_data()
+            self.results_widget.clear_results()
+            
+            # Update UI state
+            self.start_search_btn.setEnabled(False)
+            self.stop_search_btn.setEnabled(True)
+            self.progress_bar.setVisible(True)
+            self.progress_bar.setRange(0, grid_width * grid_height)
+            self.progress_bar.setValue(0)
+            
+            # Start search
+            self.is_searching = True
+            self.stop_requested = False
+            self.search_timer.start(100)  # Update every 100ms
+            
+            # Start search in background
+            self.game_search.start()
+            
+        except Exception as e:
+            logger.error(f"Error starting search: {e}", exc_info=True)
+            self.stop_calibration_check()  # Stop calibration check if search fails
             
     def _update_search_status(self):
         """Update the UI with current search status."""
-        if not hasattr(self, '_current_result'):
-            return
+        try:
+            if not self.is_searching:
+                return
+                
+            # Get current search state
+            positions_checked = self.game_search.positions_checked
+            total_cells = self.game_search.total_cells
+            current_pos = self.game_search.current_position
+            matches = self.game_search.matches
             
-        result = self._current_result
-        
-        # Update progress bar
-        total_cells = self.grid_width_spin.value() * self.grid_height_spin.value()
-        progress = min(100, int(result.positions_checked / total_cells * 100))
-        self.progress_bar.setValue(progress)
-        
-        # If search is complete, process the result
-        if not self.is_searching:
-            self._process_search_result(result)
+            # Update progress bar
+            if total_cells > 0:
+                progress = min(100, int((positions_checked / total_cells) * 100))
+                self.progress_bar.setValue(progress)
+            
+            # Update grid
+            self.grid_widget.set_current_position(*current_pos)
+            self.grid_widget.add_searched_position(*current_pos)
+            
+            # Add path point
+            self.grid_widget.add_path_point(*current_pos)
+            
+            # Update matches
+            if matches:
+                for match in matches:
+                    if match.game_position:
+                        self.grid_widget.set_cell_matches(
+                            current_pos[0], current_pos[1],
+                            1,  # Count of matches in cell
+                            match.game_position
+                        )
+            
+            # Check if search is complete
+            if not self.game_search.is_searching:
+                self._stop_search()
+                
+        except Exception as e:
+            logger.error(f"Error updating search status: {e}", exc_info=True)
+            self._stop_search()
+            
+    def _stop_search(self):
+        """Stop the search process."""
+        try:
+            # Stop calibration check when search stops
+            self.stop_calibration_check()
+            
+            if not self.is_searching:
+                return
+            
+            # Set flag to stop search
+            self.stop_requested = True
+            self.game_search.stop_requested = True
+            
+            # Update UI
+            self.is_searching = False
+            self.start_search_btn.setEnabled(True)
+            self.stop_search_btn.setEnabled(False)
+            self.progress_bar.setVisible(False)
+            self.grid_widget.set_search_in_progress(False)
             self.search_timer.stop()
             
-    def _process_search_result(self, result: SearchResult):
-        """
-        Process the final search result.
-        
-        Args:
-            result: Final search result
-        """
-        # Update UI
-        self.start_search_btn.setEnabled(True)
-        self.stop_search_btn.setEnabled(False)
-        self.progress_bar.setVisible(False)
-        self.grid_widget.set_search_in_progress(False)
-        
-        if result.success:
-            # Add result to results widget
-            self.results_widget.add_result(result)
-            
-            # Show preview
-            if result.screenshot_path:
-                self.preview_widget.set_image(result.screenshot_path)
+        except Exception as e:
+            logger.error(f"Error stopping search: {e}")
+
+    def _check_calibration(self):
+        """Check if calibration has changed and update grid if needed."""
+        try:
+            if not self.direction_widget or not self.direction_widget.direction_manager:
+                return
                 
-    def _stop_search(self):
-        """Stop the current search."""
-        if not self.is_searching:
-            return
+            direction_manager = self.direction_widget.direction_manager
             
-        # Set flag to stop search
-        self.stop_requested = True
+            # Get current calibration state
+            current_pos = direction_manager.get_current_position()
+            drag_distances = direction_manager.get_drag_distances()
+            
+            # Check if calibration state has changed
+            if (current_pos != self.last_calibration_state['position'] or
+                drag_distances != self.last_calibration_state['drag_distances']):
+                
+                # Update calibration state
+                self.last_calibration_state['position'] = current_pos
+                self.last_calibration_state['drag_distances'] = drag_distances
+                
+                # Only update grid if we have valid calibration
+                if current_pos and all(drag_distances):
+                    east_distance, south_distance = drag_distances
+                    
+                    # Calculate grid size
+                    grid_width = (self.WORLD_SIZE + 1) // east_distance
+                    if (self.WORLD_SIZE + 1) % east_distance:
+                        grid_width += 1
+                        
+                    # Height should maintain 2:1 ratio with width
+                    grid_height = grid_width // 2
+                    if grid_width % 2:
+                        grid_height += 1
+                        
+                    # Update grid widget
+                    self.grid_widget.set_grid_parameters(
+                        (grid_width, grid_height),
+                        current_pos,
+                        drag_distances
+                    )
+                    
+                    # Update drag info label
+                    self.drag_info_label.setText(
+                        f"Each drag covers:\n"
+                        f"East: {east_distance} game units\n"
+                        f"South: {south_distance} game units\n"
+                        f"Grid size: {grid_width}x{grid_height} cells"
+                    )
+                    
+        except Exception as e:
+            logger.error(f"Error checking calibration: {e}")

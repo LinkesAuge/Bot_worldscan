@@ -204,6 +204,58 @@ class TextOCR(QObject):
         """
         return self.preferred_method
         
+    def _save_debug_image(self, name: str, image: np.ndarray, metadata: Optional[Dict[str, Any]] = None) -> None:
+        """
+        Save a debug image if debug mode is enabled.
+        
+        Args:
+            name: Name of the image
+            image: Image data
+            metadata: Optional metadata
+        """
+        try:
+            # Get debug settings
+            debug_settings = self.config_manager.get_debug_settings()
+            
+            # Always emit debug image signal for visualization
+            self.debug_image.emit(name, image, metadata or {})
+            
+            # Only save to disk if debug mode is enabled
+            if debug_settings["enabled"]:
+                # Create output directory if it doesn't exist
+                output_dir = Path('scout/ocr_output')
+                output_dir.mkdir(parents=True, exist_ok=True)
+                
+                # Save image with timestamp
+                timestamp = time.strftime("%Y%m%d_%H%M%S")
+                filename = f"{name}_{timestamp}.png"
+                cv2.imwrite(str(output_dir / filename), image)
+                logger.debug(f"Saved debug image: {filename}")
+                
+        except Exception as e:
+            logger.error(f"Error saving debug image: {e}")
+
+    def _save_result_image(self, name: str, image: np.ndarray) -> None:
+        """
+        Save the final result image (always saved regardless of debug mode).
+        
+        Args:
+            name: Name of the image
+            image: Image data
+        """
+        try:
+            # Create output directory if it doesn't exist
+            output_dir = Path('scout/ocr_output')
+            output_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Save image, overwriting previous result
+            filename = f"{name}_latest.png"
+            cv2.imwrite(str(output_dir / filename), image)
+            logger.debug(f"Saved result image: {filename}")
+            
+        except Exception as e:
+            logger.error(f"Error saving result image: {e}")
+
     def extract_text(self, image: np.ndarray) -> str:
         """
         Extract text from an image using OCR with enhanced preprocessing.
@@ -261,17 +313,13 @@ class TextOCR(QObject):
             debug_settings = config.get_debug_settings()
             debug_enabled = debug_settings["enabled"]
                 
-            # Ensure the debug directory exists
-            debug_dir = Path('scout/debug_screenshots')
-            debug_dir.mkdir(exist_ok=True, parents=True)
+            # Create output directory if it doesn't exist
+            output_dir = Path('scout/ocr_output')
+            output_dir.mkdir(parents=True, exist_ok=True)
             
-            # Create an ocr_output directory for final OCR results
-            ocr_output_dir = Path('scout/ocr_output')
-            ocr_output_dir.mkdir(exist_ok=True, parents=True)
-                
             # Save the original image for debugging only if debug mode is enabled
             if debug_enabled:
-                cv2.imwrite(str(debug_dir / 'ocr_original.png'), image)
+                cv2.imwrite(str(output_dir / 'ocr_original.png'), image)
                 
             # Apply multiple preprocessing approaches for better results
             
@@ -303,11 +351,11 @@ class TextOCR(QObject):
             
             # Save the preprocessed images for debugging if debug mode is enabled
             if debug_enabled:
-                cv2.imwrite(str(debug_dir / 'ocr_thresh1.png'), thresh1)
-                cv2.imwrite(str(debug_dir / 'ocr_thresh2.png'), thresh2)
-                cv2.imwrite(str(debug_dir / 'ocr_thresh3.png'), thresh3)
-                cv2.imwrite(str(debug_dir / 'ocr_morphed.png'), eroded)
-                cv2.imwrite(str(debug_dir / 'ocr_sharpened.png'), thresh4)
+                cv2.imwrite(str(output_dir / 'ocr_thresh1.png'), thresh1)
+                cv2.imwrite(str(output_dir / 'ocr_thresh2.png'), thresh2)
+                cv2.imwrite(str(output_dir / 'ocr_thresh3.png'), thresh3)
+                cv2.imwrite(str(output_dir / 'ocr_morphed.png'), eroded)
+                cv2.imwrite(str(output_dir / 'ocr_sharpened.png'), thresh4)
             
             # Store preprocessed images in a dictionary for easy access
             preprocessed_images = {
@@ -319,8 +367,7 @@ class TextOCR(QObject):
             }
             
             # Try multiple OCR approaches with different configurations
-            results = []
-            results_by_method = {}
+            results = {}
             
             # Add config to disable temp files where possible
             base_config = '--psm 7'
@@ -336,38 +383,33 @@ class TextOCR(QObject):
                         
                     # Standard OCR
                     text = pytesseract.image_to_string(img).strip()
-                    results.append(text)
-                    results_by_method[f"{method}_standard"] = text
+                    results[f"{method}_standard"] = text
                     
                     # PSM 7: Treat the image as a single line of text
                     text_psm7 = pytesseract.image_to_string(img, config=base_config).strip()
-                    results.append(text_psm7)
-                    results_by_method[f"{method}_psm7"] = text_psm7
+                    results[f"{method}_psm7"] = text_psm7
                     
                     # Try with character whitelist for coordinates
                     text_whitelist = pytesseract.image_to_string(
                         img, 
                         config=whitelist_config
                     ).strip()
-                    results.append(text_whitelist)
-                    results_by_method[f"{method}_whitelist"] = text_whitelist
+                    results[f"{method}_whitelist"] = text_whitelist
                     
                     # Try with a more specific configuration for the expected format
                     text_specific = pytesseract.image_to_string(
                         img,
                         config=specific_config
                     ).strip()
-                    results.append(text_specific)
-                    results_by_method[f"{method}_specific"] = text_specific
+                    results[f"{method}_specific"] = text_specific
                 
             except Exception as ocr_e:
                 logger.error(f"Error during OCR processing: {ocr_e}", exc_info=True)
                 # Add a dummy result to avoid empty results
-                results.append("OCR Error")
-                results_by_method["error"] = "OCR Error"
+                results["error"] = "OCR Error"
             
             # Log all extracted texts for debugging
-            for method, text in results_by_method.items():
+            for method, text in results.items():
                 logger.debug(f"OCR Result ({method}): '{text}'")
             
             # Choose the best result based on the preferred method or scoring
@@ -381,10 +423,10 @@ class TextOCR(QObject):
                 # Use the preferred method
                 # Try different configurations of the preferred method
                 preferred_results = [
-                    results_by_method.get(f"{self.preferred_method}_standard", ""),
-                    results_by_method.get(f"{self.preferred_method}_psm7", ""),
-                    results_by_method.get(f"{self.preferred_method}_whitelist", ""),
-                    results_by_method.get(f"{self.preferred_method}_specific", "")
+                    results.get(f"{self.preferred_method}_standard", ""),
+                    results.get(f"{self.preferred_method}_psm7", ""),
+                    results.get(f"{self.preferred_method}_whitelist", ""),
+                    results.get(f"{self.preferred_method}_specific", "")
                 ]
                 
                 # Filter out empty results
@@ -405,17 +447,17 @@ class TextOCR(QObject):
                 'timestamp': timestamp,
                 'text': best_text,
                 'method': self.preferred_method,
-                'results_by_method': results_by_method
+                'results_by_method': results
             }
             
             # Save final OCR output as JSON
             import json
-            with open(str(ocr_output_dir / f'ocr_result_{timestamp}.json'), 'w') as f:
+            with open(str(output_dir / f'ocr_result_{timestamp}.json'), 'w') as f:
                 json.dump(final_output, f, indent=4)
             
             # Save the image that produced the best result
             if best_text:
-                cv2.imwrite(str(ocr_output_dir / f'ocr_image_{timestamp}.png'), image)
+                cv2.imwrite(str(output_dir / f'ocr_image_{timestamp}.png'), image)
             
             # Update debug window if available and debug mode is enabled
             if debug_enabled and hasattr(self, 'debug_window') and self.debug_window:

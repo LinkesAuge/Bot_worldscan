@@ -26,6 +26,7 @@ from scout.text_ocr import TextOCR
 from scout.actions import GameActions
 from scout.game_world_direction import GameWorldDirection
 from scout.automation.gui.position_marker import PositionMarker
+from scout.config_manager import ConfigManager
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,7 @@ class DirectionWidget(QWidget):
         window_manager: WindowManager,
         text_ocr: TextOCR,
         game_actions: GameActions,
+        config_manager: ConfigManager,
         parent: Optional[QWidget] = None
     ):
         """
@@ -57,6 +59,7 @@ class DirectionWidget(QWidget):
             window_manager: For capturing screenshots and window info
             text_ocr: For reading game coordinates
             game_actions: For performing mouse actions
+            config_manager: The configuration manager instance
             parent: Parent widget
         """
         super().__init__(parent)
@@ -64,12 +67,14 @@ class DirectionWidget(QWidget):
         self.window_manager = window_manager
         self.text_ocr = text_ocr
         self.game_actions = game_actions
+        self.config_manager = config_manager
         
         # Create direction manager
         self.direction_manager = GameWorldDirection(
             window_manager=window_manager,
             text_ocr=text_ocr,
-            game_actions=game_actions
+            game_actions=game_actions,
+            config_manager=config_manager
         )
         
         # Create position marker

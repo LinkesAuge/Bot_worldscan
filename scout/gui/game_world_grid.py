@@ -8,7 +8,7 @@ It handles:
 - Visual representation of both screen and game coordinates
 """
 
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, List, Dict
 import logging
 
 from PyQt6.QtWidgets import QWidget
@@ -26,17 +26,21 @@ class GameWorldGrid(QWidget):
     The grid is based on actual drag movements and shows both:
     - Screen space grid (based on drag movements)
     - Game world coordinates (0-999 with wrapping)
+    - Search progress with path tracking
+    - Match information per cell
     """
     
     # Game world constants
     WORLD_SIZE = 999  # Maximum coordinate value in game world
     
     # Colors
-    GRID_COLOR = QColor(100, 100, 100)  # Gray
-    CELL_COLOR = QColor(50, 50, 50)  # Dark gray
-    SEARCHED_COLOR = QColor(0, 100, 0)  # Dark green
-    CURRENT_COLOR = QColor(200, 0, 0)  # Red
-    COORD_COLOR = QColor(255, 255, 0)  # Yellow
+    GRID_COLOR = QColor(0, 0, 0)  # Black grid lines
+    BACKGROUND_COLOR = QColor(255, 255, 255)  # White background
+    VISITED_COLOR = QColor(255, 200, 200)  # Light red for visited cells
+    MATCH_COLOR = QColor(200, 255, 200)  # Light green for cells with matches
+    PATH_COLOR = QColor(255, 0, 0)  # Red for search path
+    TEXT_COLOR = QColor(0, 0, 0)  # Black text
+    MESSAGE_COLOR = QColor(128, 128, 128)  # Gray for messages
     
     def __init__(self, parent: Optional[QWidget] = None):
         """Initialize the game world grid widget."""
@@ -48,12 +52,32 @@ class GameWorldGrid(QWidget):
         self.searched_positions: List[Tuple[int, int]] = []  # List of searched positions
         self.search_in_progress = False
         
+        # Search path tracking
+        self.path_points: List[Tuple[int, int]] = []  # List of grid positions in search path
+        
+        # Match tracking
+        self.matches_per_cell: Dict[Tuple[int, int], int] = {}  # Number of matches per cell
+        self.cell_coordinates: Dict[Tuple[int, int], GameWorldPosition] = {}  # Coordinates per cell
+        
         # Game world state
         self.start_game_pos: Optional[GameWorldPosition] = None  # Starting game world position
         self.drag_distances = (0, 0)  # X, Y distance covered by one drag
+        self.is_calibrated = False  # Whether valid calibration exists
+        
+        # View ratio (width:height = 2:1)
+        self.view_ratio = 2.0
         
         # Set minimum size
-        self.setMinimumSize(400, 400)
+        self.setMinimumSize(400, 200)  # Maintain 2:1 ratio
+        
+    def resizeEvent(self, event) -> None:
+        """Handle resize events to maintain aspect ratio."""
+        super().resizeEvent(event)
+        
+        # Ensure width is twice the height
+        if self.width() / self.height() != self.view_ratio:
+            new_height = int(self.width() / self.view_ratio)
+            self.setFixedHeight(new_height)
         
     def set_grid_parameters(
         self,
@@ -72,6 +96,7 @@ class GameWorldGrid(QWidget):
         self.grid_size = grid_size
         self.start_game_pos = start_pos
         self.drag_distances = drag_distances
+        self.is_calibrated = all(drag_distances) and start_pos is not None
         self.update()
         
     def set_current_position(self, x: int, y: int) -> None:
@@ -123,18 +148,50 @@ class GameWorldGrid(QWidget):
             y=new_y
         )
         
+    def add_path_point(self, x: int, y: int) -> None:
+        """Add a point to the search path."""
+        if (x, y) not in self.path_points:
+            self.path_points.append((x, y))
+            self.update()
+            
+    def set_cell_matches(self, x: int, y: int, num_matches: int, coords: GameWorldPosition) -> None:
+        """Set the number of matches and coordinates for a cell."""
+        self.matches_per_cell[(x, y)] = num_matches
+        self.cell_coordinates[(x, y)] = coords
+        self.update()
+        
+    def clear_search_data(self) -> None:
+        """Clear all search-related data."""
+        self.searched_positions.clear()
+        self.path_points.clear()
+        self.matches_per_cell.clear()
+        self.cell_coordinates.clear()
+        self.update()
+        
     def paintEvent(self, event) -> None:
         """Paint the widget."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         
-        # Calculate cell size
+        # Fill background
+        painter.fillRect(self.rect(), self.BACKGROUND_COLOR)
+        
+        if not self.is_calibrated:
+            # Draw calibration needed message
+            painter.setPen(QPen(self.MESSAGE_COLOR))
+            font = QFont("Arial", 12)
+            painter.setFont(font)
+            message = "Please calibrate the game world directions\nto enable grid visualization"
+            painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, message)
+            return
+            
+        # Calculate cell size based on grid dimensions
         width = self.width()
         height = self.height()
         cell_width = width / self.grid_size[0]
         cell_height = height / self.grid_size[1]
         
-        # Draw grid
+        # Draw grid cells
         for y in range(self.grid_size[1]):
             for x in range(self.grid_size[0]):
                 # Calculate cell rectangle
@@ -145,33 +202,64 @@ class GameWorldGrid(QWidget):
                     int(cell_height)
                 )
                 
-                # Determine cell color
-                if (x, y) == self.current_position:
-                    color = self.CURRENT_COLOR
+                # Fill cell based on state
+                if (x, y) in self.matches_per_cell:
+                    painter.fillRect(cell_rect, self.MATCH_COLOR)
                 elif (x, y) in self.searched_positions:
-                    color = self.SEARCHED_COLOR
-                else:
-                    color = self.CELL_COLOR
-                    
-                # Draw cell
-                painter.fillRect(cell_rect, color)
+                    painter.fillRect(cell_rect, self.VISITED_COLOR)
+                
+                # Draw grid lines
                 painter.setPen(QPen(self.GRID_COLOR))
                 painter.drawRect(cell_rect)
                 
-                # Draw game world coordinates if available
-                game_pos = self.get_game_position(x, y)
-                if game_pos:
-                    painter.setPen(QPen(self.COORD_COLOR))
-                    painter.setFont(QFont("Arial", 8))
-                    coord_text = f"({game_pos.x}, {game_pos.y})"
-                    painter.drawText(cell_rect, Qt.AlignmentFlag.AlignCenter, coord_text)
+                # Draw coordinates and match count if available
+                if (x, y) in self.cell_coordinates:
+                    coords = self.cell_coordinates[(x, y)]
+                    matches = self.matches_per_cell.get((x, y), 0)
+                    
+                    painter.setPen(QPen(self.TEXT_COLOR))
+                    
+                    # Calculate font size based on cell size
+                    font_size = min(cell_width, cell_height) / 8
+                    painter.setFont(QFont("Arial", int(font_size)))
+                    
+                    # Draw coordinates on first line
+                    coord_text = f"({coords.x}, {coords.y})"
+                    coord_rect = QRect(cell_rect.x(), cell_rect.y(), cell_rect.width(), cell_rect.height() // 2)
+                    painter.drawText(coord_rect, Qt.AlignmentFlag.AlignCenter, coord_text)
+                    
+                    # Draw match count on second line if there are matches
+                    if matches > 0:
+                        match_text = f"Matches: {matches}"
+                        match_rect = QRect(cell_rect.x(), cell_rect.y() + cell_rect.height() // 2,
+                                         cell_rect.width(), cell_rect.height() // 2)
+                        painter.drawText(match_rect, Qt.AlignmentFlag.AlignCenter, match_text)
         
-        # Draw search in progress indicator
+        # Draw search path
+        if len(self.path_points) > 1:
+            painter.setPen(QPen(self.PATH_COLOR, max(1, int(min(cell_width, cell_height) / 20))))
+            for i in range(len(self.path_points) - 1):
+                x1, y1 = self.path_points[i]
+                x2, y2 = self.path_points[i + 1]
+                
+                # Calculate center points of cells
+                start_x = int((x1 + 0.5) * cell_width)
+                start_y = int((y1 + 0.5) * cell_height)
+                end_x = int((x2 + 0.5) * cell_width)
+                end_y = int((y2 + 0.5) * cell_height)
+                
+                painter.drawLine(start_x, start_y, end_x, end_y)
+        
+        # Draw current position marker
         if self.search_in_progress:
-            painter.setPen(QPen(Qt.PenStyle.NoPen))
-            painter.setBrush(QBrush(QColor(255, 165, 0, 100)))  # Semi-transparent orange
-            painter.drawRect(self.rect())
+            x, y = self.current_position
+            center_x = int((x + 0.5) * cell_width)
+            center_y = int((y + 0.5) * cell_height)
+            marker_size = min(cell_width, cell_height) * 0.2
             
+            painter.setPen(QPen(self.PATH_COLOR, max(1, int(min(cell_width, cell_height) / 20))))
+            painter.drawEllipse(QPoint(center_x, center_y), int(marker_size), int(marker_size))
+        
     def get_cell_at_pos(self, pos: QPoint) -> Optional[Tuple[int, int]]:
         """Get the grid coordinates at a screen position."""
         # Calculate cell size

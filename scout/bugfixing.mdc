@@ -8,6 +8,11 @@ description:
 globs: 
 alwaysApply: false
 ---
+---
+description: 
+globs: 
+alwaysApply: false
+---
 # Bug Fixing Log
 
 ## 2023-07-27: Fixed Coordinate Region Mismatch Issue

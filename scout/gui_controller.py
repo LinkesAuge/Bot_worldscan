@@ -180,11 +180,12 @@ class OverlayController(QMainWindow):
         
         # Create game world search tab
         self.game_world_search_tab = GameWorldSearchTab(
-            window_manager=self.window_manager,
-            template_matcher=self.template_matcher,
-            text_ocr=self.text_ocr,
-            game_actions=self.game_actions,
-            game_state=game_state
+            self.window_manager,
+            self.template_matcher,
+            self.text_ocr,
+            self.game_actions,
+            self.config_manager,
+            self.game_state
         )
         self.tab_widget.addTab(self.game_world_search_tab, "Game World Search")
         

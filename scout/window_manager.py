@@ -390,4 +390,55 @@ class WindowManager:
             return None
         except Exception as e:
             logger.error(f"Error capturing screenshot: {e}", exc_info=True)
-            return None 
+            return None
+
+    def activate_window(self) -> bool:
+        """
+        Activate (bring to front) the game window.
+        
+        Returns:
+            bool: True if window was successfully activated
+        """
+        try:
+            if not self.hwnd:
+                if not self.find_window():
+                    logger.error("Cannot activate window - window not found")
+                    return False
+            
+            # Check if window is minimized
+            if self.is_window_minimized_or_hidden():
+                # Restore window if minimized
+                win32gui.ShowWindow(self.hwnd, win32con.SW_RESTORE)
+                time.sleep(0.1)  # Give window time to restore
+            
+            # Bring window to front
+            win32gui.SetForegroundWindow(self.hwnd)
+            
+            # Wait a moment and verify window is active
+            time.sleep(0.1)
+            return self.is_window_active()
+            
+        except Exception as e:
+            logger.error(f"Error activating window: {e}")
+            return False
+            
+    def is_window_active(self) -> bool:
+        """
+        Check if the game window is currently the active window.
+        
+        Returns:
+            bool: True if game window is active
+        """
+        try:
+            if not self.hwnd:
+                return False
+                
+            # Get foreground window handle
+            foreground_hwnd = win32gui.GetForegroundWindow()
+            
+            # Compare with our window handle
+            return foreground_hwnd == self.hwnd
+            
+        except Exception as e:
+            logger.error(f"Error checking window active state: {e}")
+            return False 

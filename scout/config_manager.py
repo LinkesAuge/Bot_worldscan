@@ -443,6 +443,35 @@ class ConfigManager:
         self.save_config()
         logger.debug("Updated template search settings")
 
+    def get_search_settings(self) -> Dict[str, Any]:
+        """Get search settings from config."""
+        if not self.config.has_section('Search'):
+            self.config.add_section('Search')
+            
+        return {
+            'use_all_templates': self.config.getboolean('Search', 'use_all_templates', fallback=True),
+            'min_confidence': self.config.getfloat('Search', 'min_confidence', fallback=0.8),
+            'save_screenshots': self.config.getboolean('Search', 'save_screenshots', fallback=False)
+        }
+        
+    def update_search_settings(self, settings: Dict[str, Any]) -> None:
+        """Update search settings in config.
+        
+        Args:
+            settings: Dictionary containing search settings to update
+        """
+        if not self.config.has_section('Search'):
+            self.config.add_section('Search')
+            
+        if 'use_all_templates' in settings:
+            self.config.set('Search', 'use_all_templates', str(settings['use_all_templates']))
+        if 'min_confidence' in settings:
+            self.config.set('Search', 'min_confidence', str(settings['min_confidence']))
+        if 'save_screenshots' in settings:
+            self.config.set('Search', 'save_screenshots', str(settings['save_screenshots']))
+            
+        self.save_config()
+
     def _load_config(self):
         """Load the configuration file."""
         return self.config

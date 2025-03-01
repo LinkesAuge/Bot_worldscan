@@ -97,6 +97,17 @@ class GameWorldSearch:
         self.drag_delay = 1.0  # Seconds to wait after drag
         self.template_search_delay = 0.5  # Seconds to wait after template search
         
+        # Search state variables
+        self.templates = []
+        self.grid_size = (0, 0)
+        self.start_pos = None
+        self.drag_distances = (0, 0)
+        self.positions_checked = 0
+        self.matches = []
+        self.current_position = (0, 0)
+        self.is_searching = False
+        self.stop_requested = False
+        
         # Get the view area dimensions based on 2:1 ratio
         window_pos = self.game_coordinator.window_manager.get_window_position()
         if window_pos:
@@ -467,4 +478,109 @@ class GameWorldSearch:
             'avg_positions_checked': avg_positions_checked,
             'avg_search_time': avg_search_time,
             'templates_found': templates_found
-        } 
+        }
+    
+    def configure(
+        self,
+        templates: List[str],
+        min_confidence: float,
+        save_screenshots: bool,
+        grid_size: Tuple[int, int],
+        start_pos: GameWorldPosition,
+        drag_distances: Tuple[int, int]
+    ) -> None:
+        """
+        Configure the search parameters.
+        
+        Args:
+            templates: List of template names to search for
+            min_confidence: Minimum confidence threshold for matches
+            save_screenshots: Whether to save screenshots of matches
+            grid_size: (width, height) of the search grid in drag movements
+            start_pos: Starting game world position
+            drag_distances: (east_distance, south_distance) in game units
+        """
+        self.templates = templates
+        self.min_confidence = min_confidence
+        self.save_screenshots = save_screenshots
+        self.grid_size = grid_size
+        self.start_pos = start_pos
+        self.drag_distances = drag_distances
+        self.total_cells = grid_size[0] * grid_size[1]
+        self.positions_checked = 0
+        self.matches.clear()
+        self.current_position = (0, 0)
+        
+    def start(self):
+        """
+        Start the search process.
+        
+        This method begins the search using the configured parameters.
+        It searches through the grid systematically, checking for templates
+        at each position.
+        """
+        try:
+            if not self.templates or not self.start_pos or not self.drag_distances:
+                logger.error("Search not properly configured")
+                return
+                
+            logger.info(f"Starting search with grid size {self.grid_size}")
+            logger.info(f"Starting position: {self.start_pos}")
+            logger.info(f"Drag distances: {self.drag_distances}")
+            
+            self.positions_checked = 0
+            self.matches.clear()
+            self.current_position = (0, 0)
+            
+            # Move to start position if needed
+            if not self.game_coordinator.is_position_on_screen(
+                self.start_pos.x, self.start_pos.y
+            ):
+                if not self._move_to_position(self.start_pos.x, self.start_pos.y):
+                    logger.error("Failed to move to start position")
+                    return
+                    
+            # Search through grid
+            for y in range(self.grid_size[1]):
+                for x in range(self.grid_size[0]):
+                    # Update current position
+                    self.current_position = (x, y)
+                    
+                    # Calculate target game position
+                    target_pos = self.get_game_position(x, y)
+                    if not target_pos:
+                        continue
+                        
+                    # Move to position if not on screen
+                    if not self.game_coordinator.is_position_on_screen(
+                        target_pos.x, target_pos.y
+                    ):
+                        if not self._move_to_position(target_pos.x, target_pos.y):
+                            logger.warning(f"Failed to move to position ({x}, {y})")
+                            continue
+                            
+                    # Check for templates
+                    result = self._check_for_templates(self.templates)
+                    if result:
+                        self.matches.append(result)
+                        
+                    # Update progress
+                    self.positions_checked += 1
+                    
+                    # Check if search should stop
+                    if hasattr(self, 'stop_requested') and self.stop_requested:
+                        logger.info("Search stopped by user")
+                        return
+                        
+                    # Wait between moves
+                    time.sleep(self.template_search_delay)
+                    
+            logger.info(f"Search complete. Checked {self.positions_checked} positions, "
+                       f"found {len(self.matches)} matches")
+                       
+        except Exception as e:
+            logger.error(f"Error during search: {e}", exc_info=True)
+            
+        finally:
+            # Ensure search is marked as complete
+            self.is_searching = False 
