@@ -33,6 +33,10 @@ from scout.automation.gui.automation_tab import AutomationTab
 from scout.actions import GameActions
 from scout.game_state import GameState
 from scout.gui.game_world_search_tab import GameWorldSearchTab
+import os
+import sys
+import traceback
+from PyQt6.QtCore import QSettings
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +130,7 @@ class OverlayController(QMainWindow):
         self.select_ocr_region_btn = None
         self.ocr_status = None
         self.ocr_coords_label = None
+        self.ocr_method_combo = None
         
         # Create window
         self.setWindowTitle("Total Battle Scout")
@@ -585,6 +590,36 @@ class OverlayController(QMainWindow):
         self.ocr_btn.clicked.connect(self._toggle_ocr)
         ocr_layout.addWidget(self.ocr_btn)
         
+        # Create OCR method selection dropdown
+        method_layout = QHBoxLayout()
+        method_label = QLabel("OCR Method:")
+        method_layout.addWidget(method_label)
+        
+        self.ocr_method_combo = QComboBox()
+        self.ocr_method_combo.addItems(["thresh1", "thresh2", "thresh3", "morphed", "sharpened", "auto"])
+        
+        # Set default method from settings or use thresh3
+        preferred_method = ocr_settings.get('preferred_method', 'thresh3')
+        index = self.ocr_method_combo.findText(preferred_method)
+        if index >= 0:
+            self.ocr_method_combo.setCurrentIndex(index)
+        
+        self.ocr_method_combo.currentTextChanged.connect(self._on_ocr_method_changed)
+        method_layout.addWidget(self.ocr_method_combo)
+        
+        # Add tooltip explaining the methods
+        self.ocr_method_combo.setToolTip(
+            "Select the OCR preprocessing method:\n"
+            "- thresh1: Adaptive thresholding\n"
+            "- thresh2: Inverse thresholding\n"
+            "- thresh3: Otsu's thresholding (best for most cases)\n"
+            "- morphed: Morphological operations\n"
+            "- sharpened: Enhanced contrast with sharpening\n"
+            "- auto: Automatically select the best result"
+        )
+        
+        ocr_layout.addLayout(method_layout)
+        
         # Create OCR frequency controls
         freq_layout = QVBoxLayout()  # Changed to vertical layout
         
@@ -766,7 +801,8 @@ class OverlayController(QMainWindow):
             ocr_settings = self.config_manager.get_ocr_settings()  # Get existing settings first
             ocr_settings.update({
                 "active": self.ocr_btn.isChecked(),
-                "frequency": self.ocr_freq_input.value()
+                "frequency": self.ocr_freq_input.value(),
+                "preferred_method": self.ocr_method_combo.currentText()
             })
             
             # Save all settings
@@ -1140,9 +1176,15 @@ class OverlayController(QMainWindow):
         # Connect coordinates signal
         self.text_ocr.coordinates_updated.connect(self._update_coordinates_display)
         
+        # Set preferred OCR method
+        preferred_method = self.ocr_method_combo.currentText()
+        self.text_ocr.set_preferred_method(preferred_method)
+        logger.info(f"Using OCR method: {preferred_method}")
+        
         # Update config
         ocr_settings = self.config_manager.get_ocr_settings()
         ocr_settings['active'] = True
+        ocr_settings['preferred_method'] = preferred_method
         self.config_manager.update_ocr_settings(ocr_settings)
         
         # Start OCR processing
@@ -1469,3 +1511,64 @@ class OverlayController(QMainWindow):
         except Exception as e:
             logger.error(f"Error reverting to defaults: {e}", exc_info=True)
             QMessageBox.critical(self, "Error", f"Failed to revert settings: {str(e)}") 
+
+    def keyPressEvent(self, event) -> None:
+        """
+        Handle key press events for the main controller window.
+        
+        This method handles global key presses for stopping processes:
+        - Escape key: Stops OCR and any active processes
+        - Q key: Stops OCR and any active processes
+        
+        Args:
+            event: Key press event
+        """
+        # Check for escape key
+        if event.key() == Qt.Key.Key_Escape or event.key() == Qt.Key.Key_Q:
+            logger.info(f"Stop key pressed: {'Escape' if event.key() == Qt.Key.Key_Escape else 'Q'}")
+            
+            # Stop OCR if active
+            if self.text_ocr.active:
+                logger.info("Stopping OCR process due to stop key")
+                self._handle_ocr_toggle()  # Use existing toggle handler
+            
+            # Stop template matching if active
+            if self.overlay.is_active:
+                logger.info("Stopping template matching due to stop key")
+                self._handle_pattern_toggle()  # Use existing toggle handler
+            
+            # Stop any active automation sequence
+            if hasattr(self, 'automation_tab') and self.automation_tab.is_sequence_running():
+                logger.info("Stopping automation sequence due to stop key")
+                self.automation_tab.stop_sequence()
+            
+            # Stop any active game world search
+            if hasattr(self, 'game_world_search_tab') and hasattr(self.game_world_search_tab, 'is_searching') and self.game_world_search_tab.is_searching:
+                logger.info("Stopping game world search due to stop key")
+                self.game_world_search_tab._stop_search()
+            
+            # Update status
+            self.status_bar.showMessage("All processes stopped by user (Stop key pressed)", 3000)
+        
+        # Pass event to parent class
+        super().keyPressEvent(event) 
+
+    def _on_ocr_method_changed(self, method: str) -> None:
+        """
+        Handle changes to the OCR method dropdown.
+        
+        Args:
+            method: The selected OCR method
+        """
+        logger.info(f"OCR method changed to: {method}")
+        
+        # Update TextOCR instance
+        self.text_ocr.set_preferred_method(method)
+        
+        # Save to config
+        ocr_settings = self.config_manager.get_ocr_settings()
+        ocr_settings['preferred_method'] = method
+        self.config_manager.update_ocr_settings(ocr_settings)
+        
+        # Update status
+        self.status_bar.showMessage(f"OCR method set to: {method}", 3000) 

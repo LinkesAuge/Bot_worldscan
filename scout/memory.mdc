@@ -1,3 +1,55 @@
+# Memory
+
+## 2023-07-14: Strict Coordinate Format Enforcement
+
+### Changes Made
+- Modified the coordinate extraction to strictly enforce the expected format of `K: 000 X: 000 Y: 000`
+- Updated the text scoring system to heavily prioritize text matching the expected format
+- Added a more specific OCR configuration to improve recognition of the expected format
+- Simplified text cleaning to focus only on essential character replacements
+- Added clear validation of coordinate values to ensure they are within valid ranges
+- Improved logging to clearly indicate when text doesn't match the expected format
+
+### Impact
+- More reliable coordinate extraction by rejecting invalid formats
+- Reduced false positives in coordinate recognition
+- Clearer error messages when coordinates can't be extracted
+- Improved consistency in coordinate extraction
+- Better debugging capabilities with enhanced logging of rejected formats
+
+### Testing
+- Verified that only text matching the expected format is accepted
+- Confirmed that invalid coordinate formats are properly rejected
+- Tested that the scoring system correctly prioritizes the expected format
+- Checked that coordinate values are properly validated
+
+## 2023-07-13: OCR Text Extraction Improvements
+
+### Changes Made
+- Fixed the whitelist configuration in the OCR process by removing problematic quotation marks
+- Enhanced text cleaning to handle game-specific OCR errors (e.g., "geeX" instead of "X", "MEY" instead of "Y")
+- Added a new preprocessing method using image sharpening for better text definition
+- Improved the scoring system to better identify valid coordinate text
+- Added more robust regex patterns for coordinate extraction
+- Enhanced the text selection algorithm to skip invalid results and prioritize complete coordinates
+- Updated the OCR method dropdown in the GUI to include the new sharpened method
+- Added more comprehensive logging of OCR results and preprocessing steps
+
+### Impact
+- More reliable coordinate extraction from the game UI
+- Better handling of OCR misrecognitions specific to the game
+- Improved text preprocessing for clearer character recognition
+- More accurate scoring and selection of OCR results
+- Reduced errors in the OCR process
+- Better debugging capabilities with enhanced logging
+
+### Testing
+- Verified that coordinates are correctly extracted from the game UI
+- Tested the new sharpened preprocessing method
+- Confirmed that the text cleaning properly handles common OCR errors
+- Checked that the scoring system correctly identifies valid coordinate text
+- Verified that the OCR process no longer fails due to configuration errors
+
 ## OCR System and Game World Search Integration Fixes (2023-07-10)
 
 ### Changes Made

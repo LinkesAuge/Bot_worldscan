@@ -18,7 +18,7 @@ from PyQt6.QtCore import QObject, QTimer, pyqtSignal
 import re
 from scout.debug_window import DebugWindow
 from scout.window_manager import WindowManager
-from scout.game_state import GameState
+from scout.game_state import GameState, GameCoordinates
 import mss
 from pathlib import Path
 
@@ -56,6 +56,9 @@ class TextOCR(QObject):
         self.active = False
         self.region: Optional[Dict[str, int]] = None
         self.update_frequency = 0.5  # Default 0.5 updates/sec
+        
+        # OCR method preference
+        self.preferred_method = 'thresh3'  # Default to thresh3 as it produces the best results
         
         # Create timer for updates
         self.update_timer = QTimer()
@@ -109,12 +112,38 @@ class TextOCR(QObject):
         self.update_timer.stop()
         logger.info("OCR stopped")
         
+    def set_preferred_method(self, method: str) -> None:
+        """
+        Set the preferred OCR preprocessing method.
+        
+        Args:
+            method: The preprocessing method to prefer ('thresh1', 'thresh2', 'thresh3', 'morphed', 'auto')
+                   'auto' will use the scoring system to select the best result
+        """
+        valid_methods = ['thresh1', 'thresh2', 'thresh3', 'morphed', 'auto']
+        if method not in valid_methods:
+            logger.warning(f"Invalid OCR method '{method}'. Using default 'thresh3'.")
+            method = 'thresh3'
+            
+        self.preferred_method = method
+        logger.info(f"OCR preferred method set to '{method}'")
+        
+    def get_preferred_method(self) -> str:
+        """
+        Get the current preferred OCR preprocessing method.
+        
+        Returns:
+            The current preferred method
+        """
+        return self.preferred_method
+        
     def extract_text(self, image: np.ndarray) -> str:
         """
         Extract text from an image using OCR with enhanced preprocessing.
         
         This method applies multiple preprocessing techniques and OCR configurations
         to maximize the chances of correctly extracting coordinate text from the game UI.
+        It prioritizes the preferred method set via set_preferred_method().
         
         Args:
             image: The image to extract text from (numpy array)
@@ -123,6 +152,32 @@ class TextOCR(QObject):
             The extracted text as a string
         """
         try:
+            # Check if Tesseract is properly configured
+            try:
+                tesseract_version = pytesseract.get_tesseract_version()
+                logger.info(f"Using Tesseract OCR version: {tesseract_version}")
+            except Exception as e:
+                logger.error(f"Tesseract OCR not properly configured: {e}")
+                logger.error("Please ensure Tesseract OCR is installed and the path is set correctly")
+                logger.error("You can set the path using: pytesseract.pytesseract.tesseract_cmd = r'path_to_tesseract.exe'")
+                
+                # Try to set a default path as a fallback
+                try:
+                    import os
+                    default_paths = [
+                        r'C:\Program Files\Tesseract-OCR\tesseract.exe',
+                        r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe',
+                        r'C:\Tesseract-OCR\tesseract.exe'
+                    ]
+                    
+                    for path in default_paths:
+                        if os.path.exists(path):
+                            logger.info(f"Found Tesseract at: {path}")
+                            pytesseract.pytesseract.tesseract_cmd = path
+                            break
+                except Exception as path_e:
+                    logger.error(f"Error setting default Tesseract path: {path_e}")
+            
             # Convert to grayscale if needed
             if len(image.shape) == 3:
                 gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -157,58 +212,107 @@ class TextOCR(QObject):
             dilated = cv2.dilate(thresh1, kernel, iterations=1)
             eroded = cv2.erode(dilated, kernel, iterations=1)
             
+            # Approach 5: Enhanced contrast with sharpening for better text definition
+            kernel_sharpen = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
+            sharpened = cv2.filter2D(enhanced, -1, kernel_sharpen)
+            _, thresh4 = cv2.threshold(sharpened, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            
             # Save the preprocessed images for debugging
             cv2.imwrite(str(debug_dir / 'ocr_thresh1.png'), thresh1)
             cv2.imwrite(str(debug_dir / 'ocr_thresh2.png'), thresh2)
             cv2.imwrite(str(debug_dir / 'ocr_thresh3.png'), thresh3)
             cv2.imwrite(str(debug_dir / 'ocr_morphed.png'), eroded)
+            cv2.imwrite(str(debug_dir / 'ocr_sharpened.png'), thresh4)
+            
+            # Store preprocessed images in a dictionary for easy access
+            preprocessed_images = {
+                'thresh1': thresh1,
+                'thresh2': thresh2,
+                'thresh3': thresh3,
+                'morphed': eroded,
+                'sharpened': thresh4
+            }
             
             # Try multiple OCR approaches with different configurations
             results = []
+            results_by_method = {}
             
-            # Standard OCR with different preprocessing
-            results.append(pytesseract.image_to_string(thresh1).strip())
-            results.append(pytesseract.image_to_string(thresh2).strip())
-            results.append(pytesseract.image_to_string(thresh3).strip())
-            results.append(pytesseract.image_to_string(eroded).strip())
-            
-            # Try with different PSM modes
-            # PSM 6: Assume a single uniform block of text
-            results.append(pytesseract.image_to_string(thresh1, config='--psm 6').strip())
-            # PSM 7: Treat the image as a single line of text
-            results.append(pytesseract.image_to_string(thresh1, config='--psm 7').strip())
-            # PSM 8: Treat the image as a single word
-            results.append(pytesseract.image_to_string(thresh1, config='--psm 8').strip())
-            # PSM 10: Treat the image as a single character
-            results.append(pytesseract.image_to_string(thresh1, config='--psm 10').strip())
-            
-            # Try with character whitelist for coordinates
-            results.append(pytesseract.image_to_string(
-                thresh1, 
-                config='--psm 7 -c tessedit_char_whitelist="0123456789:KXYkxy "'
-            ).strip())
-            
-            results.append(pytesseract.image_to_string(
-                thresh2, 
-                config='--psm 7 -c tessedit_char_whitelist="0123456789:KXYkxy "'
-            ).strip())
+            try:
+                # Process each preprocessing method
+                for method, img in preprocessed_images.items():
+                    # Standard OCR
+                    text = pytesseract.image_to_string(img).strip()
+                    results.append(text)
+                    results_by_method[f"{method}_standard"] = text
+                    
+                    # PSM 7: Treat the image as a single line of text
+                    text_psm7 = pytesseract.image_to_string(img, config='--psm 7').strip()
+                    results.append(text_psm7)
+                    results_by_method[f"{method}_psm7"] = text_psm7
+                    
+                    # Try with character whitelist for coordinates
+                    text_whitelist = pytesseract.image_to_string(
+                        img, 
+                        config='--psm 7 -c tessedit_char_whitelist=0123456789:KXYkxy '
+                    ).strip()
+                    results.append(text_whitelist)
+                    results_by_method[f"{method}_whitelist"] = text_whitelist
+                    
+                    # Try with a more specific configuration for the expected format
+                    text_specific = pytesseract.image_to_string(
+                        img,
+                        config='--psm 7 -c tessedit_char_whitelist=0123456789:KXYkxy -c tessedit_write_params=1'
+                    ).strip()
+                    results.append(text_specific)
+                    results_by_method[f"{method}_specific"] = text_specific
+                
+            except Exception as ocr_e:
+                logger.error(f"Error during OCR processing: {ocr_e}", exc_info=True)
+                # Add a dummy result to avoid empty results
+                results.append("OCR Error")
+                results_by_method["error"] = "OCR Error"
             
             # Log all extracted texts for debugging
-            for i, text in enumerate(results):
-                logger.debug(f"OCR Result {i+1}: '{text}'")
+            for method, text in results_by_method.items():
+                logger.debug(f"OCR Result ({method}): '{text}'")
             
-            # Choose the best result based on coordinate patterns
-            best_text = self._select_best_text(results)
+            # Choose the best result based on the preferred method or scoring
+            best_text = ""
             
-            # Log the selected text
-            logger.info(f"Selected OCR text: '{best_text}'")
+            if self.preferred_method == 'auto':
+                # Use the scoring system to select the best result
+                best_text = self._select_best_text(results)
+                logger.info(f"Auto-selected OCR text: '{best_text}'")
+            else:
+                # Use the preferred method
+                # Try different configurations of the preferred method
+                preferred_results = [
+                    results_by_method.get(f"{self.preferred_method}_standard", ""),
+                    results_by_method.get(f"{self.preferred_method}_psm7", ""),
+                    results_by_method.get(f"{self.preferred_method}_whitelist", ""),
+                    results_by_method.get(f"{self.preferred_method}_specific", "")
+                ]
+                
+                # Filter out empty results
+                preferred_results = [r for r in preferred_results if r]
+                
+                if preferred_results:
+                    # Use the scoring system to select the best result from the preferred method
+                    best_text = self._select_best_text(preferred_results)
+                    logger.info(f"Selected OCR text from {self.preferred_method}: '{best_text}'")
+                else:
+                    # Fall back to auto selection if no results from preferred method
+                    best_text = self._select_best_text(results)
+                    logger.info(f"Fallback to auto-selected OCR text: '{best_text}'")
             
             # Update debug window if available
             if hasattr(self, 'debug_window') and self.debug_window:
+                # Use the preferred method's image for visualization
+                debug_image = preprocessed_images.get(self.preferred_method, thresh1)
                 self.debug_window.update_image(
                     "OCR Extract",
-                    thresh1,  # Use the first preprocessing method for visualization
-                    metadata={"raw_text": best_text},
+                    debug_image,
+                    metadata={"raw_text": best_text, "method": self.preferred_method},
                     save=True
                 )
                 
@@ -221,8 +325,8 @@ class TextOCR(QObject):
         """
         Select the best text from multiple OCR results.
         
-        This method uses a scoring system to find the text that most likely 
-        contains valid coordinate information in the format K:xxx X:xxx Y:xxx.
+        This method prioritizes text that matches the expected format of K: 000 X: 000 Y: 000.
+        Any text that doesn't match this pattern is given a lower score.
         
         Args:
             texts: List of OCR result texts
@@ -233,32 +337,49 @@ class TextOCR(QObject):
         best_score = -1
         best_text = ""
         
+        # Define the expected format pattern
+        expected_format = r'[kK]\s*:?\s*(\d{1,3}).*?[xX]\s*:?\s*(\d{1,3}).*?[yY]\s*:?\s*(\d{1,3})'
+        
         for text in texts:
             score = 0
             
-            # Check for coordinate patterns (K:, X:, Y:)
-            if re.search(r'[kK]\s*:?\s*\d+', text):
-                score += 3
-            if re.search(r'[xX]\s*:?\s*\d+', text):
-                score += 3
-            if re.search(r'[yY]\s*:?\s*\d+', text):
-                score += 3
+            # Skip empty texts
+            if not text or text == "OCR Error":
+                continue
                 
-            # Bonus for having all three coordinates
-            if (re.search(r'[kK]\s*:?\s*\d+', text) and 
-                re.search(r'[xX]\s*:?\s*\d+', text) and 
-                re.search(r'[yY]\s*:?\s*\d+', text)):
-                score += 5
-                
-            # Check for numbers (at least 3 digits is good)
-            numbers = re.findall(r'\d+', text)
-            score += min(len(numbers), 3)
+            # Clean the text for better pattern matching
+            cleaned = text.replace(';', ':').replace('|', ':').replace('l', '1').replace('O', '0').replace('o', '0')
             
-            # Bonus for having 3-digit numbers (game coordinates are 3 digits)
-            for num in numbers:
-                if len(num) == 3:
-                    score += 1
+            # Check if the text matches the expected format
+            match = re.search(expected_format, cleaned, re.IGNORECASE)
+            if match:
+                # Give a high base score for matching the expected format
+                score += 10
+                
+                # Extract the coordinate values
+                try:
+                    k_val = int(match.group(1))
+                    x_val = int(match.group(2))
+                    y_val = int(match.group(3))
                     
+                    # Bonus for valid coordinate values
+                    if 1 <= k_val <= 999:
+                        score += 3
+                    if 0 <= x_val <= 999:
+                        score += 3
+                    if 0 <= y_val <= 999:
+                        score += 3
+                        
+                    # Extra bonus if all coordinates are valid
+                    if 1 <= k_val <= 999 and 0 <= x_val <= 999 and 0 <= y_val <= 999:
+                        score += 5
+                except (ValueError, IndexError):
+                    # Penalty for invalid coordinate values
+                    score -= 5
+            else:
+                # Significant penalty for not matching the expected format
+                score -= 10
+                
             # Penalty for very long or very short texts
             if len(text) > 50:
                 score -= 2
@@ -279,26 +400,31 @@ class TextOCR(QObject):
         
     def _process_region(self) -> None:
         """
-        Process the selected region for text extraction and coordinate parsing.
+        Process the selected region for OCR.
         
         This method:
-        1. Captures a screenshot of the selected region
-        2. Passes it to the extract_text method for OCR processing
-        3. Parses coordinates from the extracted text
-        4. Updates the game state with the parsed coordinates
-        5. Saves debug images for troubleshooting
+        1. Takes a screenshot of the selected region
+        2. Saves the screenshot for debugging
+        3. Processes the image to extract text
+        4. Extracts coordinates from the text
+        5. Updates the game state and emits signals
         """
-        if not self.active or not self.region:
-            return
-        
         try:
-            # Take screenshot of region
+            if not self.region:
+                logger.warning("No region selected for OCR")
+                return
+                
+            logger.info(f"Processing OCR region: {self.region}")
+                
+            # Take a screenshot of the selected region
             with mss.mss() as sct:
                 screenshot = np.array(sct.grab(self.region))
-            
-            # Save the original screenshot for debugging
+                
+            # Ensure the debug directory exists
             debug_dir = Path('scout/debug_screenshots')
             debug_dir.mkdir(exist_ok=True, parents=True)
+            
+            # Save the original screenshot for debugging
             cv2.imwrite(str(debug_dir / 'OCR Region (Original).png'), screenshot)
             
             # Also save as coord_region.png for consistency with the old system
@@ -307,10 +433,13 @@ class TextOCR(QObject):
             # Use our enhanced extract_text method instead of duplicating the OCR logic
             text = self.extract_text(screenshot)
             
+            # Log the extracted text
+            logger.info(f"OCR extracted text: '{text}'")
+            
             # Update debug window with the processed image
             # We'll use the image from extract_text which is already processed
             processed_image = cv2.imread(str(debug_dir / 'ocr_thresh1.png'))
-            if processed_image is not None:
+            if processed_image is not None and hasattr(self, 'debug_window') and self.debug_window:
                 self.debug_window.update_image(
                     "OCR Region",
                     processed_image,
@@ -322,24 +451,29 @@ class TextOCR(QObject):
                 cv2.imwrite(str(debug_dir / 'OCR Region (Processed).png'), processed_image)
             
             # Extract and validate coordinates
-            self._extract_coordinates(text)
+            coords = self._extract_coordinates(text)
+            
+            # Log the result of coordinate extraction
+            if coords:
+                logger.info(f"Successfully extracted coordinates: {coords}")
+            else:
+                logger.warning("Failed to extract valid coordinates from OCR text")
             
         except Exception as e:
             logger.error(f"Error processing OCR region: {e}", exc_info=True)
             
-    def _extract_coordinates(self, text: str) -> None:
+    def _extract_coordinates(self, text: str) -> Optional[GameCoordinates]:
         """
         Extract coordinates from OCR text, handling noise and invalid characters.
         
-        Uses advanced regex patterns to find coordinates in various formats:
-        - K: number, X: number, Y: number
-        - K number X number Y number
-        - number number number (assuming K X Y order)
-        
-        Handles common OCR misrecognitions and cleans the text before parsing.
+        Strictly enforces the expected format of K: 000 X: 000 Y: 000 and rejects
+        anything that doesn't match this pattern.
         
         Args:
             text: The OCR text to parse
+            
+        Returns:
+            GameCoordinates object if valid coordinates were extracted, None otherwise
         """
         try:
             # Clean text by removing common OCR artifacts and normalizing separators
@@ -348,69 +482,52 @@ class TextOCR(QObject):
             # Log the cleaned text for debugging
             logger.debug(f"Cleaned OCR text: '{cleaned_text}'")
             
-            # Try multiple approaches to extract coordinates
+            # Use a strict regex pattern to match the expected format
+            # This pattern looks for K: followed by 1-3 digits, X: followed by 1-3 digits, and Y: followed by 1-3 digits
+            # The pattern allows for some flexibility in spacing and order
+            pattern = r'[kK]\s*:?\s*(\d{1,3}).*?[xX]\s*:?\s*(\d{1,3}).*?[yY]\s*:?\s*(\d{1,3})'
+            match = re.search(pattern, cleaned_text, re.IGNORECASE)
             
-            # Approach 1: Look for labeled coordinates with flexible formatting
-            # This handles formats like "K:123 X:456 Y:789", "K 123 X 456 Y 789", etc.
-            k_match = re.search(r'[kK][^0-9]*(\d+)', cleaned_text)
-            x_match = re.search(r'[xX][^0-9]*(\d+)', cleaned_text)
-            y_match = re.search(r'[yY][^0-9]*(\d+)', cleaned_text)
-            
-            # Log the regex matches for debugging
-            logger.debug(f"Regex matches - K: {k_match.group(1) if k_match else 'None'}, "
-                        f"X: {x_match.group(1) if x_match else 'None'}, "
-                        f"Y: {y_match.group(1) if y_match else 'None'}")
-            
-            # Extract and validate each coordinate
-            k_val = None
-            x_val = None
-            y_val = None
-            
-            if k_match:
-                try:
-                    k_val = self._validate_coordinate(int(k_match.group(1)), "K")
-                except ValueError:
-                    logger.warning(f"Invalid K value found: {k_match.group(1)}")
-            
-            if x_match:
-                try:
-                    x_val = self._validate_coordinate(int(x_match.group(1)), "X")
-                except ValueError:
-                    logger.warning(f"Invalid X value found: {x_match.group(1)}")
-            
-            if y_match:
-                try:
-                    y_val = self._validate_coordinate(int(y_match.group(1)), "Y")
-                except ValueError:
-                    logger.warning(f"Invalid Y value found: {y_match.group(1)}")
-            
-            # Approach 2: If we couldn't find labeled coordinates, try to extract just numbers
-            if k_val is None and x_val is None and y_val is None:
-                # Look for sequences of digits
-                numbers = re.findall(r'\d+', cleaned_text)
-                logger.debug(f"Found numbers: {numbers}")
+            if match:
+                # Extract the coordinate values
+                k_val = int(match.group(1))
+                x_val = int(match.group(2))
+                y_val = int(match.group(3))
                 
-                # If we have exactly 3 numbers, assume they are K, X, Y in that order
-                if len(numbers) == 3:
-                    try:
-                        k_val = self._validate_coordinate(int(numbers[0]), "K")
-                        x_val = self._validate_coordinate(int(numbers[1]), "X")
-                        y_val = self._validate_coordinate(int(numbers[2]), "Y")
-                        logger.debug(f"Extracted from number sequence - K: {k_val}, X: {x_val}, Y: {y_val}")
-                    except (ValueError, IndexError) as e:
-                        logger.warning(f"Error parsing number sequence: {e}")
-            
-            # Log the final extracted coordinates
-            logger.info(f"Extracted coordinates - K: {k_val}, X: {x_val}, Y: {y_val}")
-            
-            # Update game state with new coordinates
-            self.game_state.update_coordinates(k_val, x_val, y_val)
-            
-            # Emit updated coordinates
-            self.coordinates_updated.emit(self.game_state.get_coordinates())
+                # Validate the coordinate values
+                k_val = self._validate_coordinate(k_val, "K")
+                x_val = self._validate_coordinate(x_val, "X")
+                y_val = self._validate_coordinate(y_val, "Y")
+                
+                # Log the extracted coordinates
+                logger.info(f"Extracted coordinates - K: {k_val}, X: {x_val}, Y: {y_val}")
+                
+                # Only proceed if all coordinates are valid
+                if k_val is not None and x_val is not None and y_val is not None:
+                    # Update game state with new coordinates
+                    if self.game_state:
+                        self.game_state.update_coordinates(k_val, x_val, y_val)
+                        
+                        # Get the updated coordinates from the game state
+                        coords = self.game_state.get_coordinates()
+                        
+                        # Emit updated coordinates
+                        self.coordinates_updated.emit(coords)
+                        
+                        return coords
+                    else:
+                        logger.warning("No game state available to update coordinates")
+                        return None
+                else:
+                    logger.warning("One or more coordinates failed validation")
+                    return None
+            else:
+                logger.warning("Text does not match the expected coordinate format")
+                return None
             
         except Exception as e:
             logger.error(f"Error parsing coordinates: {e}", exc_info=True)
+            return None
             
     def _validate_coordinate(self, value: int, coord_type: str) -> Optional[int]:
         """

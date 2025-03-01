@@ -1,3 +1,207 @@
+# Bug Fixing Log
+
+## 2023-07-14: Strict Coordinate Format Enforcement
+
+### Issues Fixed
+- OCR system accepting invalid coordinate formats
+- Inconsistent coordinate extraction due to lenient pattern matching
+- Unnecessary text cleaning for game-specific OCR errors
+
+### Root Cause Analysis
+- The OCR system was too lenient in accepting various text formats as valid coordinates
+- Text cleaning was attempting to handle too many edge cases, leading to false positives
+- The scoring system wasn't prioritizing the expected format strongly enough
+
+### Solutions Implemented
+- Modified the coordinate extraction to strictly enforce the expected format of `K: 000 X: 000 Y: 000`
+- Updated the text scoring system to heavily prioritize text matching the expected format
+- Added a more specific OCR configuration to improve recognition of the expected format
+- Simplified text cleaning to focus only on essential character replacements
+- Added clear validation of coordinate values to ensure they are within valid ranges
+
+### Future Prevention
+- Maintain strict format validation for all coordinate extraction
+- Use clear documentation about the expected coordinate format
+- Implement comprehensive logging of rejected coordinate formats for debugging
+
+## 2023-07-13: OCR Text Extraction Improvements
+
+### Issues Fixed
+- OCR failing to extract coordinates correctly from game UI
+- Error in whitelist configuration causing OCR processing to fail
+- Poor handling of common OCR misrecognitions in the game UI
+- Inconsistent coordinate extraction from different preprocessing methods
+
+### Root Cause Analysis
+- The whitelist configuration had incorrect quotation marks causing a parsing error
+- The text cleaning process wasn't handling common OCR errors specific to the game UI
+- The scoring system for selecting the best OCR result wasn't robust enough
+- The preprocessing methods weren't optimized for the game's coordinate display
+
+### Solutions Implemented
+- Fixed the whitelist configuration by removing problematic quotation marks
+- Enhanced text cleaning to handle game-specific OCR errors (e.g., "geeX" instead of "X")
+- Added a new preprocessing method using image sharpening for better text definition
+- Improved the scoring system to better identify valid coordinate text
+- Added more robust regex patterns for coordinate extraction
+- Enhanced the text selection algorithm to skip invalid results and prioritize complete coordinates
+
+### Future Prevention
+- Added more comprehensive logging of OCR results and preprocessing steps
+- Implemented better error handling in the OCR process
+- Added more robust text cleaning and validation
+- Ensured all OCR configuration strings are properly formatted
+
+## 2023-07-12: OCR Method Selection Improvements
+
+### Issues Fixed
+- OCR producing inconsistent results with different preprocessing methods
+- Need to prioritize the `thresh3` method which produces the best results
+- No way to select which OCR preprocessing method to use
+
+### Root Cause Analysis
+- The OCR system was trying multiple preprocessing methods but not prioritizing the most reliable one
+- The scoring system sometimes selected suboptimal results
+- There was no UI option to select which preprocessing method to use
+
+### Solutions Implemented
+- Added a `preferred_method` property to the `TextOCR` class to specify which preprocessing method to prioritize
+- Modified the `extract_text` method to prioritize results from the preferred method
+- Added a dropdown menu to the OCR controls to select the preferred method
+- Set `thresh3` (Otsu's thresholding) as the default method as it produces the best results
+- Updated the `ConfigManager` to store and retrieve the preferred OCR method
+- Added detailed logging of OCR results by method for better debugging
+
+### Future Prevention
+- Always provide UI options for critical processing parameters
+- Implement proper fallback mechanisms when preferred methods fail
+- Add detailed logging to help diagnose issues with different processing methods
+
+## 2023-07-12: Mouse Movement and OCR Improvements
+
+### Issues Fixed
+- Mouse still not moving to center of screen before taking screenshots
+- OCR not extracting coordinates from screenshots
+- Coordinates not being displayed in the GUI
+- Tesseract OCR path not properly configured
+
+### Root Cause Analysis
+- The `pyautogui` library might not be working correctly for mouse movement
+- Tesseract OCR might not be properly installed or configured
+- The coordinate region might not be capturing the area where coordinates are displayed in the game UI
+
+### Solutions Implemented
+- Modified the `_center_mouse_for_measurement` method to use `win32api` for mouse movement instead of `pyautogui`
+- Added a fallback to try `pyautogui` if `win32api` fails
+- Enhanced the `extract_text` method to check for Tesseract installation and provide better error handling
+- Added automatic detection of Tesseract installation path
+- Modified the coordinate region to try different areas of the screen (bottom left, bottom center, top right, etc.)
+- Added a `try_all_coordinate_regions` method to systematically try different regions of the screen
+- Modified the `_update_coordinates` method to try all coordinate regions if the initial update fails
+
+### Future Prevention
+- Use multiple mouse movement methods with fallbacks
+- Always check for proper installation and configuration of external dependencies
+- Try multiple screen regions when extracting information from the UI
+- Add comprehensive error handling and logging
+
+## 2023-07-11: Mouse Centering and Coordinate Extraction Fixes
+
+### Issues Fixed
+- Mouse not moving to the center of the screen before taking screenshots
+- Coordinates not being extracted or displayed in the GUI
+- Auto-update not enabled by default in the coordinate display widget
+
+### Root Cause Analysis
+- The mouse centering code in `GameWorldCoordinator._center_mouse_for_measurement()` was not properly verifying that the mouse had actually moved
+- The delay after centering the mouse was too short, not giving the game UI enough time to update
+- The coordinate display widget was not starting with auto-update enabled by default
+
+### Solutions Implemented
+- Enhanced the `_center_mouse_for_measurement()` method to verify mouse position after moving
+- Added more detailed logging to track mouse movement and coordinate extraction
+- Increased the delay after centering the mouse from 0.2 to 0.5 seconds
+- Modified the `CoordinateDisplayWidget` to start with auto-update enabled by default
+- Added a forced initial update to the coordinate display widget
+
+### Future Prevention
+- Always verify the results of mouse movement operations
+- Add sufficient delays when interacting with the game UI
+- Enable auto-update features by default when they are critical to functionality
+- Add more detailed logging for debugging purposes
+
+## 2023-07-11: Fixed GameCoordinates Import Error
+
+### Issues Fixed
+- Application failing to start due to `NameError: name 'GameCoordinates' is not defined` in `text_ocr.py`
+
+### Root Cause Analysis
+- The `_extract_coordinates` method in `TextOCR` class was updated to return `Optional[GameCoordinates]`, but the `GameCoordinates` class wasn't properly imported from `game_state.py`
+
+### Solutions Implemented
+- Added proper import statement: `from scout.game_state import GameState, GameCoordinates`
+
+### Future Prevention
+- Always ensure that all type annotations have corresponding imports
+- Run a quick test after making changes to ensure the application starts correctly
+
+## 2023-07-11: Coordinate Extraction and Stop Key Functionality
+
+### Issues Fixed
+- Coordinates not being consistently extracted and displayed in the GUI
+- No way to stop OCR and other processes using keyboard shortcuts
+- Inconsistent coordinate display when OCR fails
+- Insufficient logging for debugging OCR issues
+
+### Root Cause Analysis
+- The OCR system had multiple signal paths that weren't properly connected
+- The `_on_coordinates_updated` method in `GameWorldSearchTab` wasn't properly updating the UI
+- The `_update_coordinates` method in `CoordinateDisplayWidget` didn't handle OCR failures gracefully
+- The `_process_region` and `_extract_coordinates` methods in `TextOCR` weren't properly emitting signals
+- No global key event handling for stopping processes
+
+### Solutions Implemented
+- Added a `keyPressEvent` method to the `OverlayController` class to handle Escape and Q key presses
+- Enhanced the `_on_coordinates_updated` method in `GameWorldSearchTab` to ensure it properly updates the UI
+- Improved the `_update_coordinates` method in `CoordinateDisplayWidget` to handle different coordinate sources
+- Enhanced the `_process_region` and `_extract_coordinates` methods in `TextOCR` to ensure proper signal emission
+- Added more comprehensive logging throughout the OCR process for better debugging
+- Improved error handling in coordinate extraction and display
+- Added fallback to display last known coordinates when OCR fails
+
+### Future Prevention
+- Maintain consistent signal connections between OCR system and UI components
+- Ensure all key UI components have proper error handling and fallbacks
+- Add comprehensive logging for all critical operations
+- Implement global key event handling for common operations like stopping processes
+
+## 2023-07-10: OCR System Integration
+
+### Issues Fixed
+- Inconsistent OCR processing paths leading to unreliable coordinate extraction
+- Duplicate OCR logic in `GameWorldCoordinator.update_current_position_from_ocr()` and `TextOCR._process_region()`
+- Inconsistent debug screenshot naming making it difficult to compare results
+- Coordinate display not updating properly in the game world search tab
+
+### Root Cause Analysis
+- The OCR system had two separate processing paths:
+  1. `TextOCR._process_region()` - Used by the "old" OCR system
+  2. `GameWorldCoordinator.update_current_position_from_ocr()` - Used by the game world search system
+- These paths used different methods for capturing screenshots, processing images, and extracting coordinates
+- Debug screenshots were saved with inconsistent names
+- The game world search tab wasn't properly connected to the OCR system's signals
+
+### Solutions Implemented
+- Unified OCR processing paths to ensure consistent coordinate extraction
+- Modified `GameWorldCoordinator.update_current_position_from_ocr()` to use `TextOCR._process_region()`
+- Updated `TextOCR._process_region()` to save debug images with consistent naming
+- Connected the `coordinates_updated` signal from `TextOCR` to the `_on_coordinates_updated` method in `GameWorldSearchTab`
+
+### Future Prevention
+- Maintain a single source of truth for OCR processing
+- Use consistent naming for debug images
+- Ensure all UI components are properly connected to the OCR system's signals
+
 ## OCR System and Game World Search Integration (2023-07-10)
 
 ### Issues Fixed

@@ -46,6 +46,13 @@ class CoordinateDisplayWidget(QWidget):
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self._update_coordinates)
         
+        # Start with auto-update enabled by default
+        self.auto_update_btn.setChecked(True)
+        self._toggle_auto_update(True)
+        
+        # Force an initial update
+        QTimer.singleShot(500, self._update_coordinates)
+        
     def _create_ui(self):
         """Create the widget UI."""
         layout = QVBoxLayout()
@@ -112,14 +119,26 @@ class CoordinateDisplayWidget(QWidget):
         layout.addWidget(calib_group)
         
     def _update_coordinates(self):
-        """Update the coordinate display from OCR."""
+        """
+        Update the coordinate display from OCR.
+        
+        This method attempts to update the coordinate display by:
+        1. First checking if coordinates are available in the game state
+        2. If not, triggering an OCR update via the game coordinator
+        3. Updating the UI labels with the latest coordinates
+        
+        Returns:
+            True if coordinates were successfully updated, False otherwise
+        """
         try:
-            # Update coordinates from OCR
-            success = self.game_coordinator.update_current_position_from_ocr()
+            logger.info("Updating coordinate display...")
             
-            # Get coordinates from game state if available
+            # First check if we already have coordinates in the game state
             if self.game_coordinator.game_state and self.game_coordinator.game_state.get_coordinates():
                 coords = self.game_coordinator.game_state.get_coordinates()
+                
+                # Log the coordinates we're about to display
+                logger.info(f"Using coordinates from game state: {coords}")
                 
                 # Format coordinates with a maximum of 3 digits
                 k_str = f"{coords.k:03d}" if coords.k is not None else "---"
@@ -137,9 +156,20 @@ class CoordinateDisplayWidget(QWidget):
                 
                 logger.info(f"Updated coordinate display: K: {k_str}, X: {x_str}, Y: {y_str}")
                 return True
-            elif success:
-                # If game state is not available but update was successful, use the coordinator's current position
+            
+            # If we don't have coordinates in the game state, try to update from OCR
+            logger.info("No coordinates in game state, updating from OCR...")
+            success = self.game_coordinator.update_current_position_from_ocr()
+            
+            # If the initial update fails, try all coordinate regions
+            if not success:
+                logger.info("Initial OCR update failed, trying all coordinate regions...")
+                success = self.game_coordinator.try_all_coordinate_regions()
+            
+            if success:
+                # Get the current position from the coordinator
                 pos = self.game_coordinator.current_position
+                logger.info(f"OCR update successful, current position: {pos}")
                 
                 # Format coordinates with a maximum of 3 digits
                 k_str = f"{pos.k:03d}" if pos.k is not None else "---"
@@ -155,10 +185,33 @@ class CoordinateDisplayWidget(QWidget):
                 current_time = time.strftime("%H:%M:%S")
                 self.update_time_label.setText(current_time)
                 
-                logger.info(f"Updated coordinates from coordinator: {pos}")
+                logger.info(f"Updated coordinates from coordinator: K: {k_str}, X: {x_str}, Y: {y_str}")
                 return True
             else:
                 logger.warning("Failed to update coordinates from OCR")
+                
+                # Even if OCR failed, try to display any coordinates we might have
+                pos = self.game_coordinator.current_position
+                if pos and (pos.k is not None or pos.x is not None or pos.y is not None):
+                    logger.info(f"Using last known position: {pos}")
+                    
+                    # Format coordinates with a maximum of 3 digits
+                    k_str = f"{pos.k:03d}" if pos.k is not None else "---"
+                    x_str = f"{pos.x:03d}" if pos.x is not None else "---"
+                    y_str = f"{pos.y:03d}" if pos.y is not None else "---"
+                    
+                    # Update labels
+                    self.k_label.setText(k_str)
+                    self.x_label.setText(x_str)
+                    self.y_label.setText(y_str)
+                    
+                    # Update time with warning indicator
+                    current_time = time.strftime("%H:%M:%S") + " (!)"
+                    self.update_time_label.setText(current_time)
+                    
+                    logger.info(f"Updated coordinates from last known position: K: {k_str}, X: {x_str}, Y: {y_str}")
+                    return True
+                
                 return False
                 
         except Exception as e:

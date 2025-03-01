@@ -80,7 +80,8 @@ class ConfigManager:
         "region_top": "0",
         "region_width": "0",
         "region_height": "0",
-        "dpi_scale": "1.0"
+        "dpi_scale": "1.0",
+        "preferred_method": "thresh3"  # Default to thresh3 as it produces the best results
     }
 
     # Default Debug Settings
@@ -194,7 +195,8 @@ class ConfigManager:
                 "width": self.config.getint("OCR", "region_width"),
                 "height": self.config.getint("OCR", "region_height"),
                 "dpi_scale": self.config.getfloat("OCR", "dpi_scale")
-            }
+            },
+            "preferred_method": self.config.get("OCR", "preferred_method", fallback="thresh3")
         }
 
     def update_ocr_settings(self, settings: Dict[str, Any]) -> None:
@@ -214,6 +216,9 @@ class ConfigManager:
         self.config["OCR"]["region_width"] = str(region.get("width", defaults["region_width"]))
         self.config["OCR"]["region_height"] = str(region.get("height", defaults["region_height"]))
         self.config["OCR"]["dpi_scale"] = str(region.get("dpi_scale", defaults["dpi_scale"]))
+        
+        # Add preferred OCR method
+        self.config["OCR"]["preferred_method"] = str(settings.get("preferred_method", defaults["preferred_method"]))
         
         self.save_config()
         logger.debug("Updated OCR settings")
@@ -533,7 +538,8 @@ class ConfigManager:
                     "width": int(self.DEFAULT_OCR_SETTINGS["region_width"]),
                     "height": int(self.DEFAULT_OCR_SETTINGS["region_height"]),
                     "dpi_scale": float(self.DEFAULT_OCR_SETTINGS["dpi_scale"])
-                }
+                },
+                "preferred_method": self.DEFAULT_OCR_SETTINGS["preferred_method"]
             },
             "debug": {
                 "enabled": self.DEFAULT_DEBUG_SETTINGS["enabled"].lower() == "true",

@@ -391,27 +391,49 @@ class GameWorldSearchTab(QWidget):
         """
         Handle coordinates updated signal from TextOCR.
         
+        This method is called whenever the TextOCR system extracts new coordinates.
+        It updates the coordinate display widget and status label with the latest coordinates.
+        
         Args:
-            coords: Updated coordinates
+            coords: Updated coordinates (GameCoordinates object)
         """
-        # Update the coordinate display widget with the latest coordinates
-        # This ensures the game world search tab always shows the most recent coordinates
-        # from the OCR process, which are centered and consistent
-        self.coord_widget._update_coordinates()
-        
-        # Log the updated coordinates for debugging
-        if hasattr(coords, 'k') and hasattr(coords, 'x') and hasattr(coords, 'y'):
-            k_str = f"{coords.k:03d}" if coords.k is not None else "---"
-            x_str = f"{coords.x:03d}" if coords.x is not None else "---"
-            y_str = f"{coords.y:03d}" if coords.y is not None else "---"
-            logger.info(f"Game World Search Tab received coordinates update: K: {k_str}, X: {x_str}, Y: {y_str}")
-        
-        # Also update the status label with the current coordinates
-        if hasattr(coords, 'k') and hasattr(coords, 'x') and hasattr(coords, 'y'):
-            k_str = f"{coords.k:03d}" if coords.k is not None else "---"
-            x_str = f"{coords.x:03d}" if coords.x is not None else "---"
-            y_str = f"{coords.y:03d}" if coords.y is not None else "---"
-            self.status_label.setText(f"Current position: K: {k_str}, X: {x_str}, Y: {y_str}")
+        try:
+            logger.info(f"Game World Search Tab received coordinates update signal: {coords}")
             
-        # Force the coordinate display widget to update immediately
-        self.coord_widget.update()
+            # Update the coordinate display widget with the latest coordinates
+            # This ensures the game world search tab always shows the most recent coordinates
+            # from the OCR process, which are centered and consistent
+            update_success = self.coord_widget._update_coordinates()
+            logger.info(f"Coordinate widget update {'succeeded' if update_success else 'failed'}")
+            
+            # Log the updated coordinates for debugging
+            if hasattr(coords, 'k') and hasattr(coords, 'x') and hasattr(coords, 'y'):
+                k_str = f"{coords.k:03d}" if coords.k is not None else "---"
+                x_str = f"{coords.x:03d}" if coords.x is not None else "---"
+                y_str = f"{coords.y:03d}" if coords.y is not None else "---"
+                logger.info(f"Game World Search Tab received coordinates: K: {k_str}, X: {x_str}, Y: {y_str}")
+            
+                # Also update the status label with the current coordinates
+                self.status_label.setText(f"Current position: K: {k_str}, X: {x_str}, Y: {y_str}")
+                
+                # If we're in the middle of a search, update the search status
+                if hasattr(self, 'is_searching') and self.is_searching:
+                    self.status_label.setText(f"Searching... Current position: K: {k_str}, X: {x_str}, Y: {y_str}")
+            else:
+                logger.warning(f"Received coordinates object without expected attributes: {coords}")
+                self.status_label.setText("Waiting for valid coordinates...")
+            
+            # Force the coordinate display widget to update immediately
+            self.coord_widget.update()
+            
+            # Also update the game coordinator's current position directly
+            if hasattr(coords, 'k') and hasattr(coords, 'x') and hasattr(coords, 'y'):
+                if all(coord is not None for coord in [coords.k, coords.x, coords.y]):
+                    self.game_coordinator.current_position.k = coords.k
+                    self.game_coordinator.current_position.x = coords.x
+                    self.game_coordinator.current_position.y = coords.y
+                    logger.info(f"Updated game coordinator position: {self.game_coordinator.current_position}")
+        
+        except Exception as e:
+            logger.error(f"Error in _on_coordinates_updated: {e}", exc_info=True)
+            self.status_label.setText("Error updating coordinates. Check logs.")

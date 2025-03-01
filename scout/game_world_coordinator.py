@@ -15,6 +15,7 @@ import cv2
 import pytesseract
 import time
 import mss
+import win32api
 
 from scout.window_manager import WindowManager
 from scout.text_ocr import TextOCR
@@ -98,22 +99,44 @@ class GameWorldCoordinator:
             self.screen_width = window_pos[2]
             self.screen_height = window_pos[3]
             
-            # Set default coordinate region (bottom center of the screen)
-            # Coordinates are typically displayed at the bottom of the game UI
-            self.coord_region = (
+            # Set default coordinate region
+            # Try different regions based on common game UI layouts
+            
+            # Option 1: Bottom left corner (common for many games)
+            bottom_left_region = (
+                50,                          # x - left side of the screen
+                self.screen_height - 100,    # y - near the bottom
+                300,                         # width - wide enough to capture coordinates
+                50                           # height - tall enough for the text
+            )
+            
+            # Option 2: Bottom center (alternative layout)
+            bottom_center_region = (
                 self.screen_width // 2 - 150,  # x - centered horizontally
                 self.screen_height - 100,      # y - near the bottom
                 300,                           # width - wide enough to capture coordinates
                 50                             # height - tall enough for the text
             )
             
+            # Option 3: Top right corner (another common location)
+            top_right_region = (
+                self.screen_width - 350,     # x - right side of the screen
+                50,                          # y - near the top
+                300,                         # width - wide enough to capture coordinates
+                50                           # height - tall enough for the text
+            )
+            
+            # Set the default region to bottom left (most common)
+            self.coord_region = bottom_left_region
+            
             logger.info(f"Initialized game world coordinator with screen size: {self.screen_width}x{self.screen_height}")
-            logger.info(f"Default coordinate region set to: {self.coord_region}")
+            logger.info(f"Default coordinate region set to bottom left: {self.coord_region}")
+            logger.info(f"Alternative regions available: bottom center, top right")
         else:
             logger.warning("Could not get window position, using default values")
             self.screen_width = 3900
             self.screen_height = 1800
-            self.coord_region = (1800, 1700, 300, 50)
+            self.coord_region = (50, 1700, 300, 50)  # Default to bottom left
     
     def update_current_position_from_ocr(self) -> bool:
         """
@@ -131,8 +154,14 @@ class GameWorldCoordinator:
             True if coordinates were successfully read, False otherwise
         """
         try:
+            logger.info("Starting OCR update process to get current position")
+            
             # First center the mouse to ensure consistent measurements
             self._center_mouse_for_measurement()
+            
+            # Force a delay to ensure the mouse movement is complete and the game UI has updated
+            logger.info("Waiting for game UI to update after mouse centering...")
+            time.sleep(0.5)  # Increased delay to ensure UI updates
             
             # Instead of duplicating the OCR logic, use the TextOCR's region and processing method
             # This ensures we're using the same OCR processing path as the "old" OCR system
@@ -166,13 +195,15 @@ class GameWorldCoordinator:
                     
                 # Save the screenshot for debugging
                 cv2.imwrite(str(debug_dir / 'coord_region_from_game_world.png'), screenshot)
-                logger.debug("Saved coordinate region screenshot for debugging")
+                logger.info("Saved coordinate region screenshot for debugging")
             
             # Trigger the TextOCR processing
+            logger.info("Triggering TextOCR processing...")
             self.text_ocr._process_region()
             
-            # Wait a short time for OCR processing to complete
-            time.sleep(0.1)
+            # Wait for OCR processing to complete
+            logger.info("Waiting for OCR processing to complete...")
+            time.sleep(0.3)
             
             # The coordinates will be updated via the TextOCR's _extract_coordinates method
             # which emits the coordinates_updated signal and updates the game state
@@ -183,7 +214,7 @@ class GameWorldCoordinator:
                 self.current_position.x = coords.x
                 self.current_position.y = coords.y
                 self.current_position.k = coords.k
-                logger.info(f"Updated current position from OCR: {self.current_position}")
+                logger.info(f"Successfully updated current position from OCR: {self.current_position}")
                 return True
             else:
                 logger.warning("No coordinates were extracted from OCR")
@@ -213,10 +244,24 @@ class GameWorldCoordinator:
             center_x = left + width // 2
             center_y = top + height // 2
             
-            # Move mouse to center
+            # Log current mouse position
             import pyautogui
+            current_x, current_y = pyautogui.position()
+            logger.info(f"Current mouse position: ({current_x}, {current_y})")
+            
+            # Move mouse to center
+            logger.info(f"Moving mouse to center: ({center_x}, {center_y})")
             pyautogui.moveTo(center_x, center_y)
-            logger.debug(f"Centered mouse at ({center_x}, {center_y}) for coordinate measurement")
+            
+            # Verify mouse position after move
+            new_x, new_y = pyautogui.position()
+            logger.info(f"New mouse position: ({new_x}, {new_y})")
+            
+            # Check if mouse was actually moved
+            if abs(new_x - center_x) > 5 or abs(new_y - center_y) > 5:
+                logger.warning(f"Mouse did not move to expected position. Expected: ({center_x}, {center_y}), Actual: ({new_x}, {new_y})")
+            else:
+                logger.info(f"Successfully centered mouse at ({center_x}, {center_y}) for coordinate measurement")
             
         except Exception as e:
             logger.error(f"Error centering mouse: {e}", exc_info=True)
@@ -562,4 +607,54 @@ class GameWorldCoordinator:
         top_left = self.screen_to_game_coords(0, 0)
         bottom_right = self.screen_to_game_coords(self.screen_width, self.screen_height)
         
-        return (top_left.x, top_left.y, bottom_right.x, bottom_right.y) 
+        return (top_left.x, top_left.y, bottom_right.x, bottom_right.y)
+    
+    def try_all_coordinate_regions(self) -> bool:
+        """
+        Try all predefined coordinate regions to find the one that works best.
+        
+        This method attempts to extract coordinates from different regions of the screen
+        to find the one that contains the coordinate display in the game UI.
+        
+        Returns:
+            True if coordinates were successfully extracted from any region, False otherwise
+        """
+        logger.info("Trying all coordinate regions to find the best one")
+        
+        # Get window position
+        window_pos = self.window_manager.get_window_position()
+        if not window_pos:
+            logger.warning("Could not get window position")
+            return False
+            
+        # Define regions to try
+        regions = [
+            # Bottom left
+            (50, window_pos[3] - 100, 300, 50),
+            # Bottom center
+            (window_pos[2] // 2 - 150, window_pos[3] - 100, 300, 50),
+            # Top right
+            (window_pos[2] - 350, 50, 300, 50),
+            # Top left
+            (50, 50, 300, 50),
+            # Center
+            (window_pos[2] // 2 - 150, window_pos[3] // 2 - 25, 300, 50)
+        ]
+        
+        # Try each region
+        for i, region in enumerate(regions):
+            logger.info(f"Trying region {i+1}: {region}")
+            
+            # Set the current region
+            self.coord_region = region
+            
+            # Try to update position from this region
+            if self.update_current_position_from_ocr():
+                logger.info(f"Successfully extracted coordinates from region {i+1}: {region}")
+                return True
+                
+            # Wait a bit before trying the next region
+            time.sleep(0.5)
+            
+        logger.warning("Could not extract coordinates from any region")
+        return False 
