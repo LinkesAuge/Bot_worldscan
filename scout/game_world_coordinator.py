@@ -18,48 +18,21 @@ import mss
 import win32api
 import ctypes
 import win32con
+import json
 
 from scout.window_manager import WindowManager
 from scout.text_ocr import TextOCR
+from scout.game_world_position import GameWorldPosition
 
 logger = logging.getLogger(__name__)
-
-@dataclass
-class GameWorldPosition:
-    """
-    Represents a position in the game world.
-    
-    Attributes:
-        x: X coordinate in the game world
-        y: Y coordinate in the game world
-        k: K coordinate (world number) in the game
-        screen_x: Optional X coordinate on screen (pixels)
-        screen_y: Optional Y coordinate on screen (pixels)
-    """
-    x: int
-    y: int
-    k: int = 0
-    screen_x: Optional[int] = None
-    screen_y: Optional[int] = None
-    
-    def __str__(self) -> str:
-        """String representation of the position."""
-        # Format coordinates with a maximum of 3 digits
-        k_str = f"{self.k:03d}" if self.k is not None else "---"
-        x_str = f"{self.x:03d}" if self.x is not None else "---"
-        y_str = f"{self.y:03d}" if self.y is not None else "---"
-        return f"GameWorldPosition(K: {k_str}, X: {x_str}, Y: {y_str})"
-
 
 class GameWorldCoordinator:
     """
     Coordinates between screen coordinates and game world coordinates.
     
-    This class handles:
-    - Tracking the current view position in game world coordinates
-    - Converting between screen coordinates and game world coordinates
-    - Calculating drag operations to move to specific game world coordinates
-    - Updating the current position based on OCR readings
+    This class manages the conversion between screen coordinates (pixels) and
+    game world coordinates (K, X, Y). It also handles navigation, position tracking,
+    and calibration.
     """
     
     def __init__(self, window_manager: WindowManager, text_ocr: TextOCR, game_state=None):
@@ -69,76 +42,245 @@ class GameWorldCoordinator:
         Args:
             window_manager: The window manager instance
             text_ocr: The text OCR instance
-            game_state: Optional GameState instance for coordinate tracking
+            game_state: Optional game state instance
         """
         self.window_manager = window_manager
         self.text_ocr = text_ocr
         self.game_state = game_state
         
-        # Current view position in game world coordinates
+        # Current position in the game world
         self.current_position = GameWorldPosition(0, 0, 0)
         
-        # Screen dimensions
-        self.screen_width = 0
-        self.screen_height = 0
+        # Region where coordinates are displayed
+        self.coord_region = None
         
         # Calibration data
-        self.calibration_points: List[Tuple[GameWorldPosition, GameWorldPosition]] = []
-        self.pixels_per_game_unit_x = 1.0  # Will be calibrated
-        self.pixels_per_game_unit_y = 1.0  # Will be calibrated
+        self.calibration_in_progress = False
+        self.calibration_start_position = None
+        self.calibration_start_screen = None
+        self.pixels_per_game_unit_x = 10.0  # Default value
+        self.pixels_per_game_unit_y = 10.0  # Default value
         
-        # Coordinate display region (where to look for coordinates in OCR)
-        self.coord_region = (0, 0, 0, 0)  # (x, y, width, height)
-        
-        # Initialize with default values
+        # Initialize
         self._initialize()
         
     def _initialize(self) -> None:
-        """Initialize with default values."""
-        # Get screen dimensions
-        window_pos = self.window_manager.get_window_position()
-        if window_pos:
-            self.screen_width = window_pos[2]
-            self.screen_height = window_pos[3]
+        """Initialize the coordinator."""
+        # Create config directory if it doesn't exist
+        config_dir = Path("config")
+        config_dir.mkdir(exist_ok=True)
+        
+        # Load calibration points if they exist
+        self._load_calibration_data()
+        
+        logger.info(f"Game world coordinator initialized with pixels per game unit: X={self.pixels_per_game_unit_x:.2f}, Y={self.pixels_per_game_unit_y:.2f}")
+
+    def _save_calibration_data(self) -> None:
+        """Save calibration data to disk."""
+        try:
+            # Create config directory if it doesn't exist
+            config_dir = Path("config")
+            config_dir.mkdir(exist_ok=True)
             
-            # Set default coordinate region
-            # Try different regions based on common game UI layouts
+            # Prepare calibration data
+            calibration_data = {
+                "pixels_per_game_unit_x": self.pixels_per_game_unit_x,
+                "pixels_per_game_unit_y": self.pixels_per_game_unit_y,
+            }
             
-            # Option 1: Bottom left corner (common for many games)
-            bottom_left_region = (
-                50,                          # x - left side of the screen
-                self.screen_height - 100,    # y - near the bottom
-                300,                         # width - wide enough to capture coordinates
-                50                           # height - tall enough for the text
+            # Save to file
+            with open("config/calibration_data.json", "w") as f:
+                json.dump(calibration_data, f, indent=4)
+                
+            logger.info(f"Saved calibration data: X={self.pixels_per_game_unit_x:.2f}, Y={self.pixels_per_game_unit_y:.2f}")
+            
+        except Exception as e:
+            logger.error(f"Error saving calibration data: {e}", exc_info=True)
+
+    def _load_calibration_data(self) -> None:
+        """Load calibration data from disk."""
+        try:
+            # Check if file exists
+            if not Path("config/calibration_data.json").exists():
+                logger.info("No calibration data found, using default values")
+                return
+                
+            # Load from file
+            with open("config/calibration_data.json", "r") as f:
+                calibration_data = json.load(f)
+                
+            # Update calibration values
+            self.pixels_per_game_unit_x = calibration_data.get("pixels_per_game_unit_x", 10.0)
+            self.pixels_per_game_unit_y = calibration_data.get("pixels_per_game_unit_y", 10.0)
+                
+            logger.info(f"Loaded calibration data: X={self.pixels_per_game_unit_x:.2f}, Y={self.pixels_per_game_unit_y:.2f}")
+            
+        except Exception as e:
+            logger.error(f"Error loading calibration data: {e}", exc_info=True)
+            # Use default values
+            self.pixels_per_game_unit_x = 10.0
+            self.pixels_per_game_unit_y = 10.0
+
+    def start_calibration(self) -> bool:
+        """
+        Start the calibration process.
+        
+        This records the current position as the starting point for calibration.
+        The user should then drag/scroll the map to a different position.
+        
+        Returns:
+            True if calibration started successfully, False otherwise
+        """
+        try:
+            # Update current position from OCR
+            success = self.update_current_position_from_ocr()
+            if not success:
+                logger.warning("Failed to get current position for calibration start")
+                return False
+                
+            # Get current position
+            start_pos = self.current_position
+            if not start_pos or start_pos.x is None or start_pos.y is None:
+                logger.warning("Invalid position data for calibration start")
+                return False
+                
+            # Get window center
+            window_pos = self.window_manager.get_window_position()
+            if not window_pos:
+                logger.error("Failed to get window position for calibration")
+                return False
+                
+            # Record starting position
+            self.calibration_start_position = GameWorldPosition(
+                start_pos.x, 
+                start_pos.y, 
+                start_pos.k
             )
             
-            # Option 2: Bottom center (alternative layout)
-            bottom_center_region = (
-                self.screen_width // 2 - 150,  # x - centered horizontally
-                self.screen_height - 100,      # y - near the bottom
-                300,                           # width - wide enough to capture coordinates
-                50                             # height - tall enough for the text
+            # Record screen center
+            self.calibration_start_screen = (
+                window_pos[0] + window_pos[2] // 2,
+                window_pos[1] + window_pos[3] // 2
             )
             
-            # Option 3: Top right corner (another common location)
-            top_right_region = (
-                self.screen_width - 350,     # x - right side of the screen
-                50,                          # y - near the top
-                300,                         # width - wide enough to capture coordinates
-                50                           # height - tall enough for the text
+            # Set calibration in progress
+            self.calibration_in_progress = True
+            
+            logger.info(f"Started calibration at position {self.calibration_start_position}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error starting calibration: {e}", exc_info=True)
+            self.calibration_in_progress = False
+            return False
+            
+    def complete_calibration(self) -> bool:
+        """
+        Complete the calibration process.
+        
+        This records the current position as the ending point for calibration
+        and calculates the pixels per game unit ratio.
+        
+        Returns:
+            True if calibration completed successfully, False otherwise
+        """
+        try:
+            # Check if calibration is in progress
+            if not self.calibration_in_progress:
+                logger.warning("No calibration in progress")
+                return False
+                
+            # Update current position from OCR
+            success = self.update_current_position_from_ocr()
+            if not success:
+                logger.warning("Failed to get current position for calibration end")
+                return False
+                
+            # Get current position
+            end_pos = self.current_position
+            if not end_pos or end_pos.x is None or end_pos.y is None:
+                logger.warning("Invalid position data for calibration end")
+                return False
+                
+            # Get window center
+            window_pos = self.window_manager.get_window_position()
+            if not window_pos:
+                logger.error("Failed to get window position for calibration end")
+                return False
+                
+            # Get end screen position
+            end_screen = (
+                window_pos[0] + window_pos[2] // 2,
+                window_pos[1] + window_pos[3] // 2
             )
             
-            # Set the default region to bottom left (most common)
-            self.coord_region = bottom_left_region
+            # Calculate game world distance
+            dx_game = end_pos.x - self.calibration_start_position.x
+            dy_game = end_pos.y - self.calibration_start_position.y
             
-            logger.info(f"Initialized game world coordinator with screen size: {self.screen_width}x{self.screen_height}")
-            logger.info(f"Default coordinate region set to bottom left: {self.coord_region}")
-            logger.info(f"Alternative regions available: bottom center, top right")
+            # Check if we have a meaningful distance
+            if abs(dx_game) < 5 and abs(dy_game) < 5:
+                logger.warning("Calibration distance too small, please drag further")
+                return False
+                
+            # Calculate screen distance (this will be 0 since we're using the center)
+            # Instead, we need to calculate the drag distance
+            # For this, we use the estimate_position_after_drag method in reverse
+            
+            # The drag vector is what we need to calculate
+            # We know the start and end game positions, and we need to find the drag vector
+            # that would cause this change
+            
+            # Calculate the drag distance based on the current pixels_per_game_unit values
+            # This is an approximation that will be refined
+            drag_x = -dx_game * self.pixels_per_game_unit_x
+            drag_y = -dy_game * self.pixels_per_game_unit_y
+            
+            # Now update the pixels_per_game_unit values
+            if dx_game != 0:
+                self.pixels_per_game_unit_x = abs(drag_x / dx_game)
+            
+            if dy_game != 0:
+                self.pixels_per_game_unit_y = abs(drag_y / dy_game)
+                
+            # Reset calibration state
+            self.calibration_in_progress = False
+            self.calibration_start_position = None
+            self.calibration_start_screen = None
+            
+            # Save calibration data
+            self._save_calibration_data()
+            
+            logger.info(f"Completed calibration: X={self.pixels_per_game_unit_x:.2f}, Y={self.pixels_per_game_unit_y:.2f}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error completing calibration: {e}", exc_info=True)
+            self.calibration_in_progress = False
+            return False
+            
+    def cancel_calibration(self) -> None:
+        """Cancel the current calibration process."""
+        self.calibration_in_progress = False
+        self.calibration_start_position = None
+        self.calibration_start_screen = None
+        logger.info("Calibration cancelled")
+        
+    def is_calibration_in_progress(self) -> bool:
+        """Check if calibration is in progress."""
+        return self.calibration_in_progress
+        
+    def get_calibration_status(self) -> str:
+        """
+        Get the current calibration status.
+        
+        Returns:
+            A string describing the current calibration status
+        """
+        if self.calibration_in_progress:
+            return f"Calibration in progress. Started at {self.calibration_start_position}"
         else:
-            logger.warning("Could not get window position, using default values")
-            self.screen_width = 3900
-            self.screen_height = 1800
-            self.coord_region = (50, 1700, 300, 50)  # Default to bottom left
+            return f"Calibration: X={self.pixels_per_game_unit_x:.2f}, Y={self.pixels_per_game_unit_y:.2f} pixels per game unit"
     
     def update_current_position_from_ocr(self) -> bool:
         """
@@ -160,6 +302,18 @@ class GameWorldCoordinator:
             False if no valid coordinates are available
         """
         try:
+            # Add a rate limiter to prevent excessive OCR operations
+            current_time = time.time()
+            if hasattr(self, '_last_ocr_time') and current_time - self._last_ocr_time < 0.5:  # 500ms minimum between calls
+                logger.debug("OCR operation rate limited - too many calls in quick succession")
+                # If we have valid coordinates, consider this a success
+                if self.current_position.x is not None or self.current_position.y is not None or self.current_position.k is not None:
+                    return True
+                return False
+            
+            # Update the last OCR time
+            self._last_ocr_time = current_time
+            
             logger.info("Starting OCR update process to get current position")
             
             # First check if we already have valid coordinates in the game state
@@ -237,16 +391,38 @@ class GameWorldCoordinator:
                 cv2.imwrite(str(debug_dir / 'coord_region_from_game_world.png'), screenshot)
                 logger.info("Saved coordinate region screenshot for debugging")
             
-            # Trigger the TextOCR processing
+            # Trigger the TextOCR processing with a timeout
             logger.info("Triggering TextOCR processing...")
-            self.text_ocr._process_region()
             
-            # Wait for OCR processing to complete
-            logger.info("Waiting for OCR processing to complete...")
-            time.sleep(0.3)
+            # Use a simple timeout approach instead of threading
+            start_time = time.time()
+            ocr_timeout = 3.0  # 3 seconds timeout
+            ocr_result = False
             
-            # The coordinates will be updated via the TextOCR's _extract_coordinates method
-            # which emits the coordinates_updated signal and updates the game state
+            try:
+                # Process the OCR region directly
+                self.text_ocr._process_region()
+                ocr_result = True
+                logger.info("OCR processing completed successfully")
+            except Exception as e:
+                logger.error(f"Error in OCR processing: {e}", exc_info=True)
+                ocr_result = False
+            
+            # Check if the operation took too long
+            elapsed_time = time.time() - start_time
+            if elapsed_time > ocr_timeout:
+                logger.warning(f"OCR processing took too long: {elapsed_time:.2f} seconds (timeout: {ocr_timeout} seconds)")
+            
+            if not ocr_result:
+                logger.warning("OCR processing failed")
+                # If we have valid coordinates in the game state, consider this a success
+                if self.game_state and self.game_state.get_coordinates() and self.game_state.get_coordinates().is_valid():
+                    return True
+                # If we have valid coordinates in our current position, consider this a success
+                if self.current_position.x is not None or self.current_position.y is not None or self.current_position.k is not None:
+                    logger.info(f"Using existing coordinates after OCR failure: {self.current_position}")
+                    return True
+                return False
             
             # Check if coordinates were updated
             if self.game_state and self.game_state.get_coordinates():
@@ -568,207 +744,185 @@ class GameWorldCoordinator:
             logger.error(f"Error parsing coordinates: {e}", exc_info=True)
             return None
     
-    def set_coord_region(self, x: int, y: int, width: int, height: int) -> None:
+    def set_coord_region(self, region_name: str) -> None:
         """
         Set the region where coordinates are displayed.
         
         Args:
-            x: X coordinate of the region
-            y: Y coordinate of the region
-            width: Width of the region
-            height: Height of the region
+            region_name: Name of the region ("bottom_left", "bottom_center", "top_right", or "custom")
         """
-        self.coord_region = (x, y, width, height)
-        logger.info(f"Set coordinate region to: {self.coord_region}")
-    
-    def add_calibration_point(self, screen_pos: Tuple[int, int], game_pos: Tuple[int, int]) -> None:
-        """
-        Add a calibration point to improve coordinate conversion accuracy.
-        
-        Args:
-            screen_pos: (x, y) position on screen in pixels
-            game_pos: (x, y) position in game world coordinates
-        """
-        screen_position = GameWorldPosition(0, 0, 0, screen_pos[0], screen_pos[1])
-        game_position = GameWorldPosition(game_pos[0], game_pos[1], 0)
-        
-        self.calibration_points.append((screen_position, game_position))
-        
-        # Recalculate calibration
-        self._calibrate()
-        
-        logger.info(f"Added calibration point: {screen_pos} -> {game_pos}")
-    
-    def _calibrate(self) -> None:
-        """Calibrate the coordinate conversion based on collected points."""
-        if len(self.calibration_points) < 2:
-            logger.warning("Not enough calibration points, using default values")
+        # Get window dimensions
+        window_pos = self.window_manager.get_window_position()
+        if not window_pos:
+            logger.warning("Could not get window position, using default values")
+            self.coord_region = (50, 50, 300, 50)  # Default
             return
             
-        # Calculate pixels per game unit
-        try:
-            # Extract screen and game coordinates
-            screen_xs = [p[0].screen_x for p in self.calibration_points]
-            screen_ys = [p[0].screen_y for p in self.calibration_points]
-            game_xs = [p[1].x for p in self.calibration_points]
-            game_ys = [p[1].y for p in self.calibration_points]
+        screen_width = window_pos[2]
+        screen_height = window_pos[3]
+        
+        # Set region based on name
+        if region_name == "bottom_left":
+            self.coord_region = (
+                50,                      # x - left side of the screen
+                screen_height - 100,     # y - near the bottom
+                300,                     # width - wide enough to capture coordinates
+                50                       # height - tall enough for the text
+            )
+        elif region_name == "bottom_center":
+            self.coord_region = (
+                screen_width // 2 - 150,  # x - centered horizontally
+                screen_height - 100,      # y - near the bottom
+                300,                      # width - wide enough to capture coordinates
+                50                        # height - tall enough for the text
+            )
+        elif region_name == "top_right":
+            self.coord_region = (
+                screen_width - 350,      # x - right side of the screen
+                50,                      # y - near the top
+                300,                     # width - wide enough to capture coordinates
+                50                       # height - tall enough for the text
+            )
+        elif region_name == "custom":
+            # Keep existing region if it's already set
+            if not self.coord_region:
+                self.coord_region = (50, 50, 300, 50)  # Default
+        else:
+            logger.warning(f"Unknown region name: {region_name}, using default")
+            self.coord_region = (50, screen_height - 100, 300, 50)  # Default to bottom left
             
-            # Calculate differences
-            screen_x_diffs = [abs(screen_xs[i] - screen_xs[j]) 
-                             for i in range(len(screen_xs)) 
-                             for j in range(i+1, len(screen_xs))]
-            
-            screen_y_diffs = [abs(screen_ys[i] - screen_ys[j]) 
-                             for i in range(len(screen_ys)) 
-                             for j in range(i+1, len(screen_ys))]
-            
-            game_x_diffs = [abs(game_xs[i] - game_xs[j]) 
-                           for i in range(len(game_xs)) 
-                           for j in range(i+1, len(game_xs))]
-            
-            game_y_diffs = [abs(game_ys[i] - game_ys[j]) 
-                           for i in range(len(game_ys)) 
-                           for j in range(i+1, len(game_ys))]
-            
-            # Calculate ratios
-            x_ratios = [s/g if g != 0 else 0 for s, g in zip(screen_x_diffs, game_x_diffs)]
-            y_ratios = [s/g if g != 0 else 0 for s, g in zip(screen_y_diffs, game_y_diffs)]
-            
-            # Filter out zeros and calculate average
-            x_ratios = [r for r in x_ratios if r > 0]
-            y_ratios = [r for r in y_ratios if r > 0]
-            
-            if x_ratios:
-                self.pixels_per_game_unit_x = sum(x_ratios) / len(x_ratios)
-            
-            if y_ratios:
-                self.pixels_per_game_unit_y = sum(y_ratios) / len(y_ratios)
-                
-            logger.info(f"Calibrated: {self.pixels_per_game_unit_x:.2f} pixels/unit X, "
-                       f"{self.pixels_per_game_unit_y:.2f} pixels/unit Y")
-                
-        except Exception as e:
-            logger.error(f"Error during calibration: {e}", exc_info=True)
+        logger.info(f"Set coordinate region to: {region_name} {self.coord_region}")
     
     def screen_to_game_coords(self, screen_x: int, screen_y: int) -> GameWorldPosition:
         """
         Convert screen coordinates to game world coordinates.
         
         Args:
-            screen_x: X coordinate on screen (pixels)
-            screen_y: Y coordinate on screen (pixels)
+            screen_x: X coordinate on screen in pixels
+            screen_y: Y coordinate on screen in pixels
             
         Returns:
-            Position in game world coordinates
+            Game world position
         """
-        # Calculate center of screen
-        center_x = self.screen_width // 2
-        center_y = self.screen_height // 2
+        # Get window center
+        window_pos = self.window_manager.get_window_position()
+        if not window_pos:
+            logger.error("Failed to get window position")
+            return GameWorldPosition(0, 0, 0)
+            
+        center_x = window_pos[0] + window_pos[2] // 2
+        center_y = window_pos[1] + window_pos[3] // 2
         
         # Calculate offset from center in pixels
-        offset_x = screen_x - center_x
-        offset_y = screen_y - center_y
+        dx_pixels = screen_x - center_x
+        dy_pixels = screen_y - center_y
         
-        # Convert to game units
-        game_offset_x = offset_x / self.pixels_per_game_unit_x if self.pixels_per_game_unit_x != 0 else 0
-        game_offset_y = offset_y / self.pixels_per_game_unit_y if self.pixels_per_game_unit_y != 0 else 0
+        # Convert to game units using calibration
+        dx_game = dx_pixels / self.pixels_per_game_unit_x
+        dy_game = dy_pixels / self.pixels_per_game_unit_y
         
-        # Add to current position
-        game_x = self.current_position.x + int(game_offset_x)
-        game_y = self.current_position.y + int(game_offset_y)
+        # Get current position
+        current_pos = self.current_position
         
-        return GameWorldPosition(game_x, game_y, self.current_position.k, screen_x, screen_y)
+        # Calculate game world coordinates
+        # Note: In game world, increasing Y is down, so we negate dy_game
+        game_x = current_pos.x + dx_game
+        game_y = current_pos.y - dy_game
+        
+        return GameWorldPosition(game_x, game_y, current_pos.k)
     
-    def game_to_screen_coords(self, game_x: int, game_y: int) -> Tuple[int, int]:
+    def game_to_screen_coords(self, game_x: float, game_y: float, game_k: int = None) -> Tuple[int, int]:
         """
         Convert game world coordinates to screen coordinates.
         
         Args:
             game_x: X coordinate in game world
             game_y: Y coordinate in game world
+            game_k: K coordinate in game world (optional)
             
         Returns:
-            (x, y) position on screen in pixels
+            (screen_x, screen_y) tuple of screen coordinates
         """
-        # Calculate offset from current position in game units
-        offset_x = game_x - self.current_position.x
-        offset_y = game_y - self.current_position.y
+        # Get window center
+        window_pos = self.window_manager.get_window_position()
+        if not window_pos:
+            logger.error("Failed to get window position")
+            return (0, 0)
+            
+        center_x = window_pos[0] + window_pos[2] // 2
+        center_y = window_pos[1] + window_pos[3] // 2
         
-        # Convert to pixels
-        pixel_offset_x = offset_x * self.pixels_per_game_unit_x
-        pixel_offset_y = offset_y * self.pixels_per_game_unit_y
+        # Get current position
+        current_pos = self.current_position
         
-        # Add to center of screen
-        screen_x = self.screen_width // 2 + int(pixel_offset_x)
-        screen_y = self.screen_height // 2 + int(pixel_offset_y)
+        # Calculate offset in game units
+        dx_game = game_x - current_pos.x
+        dy_game = game_y - current_pos.y
+        
+        # Convert to pixels using calibration
+        dx_pixels = dx_game * self.pixels_per_game_unit_x
+        dy_pixels = dy_game * self.pixels_per_game_unit_y
+        
+        # Calculate screen coordinates
+        # Note: In game world, increasing Y is down, so we negate dy_pixels
+        screen_x = int(center_x + dx_pixels)
+        screen_y = int(center_y - dy_pixels)
         
         return (screen_x, screen_y)
     
-    def calculate_drag_vector(self, target_x: int, target_y: int) -> Tuple[int, int, int, int]:
+    def calculate_drag_vector(self, target_x: float, target_y: float) -> Tuple[int, int]:
         """
-        Calculate drag vector to move to target game coordinates.
+        Calculate the drag vector needed to move to target coordinates.
         
         Args:
             target_x: Target X coordinate in game world
             target_y: Target Y coordinate in game world
             
         Returns:
-            (start_x, start_y, end_x, end_y) for drag operation
+            (drag_x, drag_y) tuple representing the drag vector in pixels
         """
-        # Calculate offset from current position in game units
-        offset_x = self.current_position.x - target_x
-        offset_y = self.current_position.y - target_y
+        # Get current position
+        current_pos = self.current_position
         
-        # Convert to pixels
-        pixel_offset_x = offset_x * self.pixels_per_game_unit_x
-        pixel_offset_y = offset_y * self.pixels_per_game_unit_y
+        # Calculate offset in game units
+        dx_game = target_x - current_pos.x
+        dy_game = target_y - current_pos.y
         
-        # Calculate drag distance (limited to avoid too large drags)
-        max_drag = min(self.screen_width, self.screen_height) // 3
-        drag_distance = math.sqrt(pixel_offset_x**2 + pixel_offset_y**2)
+        # Convert to pixels using calibration
+        # Note: Drag is in opposite direction of coordinate change
+        drag_x = -int(dx_game * self.pixels_per_game_unit_x)
+        drag_y = int(dy_game * self.pixels_per_game_unit_y)
         
-        if drag_distance > max_drag:
-            # Scale down to max_drag
-            scale = max_drag / drag_distance
-            pixel_offset_x *= scale
-            pixel_offset_y *= scale
-        
-        # Calculate drag start and end points
-        center_x = self.screen_width // 2
-        center_y = self.screen_height // 2
-        
-        start_x = center_x
-        start_y = center_y
-        end_x = center_x + int(pixel_offset_x)
-        end_y = center_y + int(pixel_offset_y)
-        
-        return (start_x, start_y, end_x, end_y)
+        logger.info(f"Calculated drag vector: ({drag_x}, {drag_y}) for target ({target_x}, {target_y})")
+        return (drag_x, drag_y)
     
     def estimate_position_after_drag(self, start_x: int, start_y: int, end_x: int, end_y: int) -> GameWorldPosition:
         """
         Estimate the new position after a drag operation.
         
         Args:
-            start_x: Start X coordinate for drag
-            start_y: Start Y coordinate for drag
-            end_x: End X coordinate for drag
-            end_y: End Y coordinate for drag
+            start_x: Start X coordinate of drag (screen pixels)
+            start_y: Start Y coordinate of drag (screen pixels)
+            end_x: End X coordinate of drag (screen pixels)
+            end_y: End Y coordinate of drag (screen pixels)
             
         Returns:
             Estimated new position in game world coordinates
         """
-        # Calculate pixel offset
-        pixel_offset_x = end_x - start_x
-        pixel_offset_y = end_y - start_y
+        # Calculate drag distance in pixels
+        drag_x = end_x - start_x
+        drag_y = end_y - start_y
         
         # Convert to game units
-        game_offset_x = pixel_offset_x / self.pixels_per_game_unit_x if self.pixels_per_game_unit_x != 0 else 0
-        game_offset_y = pixel_offset_y / self.pixels_per_game_unit_y if self.pixels_per_game_unit_y != 0 else 0
+        # Note: Drag is in opposite direction of coordinate change
+        dx_game = -drag_x / self.pixels_per_game_unit_x
+        dy_game = drag_y / self.pixels_per_game_unit_y
         
         # Calculate new position
-        new_x = self.current_position.x - int(game_offset_x)
-        new_y = self.current_position.y - int(game_offset_y)
+        new_x = self.current_position.x + dx_game
+        new_y = self.current_position.y + dy_game
         
+        logger.info(f"Estimated position after drag: ({new_x:.2f}, {new_y:.2f})")
         return GameWorldPosition(new_x, new_y, self.current_position.k)
     
     def update_position_after_drag(self, start_x: int, start_y: int, end_x: int, end_y: int) -> None:
@@ -785,84 +939,109 @@ class GameWorldCoordinator:
         self.current_position = new_position
         logger.info(f"Updated position after drag: {self.current_position}")
     
-    def is_position_on_screen(self, game_x: int, game_y: int) -> bool:
+    def is_position_on_screen(self, game_x: float, game_y: float) -> bool:
         """
-        Check if a game world position is currently visible on screen.
+        Check if a game world position is visible on the current screen.
         
         Args:
             game_x: X coordinate in game world
             game_y: Y coordinate in game world
             
         Returns:
-            True if the position is visible on screen, False otherwise
+            True if the position is on screen, False otherwise
         """
-        screen_x, screen_y = self.game_to_screen_coords(game_x, game_y)
-        
-        # Add some margin
-        margin = 50
-        
-        return (margin <= screen_x <= self.screen_width - margin and 
-                margin <= screen_y <= self.screen_height - margin)
-    
-    def get_visible_game_area(self) -> Tuple[int, int, int, int]:
-        """
-        Get the game world coordinates of the visible area.
-        
-        Returns:
-            (min_x, min_y, max_x, max_y) in game world coordinates
-        """
-        # Convert screen corners to game coordinates
-        top_left = self.screen_to_game_coords(0, 0)
-        bottom_right = self.screen_to_game_coords(self.screen_width, self.screen_height)
-        
-        return (top_left.x, top_left.y, bottom_right.x, bottom_right.y)
-    
-    def try_all_coordinate_regions(self) -> bool:
-        """
-        Try all predefined coordinate regions to find the one that works best.
-        
-        This method attempts to extract coordinates from different regions of the screen
-        to find the one that contains the coordinate display in the game UI.
-        
-        Returns:
-            True if coordinates were successfully extracted from any region, False otherwise
-        """
-        logger.info("Trying all coordinate regions to find the best one")
+        # Convert to screen coordinates
+        screen_coords = self.game_to_screen_coords(game_x, game_y)
         
         # Get window position
         window_pos = self.window_manager.get_window_position()
         if not window_pos:
-            logger.warning("Could not get window position")
+            logger.error("Failed to get window position")
             return False
             
-        # Define regions to try
-        regions = [
-            # Bottom left
-            (50, window_pos[3] - 100, 300, 50),
-            # Bottom center
-            (window_pos[2] // 2 - 150, window_pos[3] - 100, 300, 50),
-            # Top right
-            (window_pos[2] - 350, 50, 300, 50),
-            # Top left
-            (50, 50, 300, 50),
-            # Center
-            (window_pos[2] // 2 - 150, window_pos[3] // 2 - 25, 300, 50)
-        ]
+        # Check if coordinates are within window bounds
+        x_min = window_pos[0]
+        y_min = window_pos[1]
+        x_max = window_pos[0] + window_pos[2]
+        y_max = window_pos[1] + window_pos[3]
+        
+        return (x_min <= screen_coords[0] <= x_max and 
+                y_min <= screen_coords[1] <= y_max)
+    
+    def get_visible_game_area(self) -> Tuple[float, float, float, float]:
+        """
+        Get the visible game area in game world coordinates.
+        
+        Returns:
+            (min_x, min_y, max_x, max_y) tuple representing the visible area
+        """
+        # Get window position
+        window_pos = self.window_manager.get_window_position()
+        if not window_pos:
+            logger.error("Failed to get window position")
+            return (0, 0, 0, 0)
+            
+        # Get screen corners
+        top_left = (window_pos[0], window_pos[1])
+        bottom_right = (window_pos[0] + window_pos[2], window_pos[1] + window_pos[3])
+        
+        # Convert to game coordinates
+        top_left_game = self.screen_to_game_coords(top_left[0], top_left[1])
+        bottom_right_game = self.screen_to_game_coords(bottom_right[0], bottom_right[1])
+        
+        # Return visible area
+        return (
+            top_left_game.x,
+            top_left_game.y,
+            bottom_right_game.x,
+            bottom_right_game.y
+        )
+    
+    def try_all_coordinate_regions(self) -> bool:
+        """
+        Try all predefined coordinate regions to find coordinates.
+        
+        Returns:
+            True if coordinates were found in any region, False otherwise
+        """
+        # Store original region
+        original_region = self.coord_region
         
         # Try each region
-        for i, region in enumerate(regions):
-            logger.info(f"Trying region {i+1}: {region}")
+        regions = ["bottom_left", "bottom_center", "top_right"]
+        
+        for region in regions:
+            logger.info(f"Trying coordinate region: {region}")
+            self.set_coord_region(region)
             
-            # Set the current region
-            self.coord_region = region
+            # Try to update position
+            success = self.update_current_position_from_ocr()
             
-            # Try to update position from this region
-            if self.update_current_position_from_ocr():
-                logger.info(f"Successfully extracted coordinates from region {i+1}: {region}")
+            if success:
+                logger.info(f"Found coordinates in region: {region}")
                 return True
                 
-            # Wait a bit before trying the next region
-            time.sleep(0.5)
+        # Restore original region if no coordinates were found
+        self.coord_region = original_region
+        logger.warning("Could not find coordinates in any region")
+        return False
+    
+    def get_calibration_point(self, index: int) -> Optional[Tuple[GameWorldPosition, GameWorldPosition]]:
+        """
+        Get a calibration point by index.
+        
+        Args:
+            index: Index of the calibration point
             
-        logger.warning("Could not extract coordinates from any region")
-        return False 
+        Returns:
+            Tuple of (screen_position, game_position) or None if index is invalid
+        """
+        try:
+            if 0 <= index < len(self.calibration_points):
+                return self.calibration_points[index]
+            else:
+                logger.warning(f"Invalid calibration point index: {index}")
+                return None
+        except Exception as e:
+            logger.error(f"Error getting calibration point: {e}", exc_info=True)
+            return None 

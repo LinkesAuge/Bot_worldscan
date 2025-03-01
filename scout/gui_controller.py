@@ -623,20 +623,23 @@ class OverlayController(QMainWindow):
         # Create OCR frequency controls
         freq_layout = QVBoxLayout()  # Changed to vertical layout
         
+        # Get max frequency from config
+        max_frequency = ocr_settings.get('max_frequency', 2.0)
+        
         # Create horizontal layout for slider and spinbox
         freq_controls = QHBoxLayout()
         freq_label = QLabel("OCR Frequency:")
         freq_controls.addWidget(freq_label)
         
         # Add range label
-        range_label = QLabel("(0.1 - 2.0 updates/sec)")
+        range_label = QLabel(f"(0.1 - {max_frequency:.1f} updates/sec)")
         range_label.setStyleSheet("QLabel { color: gray; }")
         freq_controls.addWidget(range_label)
         
         # Slider for frequency
         self.ocr_freq_slider = QSlider(Qt.Orientation.Horizontal)
         self.ocr_freq_slider.setMinimum(1)  # 0.1 updates/sec
-        self.ocr_freq_slider.setMaximum(20)  # 2.0 updates/sec
+        self.ocr_freq_slider.setMaximum(int(max_frequency * 10))  # Convert max_frequency to slider value
         self.ocr_freq_slider.setValue(int(ocr_settings['frequency'] * 10))
         self.ocr_freq_slider.valueChanged.connect(self.on_ocr_slider_change)
         freq_controls.addWidget(self.ocr_freq_slider)
@@ -644,12 +647,13 @@ class OverlayController(QMainWindow):
         # Create spinbox for precise input
         self.ocr_freq_input = QDoubleSpinBox()
         self.ocr_freq_input.setMinimum(0.1)
-        self.ocr_freq_input.setMaximum(2.0)
+        self.ocr_freq_input.setMaximum(max_frequency)
         self.ocr_freq_input.setSingleStep(0.1)
         self.ocr_freq_input.setValue(ocr_settings['frequency'])
         self.ocr_freq_input.valueChanged.connect(self.on_ocr_spinbox_change)
         freq_controls.addWidget(self.ocr_freq_input)
         
+        freq_layout.addLayout(freq_controls)
         ocr_layout.addLayout(freq_layout)
         
         # Create OCR region selection button
@@ -1385,7 +1389,19 @@ class OverlayController(QMainWindow):
         """
         # Convert slider value to frequency
         freq = value / 10.0
-        logger.debug(f"OCR frequency slider changed: {value} -> {freq} updates/sec")
+        
+        # Get max frequency from TextOCR
+        max_freq = self.text_ocr.get_max_frequency()
+        
+        # Ensure frequency doesn't exceed maximum
+        if freq > max_freq:
+            freq = max_freq
+            # Update slider without triggering event
+            self.ocr_freq_slider.blockSignals(True)
+            self.ocr_freq_slider.setValue(int(max_freq * 10))
+            self.ocr_freq_slider.blockSignals(False)
+        
+        logger.debug(f"OCR frequency slider changed: {value} -> {freq} updates/sec (max: {max_freq})")
         
         # Update spinbox
         self.ocr_freq_input.setValue(freq)
@@ -1407,7 +1423,18 @@ class OverlayController(QMainWindow):
         Args:
             value: The frequency value in updates per second (0.1-2.0)
         """
-        logger.debug(f"OCR frequency spinbox changed to: {value} updates/sec")
+        # Get max frequency from TextOCR
+        max_freq = self.text_ocr.get_max_frequency()
+        
+        # Ensure frequency doesn't exceed maximum
+        if value > max_freq:
+            value = max_freq
+            # Update spinbox without triggering event
+            self.ocr_freq_input.blockSignals(True)
+            self.ocr_freq_input.setValue(max_freq)
+            self.ocr_freq_input.blockSignals(False)
+        
+        logger.debug(f"OCR frequency spinbox changed to: {value} updates/sec (max: {max_freq})")
         
         # Update slider
         self.ocr_freq_slider.setValue(int(value * 10))
@@ -1609,14 +1636,17 @@ class OverlayController(QMainWindow):
             logger.info(f"Stop key pressed: {'Escape' if event.key() == Qt.Key.Key_Escape else 'Q'}")
             processes_stopped = False
             
-            # Stop OCR if active
-            if self.text_ocr.active:
+            # Stop OCR if active (check button state instead of text_ocr.active)
+            if hasattr(self, 'ocr_btn') and self.ocr_btn.isChecked():
                 logger.info("Stopping OCR process due to stop key")
                 # Update button state first
-                if hasattr(self, 'ocr_btn'):
-                    self.ocr_btn.setChecked(False)
-                    self._update_ocr_button_state(False)
-                self._stop_ocr()  # Call stop directly instead of toggle
+                self.ocr_btn.setChecked(False)
+                self._update_ocr_button_state(False)
+                # Call stop directly instead of toggle
+                try:
+                    self._stop_ocr()
+                except Exception as e:
+                    logger.error(f"Error stopping OCR: {e}", exc_info=True)
                 processes_stopped = True
             
             # Stop template matching if active

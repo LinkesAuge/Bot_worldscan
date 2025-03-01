@@ -76,6 +76,7 @@ class ConfigManager:
     DEFAULT_OCR_SETTINGS = {
         "active": "false",
         "frequency": "0.5",
+        "max_frequency": "2.0",  # Maximum allowed OCR frequency
         "region_left": "0",
         "region_top": "0",
         "region_width": "0",
@@ -189,6 +190,7 @@ class ConfigManager:
         return {
             "active": self.config.getboolean("OCR", "active"),
             "frequency": self.config.getfloat("OCR", "frequency"),
+            "max_frequency": self.config.getfloat("OCR", "max_frequency", fallback=2.0),
             "region": {
                 "left": self.config.getint("OCR", "region_left"),
                 "top": self.config.getint("OCR", "region_top"),
@@ -209,6 +211,7 @@ class ConfigManager:
         
         self.config["OCR"]["active"] = str(settings.get("active", defaults["active"])).lower()
         self.config["OCR"]["frequency"] = str(settings.get("frequency", defaults["frequency"]))
+        self.config["OCR"]["max_frequency"] = str(settings.get("max_frequency", defaults["max_frequency"]))
         
         region = settings.get("region", {})
         self.config["OCR"]["region_left"] = str(region.get("left", defaults["region_left"]))
@@ -532,6 +535,7 @@ class ConfigManager:
             "ocr": {
                 "active": self.DEFAULT_OCR_SETTINGS["active"].lower() == "true",
                 "frequency": float(self.DEFAULT_OCR_SETTINGS["frequency"]),
+                "max_frequency": float(self.DEFAULT_OCR_SETTINGS["max_frequency"]),
                 "region": {
                     "left": int(self.DEFAULT_OCR_SETTINGS["region_left"]),
                     "top": int(self.DEFAULT_OCR_SETTINGS["region_top"]),

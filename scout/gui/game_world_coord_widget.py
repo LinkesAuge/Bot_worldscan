@@ -11,9 +11,10 @@ import time
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QGroupBox, QFormLayout
+    QGroupBox, QFormLayout, QComboBox, QCheckBox, QMessageBox
 )
 from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QFont
 
 from scout.game_world_coordinator import GameWorldCoordinator, GameWorldPosition
 
@@ -23,247 +24,308 @@ class CoordinateDisplayWidget(QWidget):
     """
     Widget for displaying and updating game world coordinates.
     
-    This widget provides:
-    - Display of current game world coordinates
-    - Manual and automatic coordinate updates
-    - Calibration controls
+    This widget shows the current position in the game world and provides
+    controls for updating coordinates and managing calibration.
     """
     
-    def __init__(self, game_coordinator: GameWorldCoordinator):
+    def __init__(self, game_world_coordinator: GameWorldCoordinator, parent=None):
         """
         Initialize the coordinate display widget.
         
         Args:
-            game_coordinator: The game world coordinator instance
+            game_world_coordinator: The game world coordinator instance
+            parent: Parent widget
         """
-        super().__init__()
-        
-        self.game_coordinator = game_coordinator
+        super().__init__(parent)
+        self.game_world_coordinator = game_world_coordinator
+        self.auto_update_timer = None
+        self.auto_update_interval = 2000  # 2 seconds
         
         self._create_ui()
-        
-        # Initialize update timer
-        self.update_timer = QTimer()
-        self.update_timer.timeout.connect(self._update_coordinates)
-        
-        # Start automatic updates immediately
-        self._start_auto_update()
-        
-        # Force an initial update
-        QTimer.singleShot(500, self._update_coordinates)
+        self._connect_signals()
         
     def _create_ui(self):
-        """Create the widget UI."""
+        """Create the user interface."""
+        # Main layout
         layout = QVBoxLayout()
-        self.setLayout(layout)
         
-        # Create coordinate display group
+        # Coordinate display group
         coord_group = QGroupBox("Game World Coordinates")
-        coord_layout = QFormLayout()
+        coord_layout = QVBoxLayout()
         
-        # K coordinate (world)
-        self.k_label = QLabel("0")
-        self.k_label.setStyleSheet("font-weight: bold; font-size: 14px;")
-        coord_layout.addRow("K:", self.k_label)
+        # Coordinate labels
+        self.coord_label = QLabel("K: 0, X: 0, Y: 0")
+        self.coord_label.setFont(QFont("Monospace", 10))
+        coord_layout.addWidget(self.coord_label)
         
-        # X coordinate
-        self.x_label = QLabel("0")
-        self.x_label.setStyleSheet("font-weight: bold; font-size: 14px;")
-        coord_layout.addRow("X:", self.x_label)
+        # Update button
+        update_layout = QHBoxLayout()
+        self.update_btn = QPushButton("Update Coordinates")
+        self.auto_update_cb = QCheckBox("Auto Update")
+        update_layout.addWidget(self.update_btn)
+        update_layout.addWidget(self.auto_update_cb)
+        coord_layout.addLayout(update_layout)
         
-        # Y coordinate
-        self.y_label = QLabel("0")
-        self.y_label.setStyleSheet("font-weight: bold; font-size: 14px;")
-        coord_layout.addRow("Y:", self.y_label)
+        # Coordinate region selection
+        region_layout = QHBoxLayout()
+        region_layout.addWidget(QLabel("Coordinate Region:"))
+        self.region_combo = QComboBox()
+        self.region_combo.addItems(["Bottom Left", "Bottom Center", "Top Right", "Custom"])
+        region_layout.addWidget(self.region_combo)
+        coord_layout.addLayout(region_layout)
         
-        # Last update time
-        self.update_time_label = QLabel("Never")
-        coord_layout.addRow("Last Update:", self.update_time_label)
-        
+        # Set the layout for the coordinate group
         coord_group.setLayout(coord_layout)
         layout.addWidget(coord_group)
         
-        # Create calibration group
-        calib_group = QGroupBox("Coordinate Calibration")
-        calib_layout = QVBoxLayout()
-        
-        # Calibration instructions
-        calib_layout.addWidget(QLabel("Calibration helps improve coordinate conversion accuracy."))
-        calib_layout.addWidget(QLabel("Add calibration points by capturing coordinates at different positions."))
-        
-        # Calibration button
-        self.add_calib_btn = QPushButton("Add Calibration Point")
-        self.add_calib_btn.clicked.connect(self._add_calibration_point)
-        calib_layout.addWidget(self.add_calib_btn)
+        # Calibration group
+        calibration_group = QGroupBox("Coordinate Calibration")
+        calibration_layout = QVBoxLayout()
         
         # Calibration status
-        self.calib_status_label = QLabel("No calibration points")
-        calib_layout.addWidget(self.calib_status_label)
+        self.calibration_status_label = QLabel("Calibration: Not calibrated")
+        calibration_layout.addWidget(self.calibration_status_label)
         
-        calib_group.setLayout(calib_layout)
-        layout.addWidget(calib_group)
+        # Calibration buttons
+        calibration_btn_layout = QHBoxLayout()
+        self.start_calibration_btn = QPushButton("Start Calibration")
+        self.complete_calibration_btn = QPushButton("Complete Calibration")
+        self.cancel_calibration_btn = QPushButton("Cancel")
+        
+        # Initially disable complete and cancel buttons
+        self.complete_calibration_btn.setEnabled(False)
+        self.cancel_calibration_btn.setEnabled(False)
+        
+        calibration_btn_layout.addWidget(self.start_calibration_btn)
+        calibration_btn_layout.addWidget(self.complete_calibration_btn)
+        calibration_btn_layout.addWidget(self.cancel_calibration_btn)
+        calibration_layout.addLayout(calibration_btn_layout)
+        
+        # Calibration instructions
+        instructions_text = (
+            "1. Click 'Start Calibration' to begin\n"
+            "2. Drag/scroll the map to a different location\n"
+            "3. Click 'Complete Calibration' to finish\n"
+            "Note: Drag further for better accuracy"
+        )
+        instructions_label = QLabel(instructions_text)
+        instructions_label.setWordWrap(True)
+        calibration_layout.addWidget(instructions_label)
+        
+        # Set the layout for the calibration group
+        calibration_group.setLayout(calibration_layout)
+        layout.addWidget(calibration_group)
+        
+        # Set the main layout
+        self.setLayout(layout)
+        
+    def _connect_signals(self):
+        """Connect signals to slots."""
+        # Update button
+        self.update_btn.clicked.connect(self._update_coordinates)
+        
+        # Auto update checkbox
+        self.auto_update_cb.stateChanged.connect(self._toggle_auto_update)
+        
+        # Region combo box
+        self.region_combo.currentIndexChanged.connect(self._set_coordinate_region)
+        
+        # Calibration buttons
+        self.start_calibration_btn.clicked.connect(self._start_calibration)
+        self.complete_calibration_btn.clicked.connect(self._complete_calibration)
+        self.cancel_calibration_btn.clicked.connect(self._cancel_calibration)
         
     def _update_coordinates(self):
-        """
-        Update the coordinate display from OCR.
-        
-        This method attempts to update the coordinate display by:
-        1. First checking if coordinates are available in the game state
-        2. If not, triggering an OCR update via the game coordinator
-        3. Updating the UI labels with the latest coordinates
-        
-        Returns:
-            True if coordinates were successfully updated, False otherwise
-        """
+        """Update the coordinate display from OCR."""
         try:
-            logger.info("Updating coordinate display...")
+            # Set a timeout for the OCR process
+            max_wait_time = 5  # seconds
+            start_time = time.time()
             
-            # First check if we already have coordinates in the game state
-            if self.game_coordinator.game_state and self.game_coordinator.game_state.get_coordinates():
-                coords = self.game_coordinator.game_state.get_coordinates()
-                
-                # Log the coordinates we're about to display
-                logger.info(f"Using coordinates from game state: {coords}")
-                
-                # Format coordinates with a maximum of 3 digits
-                k_str = f"{coords.k:03d}" if coords.k is not None else "---"
-                x_str = f"{coords.x:03d}" if coords.x is not None else "---"
-                y_str = f"{coords.y:03d}" if coords.y is not None else "---"
-                
-                # Update labels
-                self.k_label.setText(k_str)
-                self.x_label.setText(x_str)
-                self.y_label.setText(y_str)
-                
-                # Update time
-                current_time = time.strftime("%H:%M:%S")
-                self.update_time_label.setText(current_time)
-                
-                logger.info(f"Updated coordinate display: K: {k_str}, X: {x_str}, Y: {y_str}")
-                return True
+            # Create a timer to check if the operation is taking too long
+            timeout_timer = QTimer()
+            timeout_reached = [False]  # Using a list to allow modification in the inner function
             
-            # If we don't have coordinates in the game state, try to update from OCR
-            logger.info("No coordinates in game state, updating from OCR...")
-            success = self.game_coordinator.update_current_position_from_ocr()
+            def check_timeout():
+                if time.time() - start_time > max_wait_time:
+                    timeout_reached[0] = True
+                    timeout_timer.stop()
+                    logger.warning(f"OCR operation timed out after {max_wait_time} seconds")
+                    self.coord_label.setText("OCR operation timed out")
+                    self.coord_label.setStyleSheet("color: red;")
+                    # Stop auto-update if there's a timeout to prevent continuous timeouts
+                    self._stop_auto_update()
+                    self.auto_update_cb.setChecked(False)
             
-            # If the initial update fails, try all coordinate regions
-            if not success:
-                logger.info("Initial OCR update failed, trying all coordinate regions...")
-                success = self.game_coordinator.try_all_coordinate_regions()
+            # Start the timeout timer
+            timeout_timer.timeout.connect(check_timeout)
+            timeout_timer.start(500)  # Check every 500ms
             
-            if success:
-                # Get the current position from the coordinator
-                pos = self.game_coordinator.current_position
-                logger.info(f"OCR update successful, current position: {pos}")
+            # Perform the OCR operation
+            success = self.game_world_coordinator.update_current_position_from_ocr()
+            
+            # Stop the timeout timer
+            timeout_timer.stop()
+            
+            # If timeout was reached, return early
+            if timeout_reached[0]:
+                return
+            
+            # Get the current position regardless of OCR success
+            pos = self.game_world_coordinator.current_position
+            
+            # Check if we have any valid coordinate values
+            if pos and (pos.k is not None or pos.x is not None or pos.y is not None):
+                # Format coordinates with placeholders for missing values
+                k_str = str(pos.k) if pos.k is not None else "?"
+                x_str = str(pos.x) if pos.x is not None else "?"
+                y_str = str(pos.y) if pos.y is not None else "?"
+                self.coord_label.setText(f"K: {k_str}, X: {x_str}, Y: {y_str}")
                 
-                # Format coordinates with a maximum of 3 digits
-                k_str = f"{pos.k:03d}" if pos.k is not None else "---"
-                x_str = f"{pos.x:03d}" if pos.x is not None else "---"
-                y_str = f"{pos.y:03d}" if pos.y is not None else "---"
-                
-                # Update labels
-                self.k_label.setText(k_str)
-                self.x_label.setText(x_str)
-                self.y_label.setText(y_str)
-                
-                # Update time
-                current_time = time.strftime("%H:%M:%S")
-                self.update_time_label.setText(current_time)
-                
-                logger.info(f"Updated coordinates from coordinator: K: {k_str}, X: {x_str}, Y: {y_str}")
-                return True
+                # Use black color for success, but orange if some values are missing
+                if pos.k is not None and pos.x is not None and pos.y is not None:
+                    self.coord_label.setStyleSheet("color: black;")
+                else:
+                    self.coord_label.setStyleSheet("color: orange;")
+                    logger.warning(f"Partial coordinates displayed: K: {k_str}, X: {x_str}, Y: {y_str}")
             else:
-                logger.warning("Failed to update coordinates from OCR")
-                
-                # Even if OCR failed, try to display any coordinates we might have
-                pos = self.game_coordinator.current_position
-                if pos and (pos.k is not None or pos.x is not None or pos.y is not None):
-                    logger.info(f"Using last known position: {pos}")
-                    
-                    # Format coordinates with a maximum of 3 digits
-                    k_str = f"{pos.k:03d}" if pos.k is not None else "---"
-                    x_str = f"{pos.x:03d}" if pos.x is not None else "---"
-                    y_str = f"{pos.y:03d}" if pos.y is not None else "---"
-                    
-                    # Update labels
-                    self.k_label.setText(k_str)
-                    self.x_label.setText(x_str)
-                    self.y_label.setText(y_str)
-                    
-                    # Update time with warning indicator
-                    current_time = time.strftime("%H:%M:%S") + " (!)"
-                    self.update_time_label.setText(current_time)
-                    
-                    logger.info(f"Updated coordinates from last known position: K: {k_str}, X: {x_str}, Y: {y_str}")
-                    return True
-                
-                return False
-                
+                # No valid coordinates at all
+                self.coord_label.setText("No valid coordinates")
+                self.coord_label.setStyleSheet("color: red;")
+                logger.warning("No valid coordinates available to display")
         except Exception as e:
-            logger.error(f"Error updating coordinates: {e}", exc_info=True)
-            return False
+            logger.error(f"Error updating coordinates: {str(e)}")
+            self.coord_label.setText("Error updating coordinates")
+            self.coord_label.setStyleSheet("color: red;")
+            # Stop auto-update if there's an error to prevent continuous errors
+            self._stop_auto_update()
+            self.auto_update_cb.setChecked(False)
+            
+    def _toggle_auto_update(self, state):
+        """Toggle automatic coordinate updates."""
+        if state == 2:  # 2 is the value for Checked state in Qt
+            self._start_auto_update()
+        else:
+            self._stop_auto_update()
             
     def _start_auto_update(self):
         """Start automatic coordinate updates."""
-        # Start timer to update every second
-        self.update_timer.start(1000)  # Update every second
-        logger.info("Started automatic coordinate updates")
-        
-    def _add_calibration_point(self):
-        """Add a calibration point using the current position."""
-        try:
-            # Update coordinates from OCR
-            if not self._update_coordinates():
-                return
-                
-            # Get current position
-            pos = self.game_coordinator.current_position
+        if not self.auto_update_timer:
+            self.auto_update_timer = QTimer()
+            self.auto_update_timer.timeout.connect(self._update_coordinates)
+            self.auto_update_timer.start(self.auto_update_interval)
             
-            # Get screen center
-            window_pos = self.game_coordinator.window_manager.get_window_position()
-            if not window_pos:
-                logger.error("Failed to get window position")
-                return
-                
-            screen_x = window_pos[0] + window_pos[2] // 2
-            screen_y = window_pos[1] + window_pos[3] // 2
+    def _stop_auto_update(self):
+        """Stop automatic coordinate updates."""
+        if self.auto_update_timer:
+            self.auto_update_timer.stop()
+            self.auto_update_timer = None
             
-            # Add calibration point
-            self.game_coordinator.add_calibration_point(
-                (screen_x, screen_y),
-                (pos.x, pos.y)
+    def _set_coordinate_region(self, index):
+        """Set the region where coordinates are displayed."""
+        if index == 0:  # Bottom Left
+            self.game_world_coordinator.set_coord_region("bottom_left")
+        elif index == 1:  # Bottom Center
+            self.game_world_coordinator.set_coord_region("bottom_center")
+        elif index == 2:  # Top Right
+            self.game_world_coordinator.set_coord_region("top_right")
+        elif index == 3:  # Custom
+            # TODO: Implement custom region selection
+            pass
+            
+    def _start_calibration(self):
+        """Start the calibration process."""
+        success = self.game_world_coordinator.start_calibration()
+        if success:
+            # Update UI state
+            self.start_calibration_btn.setEnabled(False)
+            self.complete_calibration_btn.setEnabled(True)
+            self.cancel_calibration_btn.setEnabled(True)
+            
+            # Update status
+            self.calibration_status_label.setText("Calibration in progress...")
+            self.calibration_status_label.setStyleSheet("color: blue;")
+            
+            # Show message box with instructions
+            QMessageBox.information(
+                self,
+                "Calibration Started",
+                "Calibration has started. Please drag/scroll the map to a different location, "
+                "then click 'Complete Calibration'.\n\n"
+                "For best results, drag the map a significant distance."
+            )
+        else:
+            QMessageBox.warning(
+                self,
+                "Calibration Failed",
+                "Failed to start calibration. Make sure coordinates are visible and can be read."
             )
             
-            # Update calibration status
-            calib_count = len(self.game_coordinator.calibration_points)
-            self.calib_status_label.setText(f"{calib_count} calibration points")
+    def _complete_calibration(self):
+        """Complete the calibration process."""
+        success = self.game_world_coordinator.complete_calibration()
+        if success:
+            # Update UI state
+            self.start_calibration_btn.setEnabled(True)
+            self.complete_calibration_btn.setEnabled(False)
+            self.cancel_calibration_btn.setEnabled(False)
             
-            logger.info(f"Added calibration point: screen ({screen_x}, {screen_y}) -> game ({pos.x}, {pos.y})")
+            # Update status
+            status = self.game_world_coordinator.get_calibration_status()
+            self.calibration_status_label.setText(status)
+            self.calibration_status_label.setStyleSheet("color: green;")
             
-        except Exception as e:
-            logger.error(f"Error adding calibration point: {e}", exc_info=True)
+            # Show success message
+            QMessageBox.information(
+                self,
+                "Calibration Complete",
+                "Calibration completed successfully. The coordinate system has been calibrated."
+            )
+        else:
+            QMessageBox.warning(
+                self,
+                "Calibration Failed",
+                "Failed to complete calibration. Make sure you've dragged the map far enough "
+                "and coordinates can be read."
+            )
             
-    def set_coord_region(self, x: int, y: int, width: int, height: int):
-        """
-        Set the region where coordinates are displayed.
+    def _cancel_calibration(self):
+        """Cancel the calibration process."""
+        self.game_world_coordinator.cancel_calibration()
         
-        Args:
-            x: X coordinate of the region
-            y: Y coordinate of the region
-            width: Width of the region
-            height: Height of the region
-        """
-        self.game_coordinator.set_coord_region(x, y, width, height)
-        logger.info(f"Set coordinate region to: ({x}, {y}, {width}, {height})")
+        # Update UI state
+        self.start_calibration_btn.setEnabled(True)
+        self.complete_calibration_btn.setEnabled(False)
+        self.cancel_calibration_btn.setEnabled(False)
         
-    def get_current_position(self) -> Optional[GameWorldPosition]:
-        """
-        Get the current game world position.
+        # Update status
+        status = self.game_world_coordinator.get_calibration_status()
+        self.calibration_status_label.setText(status)
+        self.calibration_status_label.setStyleSheet("color: black;")
         
-        Returns:
-            Current game world position, or None if not available
-        """
-        # Update coordinates from OCR
-        if self._update_coordinates():
-            return self.game_coordinator.current_position
-        return None 
+    def get_current_position(self):
+        """Get the current game world position."""
+        return self.game_world_coordinator.current_position
+        
+    def set_coord_region(self, region):
+        """Set the region where coordinates are displayed."""
+        index = 0  # Default to bottom left
+        if region == "bottom_center":
+            index = 1
+        elif region == "top_right":
+            index = 2
+        elif region == "custom":
+            index = 3
+            
+        self.region_combo.setCurrentIndex(index)
+        
+    def update_calibration_status(self):
+        """Update the calibration status display."""
+        status = self.game_world_coordinator.get_calibration_status()
+        self.calibration_status_label.setText(status)
+        
+        # Update button states based on calibration status
+        is_calibrating = self.game_world_coordinator.is_calibration_in_progress()
+        self.start_calibration_btn.setEnabled(not is_calibrating)
+        self.complete_calibration_btn.setEnabled(is_calibrating)
+        self.cancel_calibration_btn.setEnabled(is_calibrating) 

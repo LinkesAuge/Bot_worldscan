@@ -21,6 +21,7 @@ from scout.window_manager import WindowManager
 from scout.game_state import GameState, GameCoordinates
 import mss
 from pathlib import Path
+from scout.config_manager import ConfigManager
 
 logger = logging.getLogger(__name__)
 
@@ -53,9 +54,14 @@ class TextOCR(QObject):
         self.debug_window = debug_window
         self.window_manager = window_manager
         self.game_state = game_state
-        self.active = False
+        self._active = False
         self.region: Optional[Dict[str, int]] = None
-        self.update_frequency = 0.5  # Default 0.5 updates/sec
+        
+        # Load settings from config
+        config = ConfigManager()
+        ocr_settings = config.get_ocr_settings()
+        self.update_frequency = ocr_settings.get('frequency', 0.5)  # Default 0.5 updates/sec
+        self.max_frequency = ocr_settings.get('max_frequency', 2.0)  # Default max 2.0 updates/sec
         
         # OCR method preference
         self.preferred_method = 'thresh3'  # Default to thresh3 as it produces the best results
@@ -65,6 +71,16 @@ class TextOCR(QObject):
         self.update_timer.timeout.connect(self._process_region)
         
         logger.debug("TextOCR initialized")
+    
+    @property
+    def active(self) -> bool:
+        """
+        Check if OCR is currently active.
+        
+        Returns:
+            True if OCR is active, False otherwise
+        """
+        return self._active
     
     def set_region(self, region: Dict[str, int]) -> None:
         """
@@ -77,38 +93,56 @@ class TextOCR(QObject):
         logger.info(f"OCR region set to: {region}")
         
         # If active, force an immediate capture
-        if self.active:
+        if self._active:
             self._process_region()
             
     def set_frequency(self, frequency: float) -> None:
         """
-        Set the update frequency.
+        Set the update frequency, respecting the maximum allowed frequency.
         
         Args:
             frequency: Updates per second
         """
+        # Ensure frequency doesn't exceed the maximum
+        if frequency > self.max_frequency:
+            logger.warning(f"Requested frequency {frequency} exceeds maximum allowed {self.max_frequency}. Using maximum.")
+            frequency = self.max_frequency
+            
         self.update_frequency = frequency
-        if self.active:
+        if self._active:
             interval = int(1000 / frequency)  # Convert to milliseconds
             self.update_timer.setInterval(interval)
             logger.debug(f"Update interval set to {interval}ms ({frequency} updates/sec)")
             
+    def get_max_frequency(self) -> float:
+        """
+        Get the maximum allowed update frequency.
+        
+        Returns:
+            The maximum allowed frequency in updates per second
+        """
+        # Refresh from config in case it was updated
+        config = ConfigManager()
+        ocr_settings = config.get_ocr_settings()
+        self.max_frequency = ocr_settings.get('max_frequency', 2.0)
+        return self.max_frequency
+        
     def start(self) -> None:
         """Start OCR processing."""
-        if self.active:
+        if self._active:
             return
             
-        self.active = True
+        self._active = True
         interval = int(1000 / self.update_frequency)  # Convert to milliseconds
         self.update_timer.start(interval)
-        logger.info(f"OCR started with {self.update_frequency} updates/sec")
+        logger.info(f"OCR started with {self.update_frequency} updates/sec (max: {self.max_frequency})")
         
     def stop(self) -> None:
         """Stop OCR processing."""
-        if not self.active:
+        if not self._active:
             return
             
-        self.active = False
+        self._active = False
         self.update_timer.stop()
         logger.info("OCR stopped")
         
@@ -237,23 +271,32 @@ class TextOCR(QObject):
             results = []
             results_by_method = {}
             
+            # Add config to disable temp files where possible
+            base_config = '--psm 7'
+            whitelist_config = f'{base_config} -c tessedit_char_whitelist=0123456789:KXYkxy'
+            specific_config = f'{whitelist_config} -c tessedit_write_params=1'
+            
             try:
                 # Process each preprocessing method
                 for method, img in preprocessed_images.items():
+                    # Only process the preferred method if not in auto mode
+                    if self.preferred_method != 'auto' and method != self.preferred_method:
+                        continue
+                        
                     # Standard OCR
                     text = pytesseract.image_to_string(img).strip()
                     results.append(text)
                     results_by_method[f"{method}_standard"] = text
                     
                     # PSM 7: Treat the image as a single line of text
-                    text_psm7 = pytesseract.image_to_string(img, config='--psm 7').strip()
+                    text_psm7 = pytesseract.image_to_string(img, config=base_config).strip()
                     results.append(text_psm7)
                     results_by_method[f"{method}_psm7"] = text_psm7
                     
                     # Try with character whitelist for coordinates
                     text_whitelist = pytesseract.image_to_string(
                         img, 
-                        config='--psm 7 -c tessedit_char_whitelist=0123456789:KXYkxy '
+                        config=whitelist_config
                     ).strip()
                     results.append(text_whitelist)
                     results_by_method[f"{method}_whitelist"] = text_whitelist
@@ -261,7 +304,7 @@ class TextOCR(QObject):
                     # Try with a more specific configuration for the expected format
                     text_specific = pytesseract.image_to_string(
                         img,
-                        config='--psm 7 -c tessedit_char_whitelist=0123456789:KXYkxy -c tessedit_write_params=1'
+                        config=specific_config
                     ).strip()
                     results.append(text_specific)
                     results_by_method[f"{method}_specific"] = text_specific

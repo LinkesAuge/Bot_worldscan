@@ -1,21 +1,15 @@
 ---
-description: Everything that is important for our project, code guidelins, structure, features, important notes rules etc.
+description: Main project rules
 globs: 
 alwaysApply: true
 ---
 ---
-description: General rules for the project
-globs: *.py
+
 ---
----
-description: General rules for the project
-globs: *.py
----
----
-description: General guidance and coding for the project
-globs: *.py
----
-Scout Projekt for Total Battle game
+TB_Scout_Application_Report.md contains all important information
+
+# TB Scout Application Report
+Reference the TB_Scout_Application_Report file for alneeds to be kept updated at all times. Please add/update/remove any new relevant information regarding the app like it's features, core components, file structure, code flow etc.
 
 # PROJECT OVERVIEW
 # TB Scout

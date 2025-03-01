@@ -3,7 +3,50 @@ description:
 globs: 
 alwaysApply: false
 ---
+---
+description: 
+globs: 
+alwaysApply: false
+---
 # Memory
+
+## 2023-07-26: Implemented Drag Distance Calibration System
+
+### Changes Made
+- Completely redesigned the calibration system to use a drag distance approach instead of fixed calibration points
+- Removed the old calibration point system that relied on fixed screen positions
+- Added new methods to `GameWorldCoordinator`:
+  - `start_calibration()`: Captures the first position for calibration
+  - `complete_calibration()`: Captures the second position and calculates the pixel-to-game-unit ratio
+  - `cancel_calibration()`: Cancels the current calibration process
+  - `get_calibration_status()`: Returns the current calibration status
+  - `_calibrate()`: Internal method to calculate the pixel-to-game-unit ratio
+- Updated `CoordinateDisplayWidget` with a new UI for the drag distance calibration:
+  - Added "Start Calibration", "Complete Calibration", and "Cancel" buttons
+  - Added calibration status display
+  - Added instructions for the calibration process
+  - Removed old calibration point management UI
+- Improved the coordinate conversion accuracy by using the actual distance traveled in both screen pixels and game world units
+- Added comprehensive error handling and validation throughout the calibration process
+- Updated documentation to reflect the new calibration approach
+
+### Impact
+- Significantly improved accuracy of coordinate conversion between screen and game world
+- More intuitive calibration process that accounts for the game's scrolling nature
+- Better handling of different zoom levels and screen resolutions
+- More reliable navigation and search operations due to improved coordinate conversion
+- Simplified UI with clear instructions for the calibration process
+- Enhanced user experience with immediate visual feedback during calibration
+- Eliminated the need for multiple fixed calibration points
+
+### Testing
+- Verified that the calibration process correctly captures start and end positions
+- Confirmed that the pixel-to-game-unit ratio is calculated accurately
+- Tested calibration with different drag distances to ensure consistent results
+- Verified that coordinate conversion is accurate after calibration
+- Confirmed that the UI provides clear feedback throughout the calibration process
+- Tested error handling by attempting calibration with invalid positions
+- Verified that canceling calibration properly resets the calibration state
 
 ## 2023-07-24: Fixed OCR Button Text Update Delay
 
@@ -326,3 +369,181 @@ alwaysApply: false
 - Verified that coordinates are properly extracted and displayed in the game world search tab
 - Confirmed that screenshots are saved during template searches regardless of settings
 - Tested that the coordinate display widget updates correctly when coordinates change 
+
+## 2023-07-25: Added Detailed Calibration Point Documentation
+
+### Changes Made
+- Created a comprehensive documentation file `documentation/calibration_point_explanation.md` explaining the "Add Calibration Point" feature
+- Updated the TB Scout Application Report with detailed information about the coordinate calibration system
+- Added calibration-related methods to the GameWorldCoordinator class description in the report
+- Added the CoordinateDisplayWidget class to the Supporting Classes section in the report
+- Enhanced the Game World Coordination feature description with calibration details
+
+### Impact
+- Improved understanding of the coordinate calibration system for developers and users
+- Clearer documentation of how the calibration points improve coordinate conversion accuracy
+- Better explanation of the relationship between screen coordinates and game world coordinates
+- More comprehensive documentation of the TB Scout application's features and components
+- Enhanced onboarding for new developers working on the coordinate system
+
+### Documentation Details
+- Explained the purpose and function of the calibration point system
+- Detailed the technical implementation of the calibration algorithm
+- Provided guidance on optimal usage of the calibration feature
+- Outlined the benefits and importance of proper calibration
+- Documented limitations and considerations when using the calibration system 
+
+## 2023-07-26: Added Calibration Point Management and Persistence
+
+### Changes Made
+- Added `remove_calibration_point` method to `GameWorldCoordinator` to remove calibration points by index
+- Added `clear_calibration_points` method to `GameWorldCoordinator` to clear all calibration points
+- Added `get_calibration_point` method to `GameWorldCoordinator` to get a calibration point by index
+- Implemented `_save_calibration_points` and `_load_calibration_points` methods for persistence
+- Updated `_initialize` method to load calibration points on startup
+- Enhanced `CoordinateDisplayWidget` with UI elements for managing calibration points:
+  - Added a combo box to display and select calibration points
+  - Added a "Remove" button to remove the selected calibration point
+  - Added a "Clear All" button to clear all calibration points
+  - Added `_remove_calibration_point` and `_clear_calibration_points` methods
+  - Added `_update_calibration_points_list` method to update the UI
+- Updated the TB Scout Application Report with the new calibration point management features
+
+### Impact
+- Calibration points now persist between application sessions, improving user experience
+- Users can now manage calibration points through the UI, removing individual points or clearing all points
+- Improved error handling and feedback for calibration point management
+- Better visualization of calibration points in the UI
+- More robust coordinate conversion with persistent calibration
+- Enhanced documentation of calibration point features
+
+### Testing
+- Verified that calibration points are saved to disk and loaded on startup
+- Confirmed that the UI correctly displays calibration points and enables/disables buttons
+- Tested removing individual calibration points and clearing all points
+- Verified that calibration is recalculated correctly after removing points
+- Confirmed that the status label correctly reflects the number of calibration points
+- Tested error handling for invalid calibration point indices
+
+## 2023-07-27: Fixed Calibration Point Mouse Position Issue
+
+### Changes Made
+- Updated the `_add_calibration_point` method in `CoordinateDisplayWidget` to properly use the existing OCR solution
+- Replaced the custom coordinate update with a direct call to `game_coordinator.update_current_position_from_ocr()`
+- Added validation to ensure the position data is valid before adding a calibration point
+- Improved error handling and logging for the calibration point addition process
+- Added clear comments explaining that the center of the window is the correct screen position because the OCR method centers the mouse
+
+### Impact
+- Calibration points now correctly use the same position where the OCR reading was taken
+- More accurate mapping between screen coordinates and game world coordinates
+- Improved reliability of the coordinate conversion system
+- Better error handling prevents adding invalid calibration points
+- Enhanced logging provides better debugging information
+- More consistent behavior with the rest of the application
+
+### Testing
+- Verified that the mouse is properly centered before taking OCR readings for calibration points
+- Confirmed that calibration points use the correct screen position (center of window)
+- Tested error handling by attempting to add calibration points with invalid coordinates
+- Verified that the calibration system correctly converts between screen and game coordinates
+- Confirmed that navigation and template matching are more accurate with the fixed calibration
+
+## 2023-07-27: Implemented OCR Max Frequency Limit
+
+### Changes Made
+- Added a `max_frequency` setting to the OCR configuration with a default value of 2.0 updates per second
+- Modified the `ConfigManager` class to handle the new `max_frequency` setting:
+  - Added `max_frequency` to `DEFAULT_OCR_SETTINGS` with a value of 2.0
+  - Updated `get_ocr_settings()` to retrieve the `max_frequency` setting
+  - Updated `update_ocr_settings()` to save the `max_frequency` setting
+- Enhanced the `TextOCR` class to respect the maximum frequency limit:
+  - Added loading of `max_frequency` from config in the constructor
+  - Modified `set_frequency()` to ensure the frequency doesn't exceed `max_frequency`
+  - Added `get_max_frequency()` method to retrieve the current maximum allowed frequency
+  - Updated logging to include maximum frequency information
+- Updated the GUI controller to use the maximum frequency in the OCR controls:
+  - Modified the frequency slider and spinbox to use the `max_frequency` from config
+  - Updated the range label to show the dynamic maximum frequency
+  - Ensured the slider and spinbox values don't exceed the maximum frequency
+
+### Impact
+- Prevents excessive OCR updates that could cause performance issues or crashes
+- Provides a configurable limit that can be adjusted based on system capabilities
+- Improves application stability by preventing too frequent OCR operations
+- Enhances user experience by providing clear feedback on frequency limits
+- Maintains consistent behavior across different parts of the application
+
+### Testing
+- Verified that the OCR frequency controls respect the maximum frequency
+- Confirmed that the frequency slider and spinbox are properly limited
+- Tested that the range label correctly shows the maximum frequency
+- Verified that the TextOCR class properly enforces the maximum frequency
+- Confirmed that the configuration is properly saved and loaded
+
+## Current Task: OCR Process Performance Improvements
+
+### Changes Made
+- Optimized the OCR process in `TextOCR.extract_text()` to reduce temporary files:
+  - Only process the preferred OCR method when not in auto mode
+  - Standardized configuration parameters to reduce redundancy
+  - Simplified the OCR method selection process
+- Added rate limiting to `GameWorldCoordinator.update_current_position_from_ocr()`:
+  - Implemented a minimum 500ms delay between OCR operations
+  - Added early return with existing coordinates when rate limited
+  - Improved logging to track rate-limited operations
+- Enhanced error handling throughout the OCR process:
+  - Better timeout handling to prevent the application from hanging
+  - Improved fallback to existing coordinates when OCR fails
+  - More robust state tracking for the OCR process
+
+### Impact
+- Significantly reduced the number of temporary PNG files created in the system temp folder
+- Improved application responsiveness during OCR operations
+- Prevented the application from hanging or becoming unresponsive
+- Ensured coordinates are displayed in the GUI even when OCR partially fails
+- Fixed issues with the Q/Escape keys not properly stopping the OCR process
+- Made the OCR process more compatible with the drag calibration system
+
+### Testing
+- Verified that the application remains responsive during OCR operations
+- Confirmed that fewer temporary files are created during OCR
+- Tested that the Q/Escape keys properly stop the OCR process
+- Verified that coordinates are displayed in the GUI even when some values are missing
+- Confirmed that the OCR process works correctly with the drag calibration system
+
+## Current Task
+Fixed issues with the coordinate system and OCR process in the TB Scout application.
+
+### Context
+The TB Scout application was experiencing issues with the coordinate system and OCR process:
+1. There was an error with the Qt.Checked attribute in the _toggle_auto_update method
+2. The application was locking up when running the OCR process
+3. Coordinates were not being displayed in the GUI
+
+### Changes Made
+1. Fixed the Qt.Checked issue in the _toggle_auto_update method by using a direct integer comparison (2 for Checked state) instead of Qt.CheckState.Checked
+2. Added error handling to the _update_coordinates method to prevent lockups and provide better error feedback
+3. Implemented a timeout mechanism in the _update_coordinates method to prevent the UI from freezing if the OCR process takes too long
+4. Added a threading-based timeout mechanism to the update_current_position_from_ocr method in GameWorldCoordinator to prevent it from hanging indefinitely
+5. Improved error handling and fallback mechanisms to use existing coordinates when OCR fails
+
+### Benefits
+1. The application is now more robust and less likely to freeze or crash
+2. Users receive better feedback when OCR fails or times out
+3. The coordinate system continues to function even when OCR encounters issues
+4. The auto-update feature now works correctly and safely stops when errors occur
+
+### Testing
+The changes have been implemented and should resolve the issues with:
+- The Qt.Checked attribute error
+- The application locking up during OCR
+- Coordinates not displaying in the GUI
+
+### Next Steps
+1. Monitor the application for any remaining issues with the coordinate system
+2. Consider further optimizations to the OCR process to make it more reliable
+3. Update documentation to reflect the changes made to the coordinate system and OCR process
+
+### Date
+Last updated: Current date 

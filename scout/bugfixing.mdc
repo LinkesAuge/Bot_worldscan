@@ -492,4 +492,81 @@ This dual approach led to inconsistent results, as the game world search system 
 - Use consistent naming for debug images
 - Ensure all UI components are properly connected to the OCR system's signals
 - Add more comprehensive logging for coordinate updates
-- Implement better error handling for OCR failures 
+- Implement better error handling for OCR failures
+
+## 2023-08-01: Fixed OCR Process and Q/Escape Key Handling
+
+### Issue
+1. Coordinates were not being displayed in the GUI despite being extracted by the OCR process
+2. The OCR process could not be canceled with Q/Escape keys
+
+### Root Cause
+1. The coordinate display widget was only updating the display when the OCR process returned success, but wasn't checking if there were valid coordinates in the game world coordinator
+2. The keyPressEvent method was checking `self.text_ocr.active` which wasn't properly tracking the OCR state
+3. The TextOCR class had inconsistent state tracking with both `self.active` and internal timer state
+
+### Solution
+1. Modified the `_update_coordinates` method in `CoordinateDisplayWidget` to:
+   - Get the current position regardless of OCR success
+   - Display partial coordinates with placeholders for missing values
+   - Use different colors to indicate full, partial, or missing coordinates
+2. Fixed the `keyPressEvent` method in `OverlayController` to:
+   - Check the OCR button state instead of `text_ocr.active`
+   - Add proper error handling when stopping the OCR process
+3. Improved the TextOCR class with:
+   - Added a proper `active` property to track OCR state
+   - Ensured consistent state tracking between the property and internal timer
+
+### Prevention
+1. Added more detailed logging to track coordinate display issues
+2. Improved error handling throughout the OCR process
+3. Added proper state tracking in the TextOCR class
+4. Used button state as the source of truth for process state in key event handling
+
+### Testing
+1. Verified that coordinates are displayed in the GUI even when some values are missing
+2. Confirmed that the Q/Escape keys properly stop the OCR process
+3. Tested error handling by simulating OCR failures
+4. Verified that the OCR button state correctly reflects the OCR process state
+
+## 2023-08-02: Fixed OCR Process Performance and Temporary Files Issues
+
+### Issues Fixed
+- Application getting stuck or becoming unresponsive during OCR operations
+- Excessive temporary PNG files being created in the system temp folder
+- OCR process not stopping when using Q/Escape keys
+- Coordinates not being displayed in the GUI despite being extracted
+
+### Root Cause Analysis
+- The pytesseract library was creating numerous temporary files for each OCR operation
+- Multiple OCR methods were being run in quick succession, creating a large number of temporary files
+- The OCR process was being called too frequently without rate limiting
+- The drag calibration system increased the number of OCR operations, exacerbating the issue
+
+### Solutions Implemented
+1. Optimized the OCR process in `TextOCR.extract_text()`:
+   - Only process the preferred OCR method when not in auto mode
+   - Standardized configuration parameters to reduce redundancy
+   - Simplified the OCR method selection process
+2. Added rate limiting to `GameWorldCoordinator.update_current_position_from_ocr()`:
+   - Implemented a minimum 500ms delay between OCR operations
+   - Added early return with existing coordinates when rate limited
+   - Improved logging to track rate-limited operations
+3. Enhanced error handling throughout the OCR process:
+   - Better timeout handling to prevent the application from hanging
+   - Improved fallback to existing coordinates when OCR fails
+   - More robust state tracking for the OCR process
+
+### Prevention Strategies
+1. Implemented rate limiting to prevent excessive OCR operations
+2. Reduced the number of temporary files created during OCR
+3. Improved error handling and timeout mechanisms
+4. Enhanced logging to better track OCR operations and failures
+5. Added more robust state tracking for the OCR process
+
+### Testing
+1. Verified that the application remains responsive during OCR operations
+2. Confirmed that fewer temporary files are created during OCR
+3. Tested that the Q/Escape keys properly stop the OCR process
+4. Verified that coordinates are displayed in the GUI even when some values are missing
+5. Confirmed that the OCR process works correctly with the drag calibration system 
