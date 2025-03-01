@@ -913,6 +913,17 @@ class AutomationTab(QWidget):
         # Load saved positions and sequences
         self._load_saved_data()
         
+    def is_sequence_running(self) -> bool:
+        """
+        Check if a sequence is currently running.
+        
+        Returns:
+            bool: True if a sequence is running, False otherwise
+        """
+        if hasattr(self, 'sequence_status'):
+            return self.sequence_status.text() == "Sequence: Active"
+        return False
+
     def _load_saved_data(self) -> None:
         """Load saved positions and sequences from disk."""
         try:
@@ -1337,11 +1348,19 @@ class AutomationTab(QWidget):
     def _toggle_ocr(self) -> None:
         """Toggle OCR functionality on/off."""
         try:
-            if self.ocr_btn.isChecked():
+            # Get the current state from the text_ocr object
+            is_active = self.ocr_btn.isChecked()
+            
+            # Update button text and style based on state
+            if is_active:
                 # Start OCR
                 self.ocr_btn.setText("Stop Text OCR")
                 self.ocr_status.setText("Text OCR: Active")
-                logger.info("Text OCR activated")
+                # Set button style to ON state (green)
+                self.ocr_btn.setStyleSheet(
+                    "background-color: #228B22; color: white; padding: 8px; font-weight: bold;"
+                )
+                logger.info("Text OCR activated in automation tab")
                 
                 # Here you would typically start the OCR process
                 # For now, we'll just update the UI
@@ -1350,16 +1369,24 @@ class AutomationTab(QWidget):
                 # Stop OCR
                 self.ocr_btn.setText("Start Text OCR")
                 self.ocr_status.setText("Text OCR: Inactive")
-                logger.info("Text OCR deactivated")
+                # Set button style to OFF state (red)
+                self.ocr_btn.setStyleSheet(
+                    "background-color: #8B0000; color: white; padding: 8px; font-weight: bold;"
+                )
+                logger.info("Text OCR deactivated in automation tab")
                 
                 # Here you would typically stop the OCR process
                 # For now, we'll just update the UI
                 self.select_ocr_region_btn.setEnabled(True)
         except Exception as e:
-            logger.error(f"Error toggling OCR: {e}", exc_info=True)
+            logger.error(f"Error toggling OCR in automation tab: {e}", exc_info=True)
             self.ocr_btn.setChecked(False)
             self.ocr_btn.setText("Start Text OCR")
             self.ocr_status.setText("Text OCR: Error")
+            # Set button style to ERROR state (red)
+            self.ocr_btn.setStyleSheet(
+                "background-color: #8B0000; color: white; padding: 8px; font-weight: bold;"
+            )
             QMessageBox.critical(self, "OCR Error", f"Failed to toggle OCR: {str(e)}")
             
     def _start_ocr_region_selection(self) -> None:

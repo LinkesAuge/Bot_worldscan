@@ -1,4 +1,185 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
 # Memory
+
+## 2023-07-24: Fixed OCR Button Text Update Delay
+
+### Changes Made
+- Refactored the `_toggle_ocr` method in `OverlayController` to use asynchronous operations
+- Created a centralized `_update_ocr_button_state` method for managing OCR button appearance
+- Added a new `_perform_ocr_toggle` method that runs asynchronously after button state updates
+- Updated the `keyPressEvent` method to use the centralized button state management
+- Added a `update_ocr_button_from_state` method to synchronize button state with OCR state
+- Improved error handling throughout the OCR toggle process
+
+### Impact
+- OCR button text and style now update immediately when clicked
+- UI remains responsive during OCR operations
+- Consistent button state management across the application
+- Better user experience with immediate visual feedback
+- More reliable error handling and recovery
+- Improved code organization with clear separation of concerns
+
+### Testing
+- Verified that the OCR button text updates immediately when clicked
+- Confirmed that the UI remains responsive during OCR operations
+- Tested error handling by simulating exceptions during OCR toggle
+- Verified that the button state correctly reflects the OCR state
+- Confirmed that keyboard shortcuts properly update the button state
+
+## 2023-07-23: Fixed OCR Button State Inconsistency
+
+### Changes Made
+- Standardized the OCR button styling to use consistent colors (green for ON, red for OFF)
+- Updated the `keyPressEvent` method to properly set the button text and style when stopping OCR
+- Enhanced the `_toggle_ocr` method to ensure consistent button state management
+- Updated the AutomationTab's OCR button styling to match the main OCR button
+- Improved error handling to ensure the button always reflects the correct state
+- Added more detailed logging to track OCR state changes
+
+### Impact
+- OCR toggle button now has only two states (ON/OFF) with consistent styling
+- Button state is now properly synchronized with the actual OCR state
+- Consistent behavior when toggling OCR via different methods (UI button vs. keyboard shortcuts)
+- Improved user experience with clear visual feedback on OCR state
+- More reliable error handling ensures the UI always reflects the actual state
+- Better debugging capabilities with enhanced logging
+
+### Testing
+- Verified that the OCR button has only two states (green for ON, red for OFF)
+- Confirmed that pressing Escape/Q key properly updates the OCR button style
+- Tested toggling OCR via the UI button and verified consistent styling
+- Verified that error handling properly updates the button state
+- Confirmed that the AutomationTab's OCR button has consistent styling
+
+## 2023-07-22: Fixed Escape/Q Key to Only Deactivate Processes
+
+### Changes Made
+- Modified the `keyPressEvent` method in the `OverlayController` class to call stop methods directly instead of toggle methods
+- For OCR, now calling `_stop_ocr()` directly instead of `_toggle_ocr()`
+- For template matching, now calling `overlay.stop_template_matching()` directly and updating settings
+- Added a flag to track whether any processes were actually stopped
+- Updated the status message to indicate when no active processes were found to stop
+- Ensured all UI elements are properly updated to reflect the stopped state
+
+### Impact
+- Escape and Q keys now only deactivate processes, never activate them
+- Consistent behavior with user expectations for stop keys
+- More intuitive user experience with keyboard shortcuts
+- Clear feedback when no active processes are found to stop
+- Improved reliability of process management
+- Consistent behavior across different stopping mechanisms
+
+### Testing
+- Verified that pressing Escape key only turns off template matching and never turns it on
+- Confirmed that pressing Q key only turns off OCR processes and never turns them on
+- Tested behavior when no processes are active to ensure appropriate feedback
+- Verified that UI elements correctly reflect the stopped state
+- Confirmed that the status bar provides appropriate feedback based on whether processes were stopped
+
+## 2023-07-21: Fixed Escape/Q Key Process Toggling
+
+### Changes Made
+- Updated the `keyPressEvent` method in the `OverlayController` class to properly update button states before calling toggle methods
+- Enhanced the `_toggle_pattern_matching` method to ensure button text and color are updated when toggled off
+- Improved the `_toggle_ocr` method with better error handling and state management
+- Added checks to ensure button states are consistent with the actual process states
+- Ensured all toggle methods properly handle errors and set processes to OFF state in case of exceptions
+
+### Impact
+- Escape and Q keys now properly toggle off template matching, OCR, and automation processes
+- Button states are now correctly updated when processes are stopped via keyboard shortcuts
+- Consistent behavior between UI button clicks and keyboard shortcuts for stopping processes
+- More robust error handling in toggle methods prevents processes from being left in an inconsistent state
+- Improved user experience with reliable keyboard shortcuts for stopping processes
+
+### Testing
+- Verified that pressing Escape key properly toggles off template matching with correct button state updates
+- Confirmed that pressing Q key properly toggles off OCR processes with correct button state updates
+- Tested stopping automation sequences with keyboard shortcuts and verified button state updates
+- Verified error handling by simulating exceptions during toggle operations
+- Confirmed that the status bar correctly updates when processes are stopped via keyboard shortcuts
+
+## 2023-07-20: Fixed Stop Key Error in OCR Process
+
+### Changes Made
+- Fixed the `keyPressEvent` method in the `OverlayController` class to call the correct methods when stopping processes with keyboard shortcuts
+- Changed `_handle_ocr_toggle()` to `_toggle_ocr()` for stopping OCR processes
+- Changed `_handle_pattern_toggle()` to `_toggle_pattern_matching()` for stopping template matching
+- Fixed attribute name check from `self.overlay.is_active` to `self.overlay.active`
+- Added a new `is_sequence_running()` method to the `AutomationTab` class to check if a sequence is currently running
+- Updated the `keyPressEvent` method to safely check for the existence of the method before calling it
+- Ensured proper error handling in the key event processing
+
+### Impact
+- Fixed application crash when pressing Escape or Q keys to stop OCR processes
+- Fixed application crash when checking overlay status during stop key processing
+- Fixed application crash when checking if a sequence is running in the automation tab
+- Improved reliability of keyboard shortcuts for stopping active processes
+- Enhanced user experience by ensuring stop keys work consistently
+- Maintained consistent behavior across different stopping mechanisms (UI buttons vs. keyboard shortcuts)
+
+### Testing
+- Verified that pressing Escape key properly stops OCR processes without errors
+- Confirmed that pressing Q key properly stops template matching without errors
+- Tested stopping automation sequences with keyboard shortcuts
+- Tested stopping multiple active processes simultaneously with keyboard shortcuts
+- Verified that the status bar correctly updates when processes are stopped via keyboard shortcuts
+
+## 2023-07-19: OCR Mouse Centering from Overlay Tab
+
+### Changes Made
+- Updated the `_start_ocr` method in the `OverlayController` class to center the mouse before starting OCR
+- Added a call to the `game_coordinator.update_current_position_from_ocr()` method from the game world search tab
+- Ensured proper error handling if the game world search tab is not available
+- Added comprehensive logging to track the mouse centering process
+- Improved the method documentation to clearly explain the steps taken during OCR activation
+
+### Impact
+- Consistent mouse centering regardless of which tab is used to activate OCR
+- Improved OCR accuracy due to consistent mouse positioning
+- More reliable coordinate extraction across all application components
+- Enhanced debugging capabilities with detailed logging of OCR activation
+- Better user experience with more consistent OCR results
+
+### Testing
+- Verified that the mouse is properly centered when activating OCR from the overlay tab
+- Confirmed that OCR results are consistent regardless of which tab is used to start OCR
+- Tested error handling when the game world search tab is not available
+- Verified that logging correctly tracks the mouse centering process
+
+## 2023-07-18: Enhanced Mouse Centering for OCR
+
+### Changes Made
+- Completely redesigned the `_center_mouse_for_measurement` method in `GameWorldCoordinator` to use multiple mouse movement approaches:
+  1. win32api.SetCursorPos
+  2. ctypes.windll.user32.SetCursorPos
+  3. pyautogui.moveTo
+  4. ctypes.windll.user32.mouse_event (as a final fallback)
+- Added verification after each mouse movement attempt to ensure the mouse actually moved to the target position
+- Added the `_ensure_window_active` method to activate the game window before centering the mouse
+- Updated the coordinate region calculation to account for window frame offsets
+- Improved the client area detection to center the mouse in the actual game area, not just the window frame
+- Added comprehensive logging to track mouse movement attempts and results
+- Updated the `update_current_position_from_ocr` method to ensure the window is active before trying to center the mouse
+
+### Impact
+- More reliable mouse centering before taking OCR screenshots
+- Improved accuracy of coordinate extraction due to consistent mouse positioning
+- Better handling of window frame offsets for more precise region selection
+- Enhanced debugging capabilities with detailed logging of mouse movement attempts
+- More robust error handling and recovery when mouse movement fails
+- Improved user experience with more reliable OCR functionality
+
+### Testing
+- Verified that the mouse properly centers in the game window before taking OCR screenshots
+- Confirmed that the window is properly activated before mouse operations
+- Tested all mouse movement methods to ensure they work correctly
+- Verified that the coordinate region calculation correctly accounts for window frame offsets
+- Confirmed that OCR screenshots capture the correct region due to proper mouse positioning
 
 ## 2023-07-17: Persistent Game World Coordinates
 

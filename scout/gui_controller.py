@@ -1154,22 +1154,91 @@ class OverlayController(QMainWindow):
 
     def _toggle_ocr(self) -> None:
         """Toggle Text OCR on/off."""
-        is_active = self.ocr_btn.isChecked()
+        try:
+            # Get the current state from the button
+            is_active = self.ocr_btn.isChecked()
+            
+            # Update button text and style immediately
+            self._update_ocr_button_state(is_active)
+            
+            # Use a timer to perform the actual OCR operations asynchronously
+            # This prevents the UI from freezing while OCR is being started/stopped
+            QTimer.singleShot(10, lambda: self._perform_ocr_toggle(is_active))
+            
+        except Exception as e:
+            logger.error(f"Error toggling OCR: {e}", exc_info=True)
+            # Ensure we set to OFF state in case of error
+            self.ocr_btn.setChecked(False)
+            self._update_ocr_button_state(False)
+            # Try to stop OCR if it might be running
+            try:
+                self._stop_ocr()
+            except Exception as inner_e:
+                logger.error(f"Error stopping OCR after toggle error: {inner_e}", exc_info=True)
+    
+    def _update_ocr_button_state(self, is_active: bool) -> None:
+        """
+        Update the OCR button state (text and style).
+        
+        This is the central method for managing the OCR button appearance.
+        All code that needs to update the OCR button should call this method.
+        
+        Args:
+            is_active: Whether OCR is active (True) or inactive (False)
+        """
+        # Update button text
         self.ocr_btn.setText(f"Text OCR: {'ON' if is_active else 'OFF'}")
         
+        # Update button style based on state
         if is_active:
+            # Green for ON state
             self.ocr_btn.setStyleSheet(
                 "background-color: #228B22; color: white; padding: 8px; font-weight: bold;"
             )
-            self._start_ocr()
         else:
+            # Red for OFF state
             self.ocr_btn.setStyleSheet(
                 "background-color: #8B0000; color: white; padding: 8px; font-weight: bold;"
             )
-            self._stop_ocr()
+        
+        # Log the state change
+        logger.debug(f"OCR button state updated: {'Active' if is_active else 'Inactive'}")
+    
+    def _perform_ocr_toggle(self, is_active: bool) -> None:
+        """
+        Perform the actual OCR toggle operations.
+        
+        This method is called asynchronously after the button state has been updated.
+        
+        Args:
+            is_active: Whether to activate (True) or deactivate (False) OCR
+        """
+        try:
+            if is_active:
+                self._start_ocr()
+            else:
+                self._stop_ocr()
+        except Exception as e:
+            logger.error(f"Error during OCR toggle operation: {e}", exc_info=True)
+            # Revert button state in case of error
+            self.ocr_btn.setChecked(False)
+            self._update_ocr_button_state(False)
+            # Try to stop OCR if it might be running
+            try:
+                self._stop_ocr()
+            except Exception as inner_e:
+                logger.error(f"Error stopping OCR after toggle operation error: {inner_e}", exc_info=True)
     
     def _start_ocr(self) -> None:
-        """Start Text OCR processing."""
+        """
+        Start Text OCR processing.
+        
+        This method:
+        1. Centers the mouse in the game window
+        2. Sets up the OCR system with the preferred method
+        3. Updates the configuration
+        4. Starts the OCR processing
+        """
         logger.info("Starting Text OCR")
         self.ocr_status.setText("Text OCR: Active")
         
@@ -1186,6 +1255,12 @@ class OverlayController(QMainWindow):
         ocr_settings['active'] = True
         ocr_settings['preferred_method'] = preferred_method
         self.config_manager.update_ocr_settings(ocr_settings)
+        
+        # Center the mouse in the game window before starting OCR
+        # This ensures consistent coordinate extraction
+        if hasattr(self, 'game_world_search_tab') and hasattr(self.game_world_search_tab, 'game_coordinator'):
+            logger.info("Centering mouse in game window before starting OCR...")
+            self.game_world_search_tab.game_coordinator.update_current_position_from_ocr()
         
         # Start OCR processing
         self.text_ocr.start()
@@ -1410,11 +1485,17 @@ class OverlayController(QMainWindow):
             else:
                 self.overlay.stop_template_matching()
                 self._update_pattern_button_color(False)
+                # Ensure the button text is updated
+                if hasattr(self, 'pattern_btn'):
+                    self.pattern_btn.setText("Template Matching: OFF")
                 logger.info("Template matching deactivated")
                 
         except Exception as e:
             logger.error(f"Error toggling template matching: {e}", exc_info=True)
-            self._update_pattern_button_color(False)
+            # Ensure we set to OFF state in case of error
+            if hasattr(self, 'pattern_btn'):
+                self.pattern_btn.setText("Template Matching: OFF")
+                self._update_pattern_button_color(False)
 
     def _toggle_sound(self) -> None:
         """
@@ -1526,29 +1607,53 @@ class OverlayController(QMainWindow):
         # Check for escape key
         if event.key() == Qt.Key.Key_Escape or event.key() == Qt.Key.Key_Q:
             logger.info(f"Stop key pressed: {'Escape' if event.key() == Qt.Key.Key_Escape else 'Q'}")
+            processes_stopped = False
             
             # Stop OCR if active
             if self.text_ocr.active:
                 logger.info("Stopping OCR process due to stop key")
-                self._handle_ocr_toggle()  # Use existing toggle handler
+                # Update button state first
+                if hasattr(self, 'ocr_btn'):
+                    self.ocr_btn.setChecked(False)
+                    self._update_ocr_button_state(False)
+                self._stop_ocr()  # Call stop directly instead of toggle
+                processes_stopped = True
             
             # Stop template matching if active
-            if self.overlay.is_active:
+            if self.overlay.active:
                 logger.info("Stopping template matching due to stop key")
-                self._handle_pattern_toggle()  # Use existing toggle handler
+                # Update pattern button state
+                if hasattr(self, 'pattern_btn'):
+                    self.pattern_btn.setText("Template Matching: OFF")
+                    self._update_pattern_button_color(False)
+                # Stop template matching directly
+                self.overlay.stop_template_matching()
+                # Update settings to reflect the stopped state
+                settings = self.config_manager.get_template_matching_settings()
+                settings["active"] = False
+                self.config_manager.update_template_matching_settings(settings)
+                processes_stopped = True
             
             # Stop any active automation sequence
-            if hasattr(self, 'automation_tab') and self.automation_tab.is_sequence_running():
+            if hasattr(self, 'automation_tab') and hasattr(self.automation_tab, 'is_sequence_running') and self.automation_tab.is_sequence_running():
                 logger.info("Stopping automation sequence due to stop key")
+                # Update sequence button state
+                if hasattr(self, 'sequence_btn') and self.sequence_btn.isChecked():
+                    self.sequence_btn.setChecked(False)
                 self.automation_tab.stop_sequence()
+                processes_stopped = True
             
             # Stop any active game world search
             if hasattr(self, 'game_world_search_tab') and hasattr(self.game_world_search_tab, 'is_searching') and self.game_world_search_tab.is_searching:
                 logger.info("Stopping game world search due to stop key")
                 self.game_world_search_tab._stop_search()
+                processes_stopped = True
             
             # Update status
-            self.status_bar.showMessage("All processes stopped by user (Stop key pressed)", 3000)
+            if processes_stopped:
+                self.status_bar.showMessage("Processes stopped by user (Stop key pressed)", 3000)
+            else:
+                self.status_bar.showMessage("No active processes to stop", 3000)
         
         # Pass event to parent class
         super().keyPressEvent(event) 
@@ -1572,3 +1677,18 @@ class OverlayController(QMainWindow):
         
         # Update status
         self.status_bar.showMessage(f"OCR method set to: {method}", 3000) 
+
+    def update_ocr_button_from_state(self) -> None:
+        """
+        Update the OCR button state based on the actual OCR state.
+        
+        This method ensures the button state is synchronized with the actual OCR state.
+        It should be called whenever the OCR state might have changed outside of the button click handler.
+        """
+        if hasattr(self, 'text_ocr') and hasattr(self, 'ocr_btn'):
+            is_active = self.text_ocr.active
+            # Only update if the button state doesn't match the OCR state
+            if self.ocr_btn.isChecked() != is_active:
+                logger.debug(f"Synchronizing OCR button state with OCR state: {is_active}")
+                self.ocr_btn.setChecked(is_active)
+                self._update_ocr_button_state(is_active) 

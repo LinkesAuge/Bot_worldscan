@@ -16,6 +16,8 @@ import pytesseract
 import time
 import mss
 import win32api
+import ctypes
+import win32con
 
 from scout.window_manager import WindowManager
 from scout.text_ocr import TextOCR
@@ -143,11 +145,12 @@ class GameWorldCoordinator:
         Update the current position from OCR.
         
         This method:
-        1. Centers the mouse in the game window
-        2. Takes a screenshot of the coordinate region
-        3. Processes the screenshot with OCR
-        4. Extracts coordinates from the OCR text
-        5. Updates the current position with the parsed coordinates
+        1. Ensures the game window is active
+        2. Centers the mouse in the game window
+        3. Takes a screenshot of the coordinate region
+        4. Processes the screenshot with OCR
+        5. Extracts coordinates from the OCR text
+        6. Updates the current position with the parsed coordinates
         
         If OCR fails but we have valid coordinates in the game state,
         those coordinates will still be used.
@@ -170,7 +173,15 @@ class GameWorldCoordinator:
                     self.current_position.k = coords.k
                     # We'll still try to get fresh coordinates from OCR, but we have valid ones if that fails
             
-            # First center the mouse to ensure consistent measurements
+            # Ensure the game window is active before trying to center the mouse
+            if not self._ensure_window_active():
+                logger.warning("Could not activate game window for OCR update")
+                # If we have valid coordinates in the game state, consider this a success
+                if self.game_state and self.game_state.get_coordinates() and self.game_state.get_coordinates().is_valid():
+                    return True
+                return False
+            
+            # Center the mouse to ensure consistent measurements
             logger.info("Centering mouse in game window...")
             self._center_mouse_for_measurement()
             
@@ -197,9 +208,12 @@ class GameWorldCoordinator:
                 x, y, width, height = self.coord_region
                 window_pos = self.window_manager.get_window_position()
                 if window_pos:
-                    # Convert to screen coordinates
-                    screen_x = window_pos[0] + x
-                    screen_y = window_pos[1] + y
+                    # Get window frame offset
+                    x_offset, y_offset = self.window_manager.get_window_frame_offset()
+                    
+                    # Convert to screen coordinates, adjusting for window frame
+                    screen_x = window_pos[0] + x + x_offset
+                    screen_y = window_pos[1] + y + y_offset
                     self.text_ocr.set_region({
                         'left': screen_x,
                         'top': screen_y,
@@ -282,15 +296,32 @@ class GameWorldCoordinator:
         which in turn affects the coordinates displayed in the game UI.
         """
         try:
-            # Get window position
-            window_pos = self.window_manager.get_window_position()
-            if not window_pos:
-                logger.warning("Could not get window position for mouse centering")
-                return
+            # Get client area position and size
+            client_rect = self.window_manager.get_client_rect()
+            if not client_rect:
+                logger.warning("Could not get client rect for mouse centering")
+                # Fall back to window position
+                window_pos = self.window_manager.get_window_position()
+                if not window_pos:
+                    logger.warning("Could not get window position for mouse centering")
+                    return
+                left, top, width, height = window_pos
                 
-            left, top, width, height = window_pos
+                # Get window frame offset
+                x_offset, y_offset = self.window_manager.get_window_frame_offset()
+                
+                # Adjust for window frame
+                left += x_offset
+                top += y_offset
+                width -= x_offset * 2  # Approximate adjustment
+                height -= y_offset + x_offset  # Approximate adjustment
+            else:
+                # Use client rect directly
+                left, top, right, bottom = client_rect
+                width = right - left
+                height = bottom - top
             
-            # Calculate center position
+            # Calculate center position of client area
             center_x = left + width // 2
             center_y = top + height // 2
             
@@ -298,46 +329,150 @@ class GameWorldCoordinator:
             import pyautogui
             current_x, current_y = pyautogui.position()
             logger.info(f"Current mouse position: ({current_x}, {current_y})")
+            logger.info(f"Target center position: ({center_x}, {center_y})")
             
-            # Try to move mouse using win32api first (more reliable)
+            # Try multiple methods to move the mouse
+            methods_tried = 0
+            max_attempts = 3
+            
+            # Method 1: win32api.SetCursorPos
+            if methods_tried < max_attempts:
+                methods_tried += 1
+                try:
+                    logger.info(f"Method {methods_tried}: Moving mouse using win32api.SetCursorPos")
+                    win32api.SetCursorPos((center_x, center_y))
+                    time.sleep(0.1)  # Small delay
+                    
+                    # Verify position
+                    new_x, new_y = pyautogui.position()
+                    logger.info(f"New position after win32api: ({new_x}, {new_y})")
+                    
+                    if abs(new_x - center_x) <= 5 and abs(new_y - center_y) <= 5:
+                        logger.info(f"Successfully centered mouse using win32api")
+                        return
+                    else:
+                        logger.warning(f"win32api mouse movement not accurate. Expected: ({center_x}, {center_y}), Actual: ({new_x}, {new_y})")
+                except Exception as e:
+                    logger.warning(f"Error using win32api.SetCursorPos: {e}")
+            
+            # Method 2: ctypes.windll.user32.SetCursorPos
+            if methods_tried < max_attempts:
+                methods_tried += 1
+                try:
+                    logger.info(f"Method {methods_tried}: Moving mouse using ctypes.windll.user32.SetCursorPos")
+                    ctypes.windll.user32.SetCursorPos(center_x, center_y)
+                    time.sleep(0.1)  # Small delay
+                    
+                    # Verify position
+                    new_x, new_y = pyautogui.position()
+                    logger.info(f"New position after ctypes: ({new_x}, {new_y})")
+                    
+                    if abs(new_x - center_x) <= 5 and abs(new_y - center_y) <= 5:
+                        logger.info(f"Successfully centered mouse using ctypes")
+                        return
+                    else:
+                        logger.warning(f"ctypes mouse movement not accurate. Expected: ({center_x}, {center_y}), Actual: ({new_x}, {new_y})")
+                except Exception as e:
+                    logger.warning(f"Error using ctypes.windll.user32.SetCursorPos: {e}")
+            
+            # Method 3: pyautogui.moveTo
+            if methods_tried < max_attempts:
+                methods_tried += 1
+                try:
+                    logger.info(f"Method {methods_tried}: Moving mouse using pyautogui.moveTo")
+                    pyautogui.moveTo(center_x, center_y)
+                    time.sleep(0.1)  # Small delay
+                    
+                    # Verify position
+                    new_x, new_y = pyautogui.position()
+                    logger.info(f"New position after pyautogui: ({new_x}, {new_y})")
+                    
+                    if abs(new_x - center_x) <= 5 and abs(new_y - center_y) <= 5:
+                        logger.info(f"Successfully centered mouse using pyautogui")
+                        return
+                    else:
+                        logger.warning(f"pyautogui mouse movement not accurate. Expected: ({center_x}, {center_y}), Actual: ({new_x}, {new_y})")
+                except Exception as e:
+                    logger.warning(f"Error using pyautogui.moveTo: {e}")
+            
+            # If we get here, all methods failed or were inaccurate
+            logger.warning("All mouse centering methods failed or were inaccurate")
+            
+            # Try one more approach: mouse_event
             try:
-                logger.info(f"Moving mouse to center using win32api: ({center_x}, {center_y})")
-                win32api.SetCursorPos((center_x, center_y))
+                logger.info("Final attempt: Using mouse_event to move mouse")
+                # Get current position
+                current_x, current_y = pyautogui.position()
                 
-                # Small delay to ensure the mouse movement is complete
-                time.sleep(0.1)
+                # Calculate relative movement
+                dx = center_x - current_x
+                dy = center_y - current_y
                 
-                # Verify mouse position after move
+                # Use mouse_event to move relatively
+                ctypes.windll.user32.mouse_event(
+                    0x0001,  # MOUSEEVENTF_MOVE
+                    dx, dy,
+                    0, 0
+                )
+                
+                time.sleep(0.1)  # Small delay
+                
+                # Verify position
                 new_x, new_y = pyautogui.position()
-                logger.info(f"New mouse position after win32api: ({new_x}, {new_y})")
+                logger.info(f"New position after mouse_event: ({new_x}, {new_y})")
                 
-                # Check if mouse was actually moved
-                if abs(new_x - center_x) > 5 or abs(new_y - center_y) > 5:
-                    logger.warning(f"win32api mouse movement failed. Expected: ({center_x}, {center_y}), Actual: ({new_x}, {new_y})")
-                    # Fall back to pyautogui
-                    raise Exception("win32api mouse movement failed")
+                if abs(new_x - center_x) <= 10 and abs(new_y - center_y) <= 10:
+                    logger.info(f"Successfully centered mouse using mouse_event")
                 else:
-                    logger.info(f"Successfully centered mouse using win32api at ({center_x}, {center_y})")
-                    return
-            except Exception as win32_error:
-                logger.warning(f"Error using win32api for mouse movement: {win32_error}. Falling back to pyautogui.")
+                    logger.warning(f"mouse_event movement not accurate. Expected: ({center_x}, {center_y}), Actual: ({new_x}, {new_y})")
+            except Exception as e:
+                logger.error(f"Error using mouse_event: {e}")
                 
-            # Fall back to pyautogui if win32api fails
-            logger.info(f"Moving mouse to center using pyautogui: ({center_x}, {center_y})")
-            pyautogui.moveTo(center_x, center_y)
-            
-            # Verify mouse position after move
-            new_x, new_y = pyautogui.position()
-            logger.info(f"New mouse position after pyautogui: ({new_x}, {new_y})")
-            
-            # Check if mouse was actually moved
-            if abs(new_x - center_x) > 5 or abs(new_y - center_y) > 5:
-                logger.warning(f"Mouse did not move to expected position. Expected: ({center_x}, {center_y}), Actual: ({new_x}, {new_y})")
-            else:
-                logger.info(f"Successfully centered mouse at ({center_x}, {center_y}) for coordinate measurement")
-            
         except Exception as e:
             logger.error(f"Error centering mouse: {e}", exc_info=True)
+            
+    def _ensure_window_active(self) -> bool:
+        """
+        Ensure the game window is active (has focus).
+        
+        Returns:
+            bool: True if window is active or was successfully activated, False otherwise
+        """
+        try:
+            if not self.window_manager.find_window():
+                logger.warning("Cannot activate window: Window not found")
+                return False
+                
+            # Check if window is already active
+            active_hwnd = ctypes.windll.user32.GetForegroundWindow()
+            if active_hwnd == self.window_manager.hwnd:
+                logger.debug("Window is already active")
+                return True
+                
+            # Try to activate the window
+            logger.info("Activating game window")
+            
+            # Show window if minimized
+            if self.window_manager.is_window_minimized_or_hidden():
+                ctypes.windll.user32.ShowWindow(self.window_manager.hwnd, win32con.SW_RESTORE)
+                time.sleep(0.2)  # Give time for window to restore
+            
+            # Set foreground window
+            ctypes.windll.user32.SetForegroundWindow(self.window_manager.hwnd)
+            time.sleep(0.2)  # Give time for window to activate
+            
+            # Verify activation
+            active_hwnd = ctypes.windll.user32.GetForegroundWindow()
+            if active_hwnd == self.window_manager.hwnd:
+                logger.info("Successfully activated game window")
+                return True
+            else:
+                logger.warning("Failed to activate game window")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error activating window: {e}")
+            return False
     
     def _parse_coordinates(self, text: str) -> Optional[Tuple[int, int, int]]:
         """
