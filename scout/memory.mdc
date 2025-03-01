@@ -1220,4 +1220,32 @@ Fixed inconsistency in calibration result display across different parts of the 
   - Integrated with template loading to maintain selection state
   - Located in search settings section above template list
 
+## Direction Calibration System Status
+**Last Updated:** March 1, 2024
+
+### Recent Improvements
+1. Fixed inconsistent Y measurements during calibration
+   - Added proper stabilization delays
+   - Implemented multiple OCR updates at critical points
+   - Increased wait times after movements
+   - Result: Consistent measurements across all calibration runs
+
+### Current Status
+- Calibration system is now stable and reliable
+- OCR integration is working correctly
+- Movement measurements are consistent
+- Proper game world stabilization is implemented
+
+### Technical Details
+- Initial stabilization: 1.5s wait + 3x OCR updates
+- Post-movement stabilization: 2.0s wait + 3x OCR updates
+- OCR update interval: 0.5s between updates
+- Movement validation is working correctly
+- Position tracking is accurate
+
+### Next Steps
+1. Monitor calibration performance in different game states
+2. Consider adding calibration quality metrics
+3. Look into potential performance optimizations
+
 [Rest of the document remains unchanged...] 

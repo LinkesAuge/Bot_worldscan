@@ -25,6 +25,7 @@ from pathlib import Path
 from scout.config_manager import ConfigManager
 import time
 import json
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,7 @@ class TextOCR(QObject):
         self.game_state = game_state
         self._active = False
         self.region: Optional[Dict[str, int]] = None
+        self.logical_region: Optional[Dict[str, int]] = None
         self._cancellation_requested = False  # Flag to indicate cancellation request
         
         # Load settings from config
@@ -86,37 +88,58 @@ class TextOCR(QObject):
         """
         return self._active
     
-    def set_region(self, region: Dict[str, int]) -> None:
+    def set_region(self, region: Dict[str, Any]) -> None:
         """
-        Set the region to process.
+        Set the OCR region for coordinate extraction.
         
         Args:
-            region: Dictionary with left, top, width, height in logical coordinates
-                   and dpi_scale for converting to physical coordinates
+            region: Dictionary containing region coordinates and properties
+                   Must have 'left', 'top', 'width', 'height', and 'dpi_scale'
         """
-        # Convert logical coordinates to physical coordinates for screen capture
-        dpi_scale = region.get('dpi_scale', 1.0)
-        window_pos = self.window_manager.get_window_position()
-        if window_pos:
-            window_x, window_y, _, _ = window_pos
+        try:
+            # Get window dimensions
+            window_rect = self.window_manager.get_window_position()
+            if not window_rect:
+                logger.error("Could not get window position")
+                return
+                
+            window_x, window_y, window_width, window_height = window_rect
             
-            # Convert to physical coordinates
-            physical_region = {
-                'left': int(window_x + (region['left'] * dpi_scale)),
-                'top': int(window_y + (region['top'] * dpi_scale)),
-                'width': int(region['width'] * dpi_scale),
-                'height': int(region['height'] * dpi_scale),
-                'dpi_scale': dpi_scale
+            # Convert region to window-relative coordinates
+            logical_region = {
+                'left': region['left'],
+                'top': region['top'],
+                'width': region['width'],
+                'height': region['height'],
+                'dpi_scale': region.get('dpi_scale', 1.0)
             }
             
-            self.region = physical_region
-            logger.info(f"OCR region set to: logical={region}, physical={physical_region}")
+            # Ensure region is within window bounds
+            logical_region['left'] = max(0, min(logical_region['left'], window_width - logical_region['width']))
+            logical_region['top'] = max(0, min(logical_region['top'], window_height - logical_region['height']))
             
-            # If active, force an immediate capture
-            if self._active:
-                self._process_region()
-        else:
-            logger.error("Could not get window position to set OCR region")
+            # Convert to screen coordinates
+            screen_x = window_x + logical_region['left']
+            screen_y = window_y + logical_region['top']
+            
+            physical_region = {
+                'left': screen_x,
+                'top': screen_y,
+                'width': logical_region['width'],
+                'height': logical_region['height'],
+                'dpi_scale': logical_region['dpi_scale']
+            }
+            
+            # Store both logical (window-relative) and physical (screen) coordinates
+            self.region = physical_region
+            self.logical_region = logical_region
+            
+            logger.info(f"OCR region set to: logical={logical_region}, physical={physical_region}")
+            
+        except Exception as e:
+            logger.error(f"Error setting OCR region: {e}")
+            self.region = None
+            self.logical_region = None
             
     def set_frequency(self, frequency: float) -> None:
         """
@@ -644,96 +667,72 @@ class TextOCR(QObject):
         return score
 
     def _process_region(self) -> None:
-        """Process the current region and extract coordinates."""
-        if not self._active or self._cancellation_requested:
-            return
-            
-        if not self.region:
-            logger.warning("No region set for OCR")
-            return
-            
+        """Process the current OCR region and emit coordinates if found."""
         try:
-            logger.info(f"Processing OCR region: {self.region}")
-            
-            # Capture region
-            with mss.mss() as sct:
-                screenshot = np.array(sct.grab(self.region))
+            if self._cancellation_requested:
+                logger.info("OCR processing cancelled")
+                return
                 
-            # Convert from BGRA to BGR
-            image = cv2.cvtColor(screenshot, cv2.COLOR_BGRA2BGR)
+            if not self.region:
+                logger.warning("No OCR region set")
+                return
+                
+            # Get current window position
+            window_rect = self.window_manager.get_window_position()
+            if not window_rect:
+                logger.error("Could not get window position")
+                return
+                
+            window_x, window_y, window_width, window_height = window_rect
             
-            # Create temp directory for OCR processing
-            temp_dir = Path('scout/ocr_output/temp')
-            temp_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Always save the original image for OCR processing
-            cv2.imwrite(str(temp_dir / 'ocr_original_latest.png'), image)
-            
-            # Process with preferred method
-            if self.preferred_method == 'auto':
-                # Try all methods
-                methods = {
-                    'thresh1': self._apply_threshold1,
-                    'thresh2': self._apply_threshold2,
-                    'thresh3': self._apply_threshold3,
-                    'morphed': self._apply_morphological
+            # Update physical region based on current window position and logical region
+            if self.logical_region:
+                # Ensure region is within window bounds
+                left = max(0, min(self.logical_region['left'], window_width - self.logical_region['width']))
+                top = max(0, min(self.logical_region['top'], window_height - self.logical_region['height']))
+                
+                # Update physical region with current window position
+                self.region = {
+                    'left': window_x + left,
+                    'top': window_y + top,
+                    'width': self.logical_region['width'],
+                    'height': self.logical_region['height'],
+                    'dpi_scale': self.logical_region.get('dpi_scale', 1.0)
                 }
-                
-                results = {}
-                scores = {}
-                
-                for method_name, method_func in methods.items():
-                    # Process image
-                    processed = method_func(image.copy())
-                    # Save processed image
-                    cv2.imwrite(str(temp_dir / f'ocr_{method_name}_latest.png'), processed)
-                    # Extract text
-                    text = pytesseract.image_to_string(processed).strip()
-                    results[method_name] = text
-                    scores[method_name] = self._score_text(text)
-                    
-                # Select best result
-                best_method = max(scores.items(), key=lambda x: x[1])[0] if scores else None
-                if best_method:
-                    text = results[best_method]
-                else:
-                    logger.warning("No valid OCR results")
-                    return
-            else:
-                # Map method names to functions
-                method_map = {
-                    'thresh1': self._apply_threshold1,
-                    'thresh2': self._apply_threshold2,
-                    'thresh3': self._apply_threshold3,
-                    'morphed': self._apply_morphological
-                }
-                
-                # Get the appropriate method function
-                method_func = method_map.get(self.preferred_method)
-                if not method_func:
-                    logger.error(f"Invalid OCR method: {self.preferred_method}")
-                    return
-                    
-                # Process image with selected method
-                processed = method_func(image.copy())
-                cv2.imwrite(str(temp_dir / f'ocr_{self.preferred_method}_latest.png'), processed)
-                text = pytesseract.image_to_string(processed).strip()
             
-            # Extract coordinates
+            # Take screenshot of region
+            screenshot = self.window_manager.capture_region(self.region)
+            if screenshot is None:
+                logger.error("Failed to capture screenshot of OCR region")
+                return
+                
+            # Save screenshot for debugging
+            debug_path = Path('scout/ocr_output')
+            debug_path.mkdir(parents=True, exist_ok=True)
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            screenshot_path = debug_path / f'ocr_region_{timestamp}.png'
+            cv2.imwrite(str(screenshot_path), screenshot)
+            
+            # Extract text from screenshot
+            text = self.extract_text(screenshot)
             if text:
+                logger.debug(f"Extracted text: {text}")
+                
+                # Extract coordinates from text
                 coords = self._extract_coordinates(text)
                 if coords:
-                    # Update game state
-                    self.game_state.update_coordinates(coords)
+                    logger.info(f"Successfully extracted coordinates: K: {coords.k:03d}, X: {coords.x:03d}, Y: {coords.y:03d} ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')})")
+                    # Update game state with new coordinates
+                    if self.game_state:
+                        self.game_state.update_coordinates(coords.k, coords.x, coords.y)
                     self.coordinates_updated.emit(coords)
-                    logger.info(f"Successfully extracted coordinates: {coords}")
                 else:
-                    logger.warning("Failed to extract valid coordinates")
+                    logger.debug("No coordinates found in text")
             else:
-                logger.warning("No text extracted from image")
+                logger.debug("No text extracted from screenshot")
                 
         except Exception as e:
-            logger.error(f"Error processing region: {e}", exc_info=True)
+            logger.error(f"Error processing OCR region: {e}", exc_info=True)
 
     def _is_valid_match(self, coords: GameCoordinates) -> bool:
         """

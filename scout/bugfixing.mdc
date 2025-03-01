@@ -765,4 +765,116 @@ To prevent similar issues in the future:
 1. Always implement consistent calculation methods across all display locations
 2. Use the same validation and wrapping logic throughout the application
 3. Show detailed information in the GUI to match log output
-4. Validate displayed values against actual calculations 
+4. Validate displayed values against actual calculations
+
+## [FIXED] Inconsistent Y Measurements in Direction Calibration
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** GameWorldDirection
+
+### Issue Description
+During direction calibration, the first Y measurement was consistently higher (~23%) than subsequent measurements, causing calibration failures due to inconsistent ratios.
+
+### Root Cause
+The game world was not fully stabilized after movements before taking measurements. The first measurement was affected by residual movement in the game world.
+
+### Solution
+Modified the `_calibrate_direction` method in `game_world_direction.py` to:
+1. Increase initial wait time from 1.0s to 1.5s
+2. Add multiple OCR updates (3 times with 0.5s delay) at each critical point:
+   - Before taking the start position
+   - After the drag movement
+   - After returning to start position
+3. Increase wait time after movements from 1.5s to 2.0s
+
+### Verification
+- Y measurements are now consistent across all runs
+- Calibration completes successfully with consistent ratios
+- No more outliers in the first measurement 
+
+## [FIXED] OCR Region Out of Window Bounds
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** TextOCR
+
+### Issue Description
+OCR was failing to read coordinates because the OCR region was being positioned outside the game window bounds, particularly when the window was moved or resized.
+
+### Root Cause
+The OCR region coordinates were not being properly validated against window bounds, and physical screen coordinates were not being updated when the window moved.
+
+### Solution
+1. Enhanced `set_region` method in `TextOCR` class to:
+   - Add bounds checking to ensure region stays within window
+   - Store both logical (window-relative) and physical (screen) coordinates
+   - Improve error handling and validation
+2. Updated `_process_region` method to:
+   - Dynamically update physical coordinates based on current window position
+   - Add bounds checking during processing
+   - Improve screenshot saving for debugging
+   - Enhance error handling and logging
+
+### Verification
+- OCR region now stays within game window bounds
+- Region automatically adjusts when window moves
+- Coordinates are properly read during scans
+- Debug screenshots are saved for verification 
+
+## [FIXED] Missing Screenshot Capture Method
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** WindowManager, TextOCR
+
+### Issue Description
+OCR system was broken in both overlay and game world tab due to a missing `capture_region` method in the WindowManager class.
+
+### Root Cause
+During the OCR system refactoring, we moved the screenshot capture functionality from TextOCR to WindowManager for better organization, but the implementation of `capture_region` was missing.
+
+### Solution
+1. Added `capture_region` method to WindowManager:
+   - Takes region dictionary with left, top, width, height
+   - Uses mss for efficient screen capture
+   - Converts BGRA to BGR format for OpenCV compatibility
+   - Includes proper error handling
+2. Added necessary imports:
+   - numpy for array handling
+   - cv2 for image processing
+   - mss for screen capture
+
+### Verification
+- OCR system now works in both overlay and game world tab
+- Screenshots are properly captured and processed
+- Color format is correctly converted for OpenCV
+- Error handling properly catches and logs issues 
+
+## [FIXED] OCR Region Update and Game State Sync
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** TextOCR
+
+### Issue Description
+OCR system was failing to properly update coordinates and maintain game state synchronization after the screenshot capture refactoring.
+
+### Root Cause
+1. Physical region updates were not properly maintaining all required fields
+2. Game state was not being updated with new coordinates
+3. Region dictionary was being modified in place instead of being recreated
+
+### Solution
+1. Fixed physical region updates in TextOCR:
+   - Now creating new region dictionary with all fields
+   - Properly calculating screen coordinates from window position
+   - Maintaining dpi_scale and other required properties
+2. Added game state synchronization:
+   - Updating game state when new coordinates are extracted
+   - Ensuring coordinates are properly formatted
+3. Improved error handling and logging:
+   - Better debug messages for troubleshooting
+   - Clearer logging of coordinate extraction results
+
+### Verification
+- OCR system now properly updates coordinates
+- Game state stays synchronized with latest coordinates
+- Debug screenshots are properly saved
+- Error handling provides clear feedback 

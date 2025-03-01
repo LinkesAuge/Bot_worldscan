@@ -1,14 +1,26 @@
-from typing import Optional, Tuple, List, Any
+"""
+Window Manager
+
+This module provides functionality for managing game window interactions:
+- Window detection and tracking
+- Window activation and focus
+- Coordinate conversion between screen and window
+- Screenshot capture
+"""
+
+from typing import Optional, Tuple, List, Any, Dict
 import win32gui
-import logging
+import win32con
+import win32api
 import ctypes
-from ctypes.wintypes import RECT, POINT
+import logging
 import numpy as np
 import cv2
 import mss
+from pathlib import Path
+from ctypes.wintypes import RECT, POINT
 import time
 import pywintypes
-import win32con
 
 logger = logging.getLogger(__name__)
 
@@ -441,4 +453,39 @@ class WindowManager:
             
         except Exception as e:
             logger.error(f"Error checking window active state: {e}")
-            return False 
+            return False
+
+    def capture_region(self, region: Dict[str, Any]) -> Optional[np.ndarray]:
+        """
+        Capture a specific region of the screen.
+        
+        Args:
+            region: Dictionary containing region coordinates and properties
+                   Must have 'left', 'top', 'width', 'height'
+                   
+        Returns:
+            numpy.ndarray: The captured image in BGR format, or None if capture fails
+        """
+        try:
+            # Take screenshot using mss
+            with mss.mss() as sct:
+                # Convert region to mss format
+                mss_region = {
+                    'left': region['left'],
+                    'top': region['top'],
+                    'width': region['width'],
+                    'height': region['height']
+                }
+                
+                # Capture the region
+                screenshot = np.array(sct.grab(mss_region))
+                
+                # Convert from BGRA to BGR
+                if screenshot.shape[2] == 4:  # If BGRA
+                    screenshot = cv2.cvtColor(screenshot, cv2.COLOR_BGRA2BGR)
+                    
+                return screenshot
+                
+        except Exception as e:
+            logger.error(f"Error capturing region: {e}")
+            return None 
