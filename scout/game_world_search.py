@@ -633,6 +633,12 @@ class GameWorldSearch:
             # Start from configured cell
             current_x, current_y = self.start_cell
             
+            # Ensure OCR is running for coordinate updates
+            if not self.text_ocr.active:
+                logger.info("Starting OCR for coordinate tracking")
+                self.text_ocr._cancellation_requested = False
+                self.text_ocr.start()
+            
             while current_y < self.grid_size[1] and not self.stop_requested:
                 while current_x < self.grid_size[0] and not self.stop_requested:
                     try:
@@ -647,6 +653,9 @@ class GameWorldSearch:
                             logger.error(f"Failed to move to position {game_pos}")
                             continue
                             
+                        # Wait briefly for coordinates to update after movement
+                        time.sleep(0.5)
+                        
                         # Search at current position
                         self._search_at_position(game_pos)
                         
@@ -668,6 +677,12 @@ class GameWorldSearch:
         except Exception as e:
             self.is_searching = False
             logger.error(f"Error during search: {e}", exc_info=True)
+        finally:
+            # Stop OCR if we started it
+            if self.text_ocr.active:
+                logger.info("Stopping OCR after search completion")
+                self.text_ocr._cancellation_requested = True
+                self.text_ocr.stop()
 
     def _perform_drag(self, start_pos: Tuple[int, int], end_pos: Tuple[int, int]) -> bool:
         """

@@ -125,7 +125,7 @@ def main() -> None:
             game_state=game_state
         )
         
-        # Load OCR settings but don't start OCR
+        # Load OCR settings but ensure OCR starts inactive
         ocr_settings = config_manager.get_ocr_settings()
         text_ocr.set_region(ocr_settings['region'])
         text_ocr.set_frequency(ocr_settings['frequency'])
