@@ -10,6 +10,265 @@ alwaysApply: false
 ---
 # Memory
 
+## 2024-03-01: Enhanced Calibration with Multiple Drags
+
+### Changes Made
+1. Added support for multiple calibration drags:
+   - Added spinbox to UI for configuring number of drags (1-10)
+   - Modified calibration process to perform multiple drags
+   - Implemented averaging of calibration values across drags
+   - Added progress feedback during calibration
+2. Enhanced calibration accuracy:
+   - Each drag provides an independent measurement
+   - Results are averaged to reduce measurement error
+   - Invalid measurements are skipped rather than failing
+   - Detailed logging of individual measurements
+3. Improved UI feedback:
+   - Shows number of drags being performed
+   - Displays progress during calibration
+   - Shows how many measurements were averaged
+   - Clear feedback on calibration results
+
+### Impact
+1. More accurate calibration:
+   - Multiple measurements reduce random errors
+   - Averaging provides more stable calibration values
+   - Bad measurements are automatically filtered out
+2. Better user control:
+   - Users can choose accuracy vs. speed tradeoff
+   - Default of 3 drags balances accuracy and time
+   - Maximum of 10 drags for highest accuracy
+3. Enhanced reliability:
+   - Individual failed measurements don't fail calibration
+   - More robust against OCR reading errors
+   - Better handling of invalid measurements
+
+### Testing
+1. Verified multiple drag functionality:
+   - Tested with different numbers of drags
+   - Confirmed averaging works correctly
+   - Validated error handling for failed measurements
+2. Tested UI components:
+   - Verified spinbox limits and default value
+   - Confirmed progress feedback during calibration
+   - Checked results display with measurement counts
+3. Validated calibration accuracy:
+   - Compared results with different drag counts
+   - Verified consistency of measurements
+   - Tested handling of invalid measurements
+
+## 2024-03-01: Enhanced Calibration UI and Data Persistence
+
+### Changes Made
+1. Added detailed calibration results display to UI:
+   - Added permanent display of calibration ratios
+   - Enhanced success message with detailed results
+   - Added visual feedback for calibration status
+2. Improved calibration data persistence:
+   - Added saving of start and end calibration points
+   - Enhanced loading of calibration data
+   - Added comprehensive logging of loaded calibration data
+3. Updated UI to show current calibration values:
+   - Added display of pixels per game unit for both axes
+   - Added clear formatting and labels for results
+   - Improved reset functionality to clear all displays
+
+### Impact
+1. Better user feedback:
+   - Users can now see calibration results at all times
+   - Clear visual indication of calibration status
+   - Detailed feedback on calibration success/failure
+2. Improved persistence:
+   - Calibration points are now saved between sessions
+   - More robust loading of calibration data
+   - Better error handling for missing or corrupt data
+3. Enhanced user experience:
+   - More informative UI
+   - Clearer feedback on calibration process
+   - Better persistence of calibration settings
+
+### Testing
+1. Verified calibration results display:
+   - Confirmed results are shown after successful calibration
+   - Tested display formatting and clarity
+   - Verified reset functionality
+2. Tested data persistence:
+   - Confirmed calibration data is saved correctly
+   - Verified loading of saved calibration points
+   - Tested error handling for invalid data
+3. Validated UI updates:
+   - Checked all labels and displays
+   - Confirmed proper status updates
+   - Verified reset functionality
+
+## 2024-03-01: Fixed Wait Method in Calibration Process
+
+### Changes Made
+- Fixed incorrect wait method call in `GameWorldCoordinator`
+- Changed `game_actions.wait()` to `time.sleep()` to use the correct waiting mechanism
+- Ensured consistent timing between drag operations and OCR readings
+
+### Impact
+1. Fixed calibration error where drag operation was failing due to incorrect wait method
+2. Ensured proper timing between drag and coordinate readings
+3. Improved reliability of the calibration process
+
+### Testing
+1. Verified that drag operations work correctly during calibration
+2. Confirmed proper timing between operations
+3. Tested complete calibration process with drag and coordinate readings
+
+## 2024-03-01: Fixed GameWorldCoordinator Mouse Movement Method
+
+### Changes Made
+- Fixed method name mismatch between `GameWorldCoordinator` and `GameActions`
+- Changed `move_mouse` to `move_mouse_to` to match the actual method name in `GameActions`
+- Fixed sleep call to use `time.sleep` instead of non-existent `wait` method
+
+### Impact
+1. Fixed calibration error where mouse movement was failing due to incorrect method name
+2. Ensured proper mouse movement during calibration process
+3. Fixed sleep/wait functionality during calibration
+
+### Testing
+1. Verified that mouse movement works during calibration
+2. Confirmed that calibration process can complete successfully
+3. Tested proper timing between mouse movements
+
+## 2024-03-01: Fixed GameWorldCoordinator Initialization with GameActions
+
+### Changes Made
+- Fixed initialization of `GameWorldCoordinator` in `GameWorldSearchTab` to properly pass the `game_actions` parameter
+- This ensures that the coordinator has access to mouse movement functionality needed for calibration
+
+### Impact
+1. Fixed calibration error where mouse movement was failing due to missing game_actions
+2. Enabled proper calibration point marking and drag operations
+3. Improved reliability of the calibration process
+
+### Testing
+1. Verified that calibration points can now be marked without errors
+2. Confirmed that mouse movement works during calibration
+3. Tested complete calibration process with drag operations
+
+## 2023-08-04: Fixed Calibration Point Initialization
+
+### Changes Made
+- Fixed issue where calibration points weren't being set because calibration wasn't started
+- Modified `_start_marking_point` method in `CoordinateDisplayWidget` to start calibration when marking the first point
+- Ensured calibration state is properly initialized before point marking
+
+### Impact
+1. Fixed issue where calibration points couldn't be set
+2. Improved user experience by automatically starting calibration
+3. Prevented confusing error messages about calibration not being in progress
+4. Maintained proper calibration state throughout the process
+
+### Testing
+1. Verified that calibration points can be set successfully
+2. Confirmed that calibration process works end-to-end
+3. Tested error handling for invalid points
+4. Validated calibration state management
+
+## 2023-08-04: Improved Calibration UI with Separate Point Selection
+
+### Changes Made
+1. Redesigned the calibration UI in `CoordinateDisplayWidget`:
+   - Added separate buttons for selecting start and end points
+   - Added coordinate display for both start and end points
+   - Added a "Reset" button to clear calibration points
+   - Improved button state management based on calibration progress
+2. Enhanced the calibration workflow:
+   - Clear separation between point selection and calibration start
+   - Better visual feedback with point coordinates display
+   - More intuitive button labeling and organization
+   - Improved status messages during calibration process
+
+### Impact
+1. More intuitive calibration process:
+   - Clear distinction between start and end point selection
+   - Visual feedback showing selected point coordinates
+   - Better guidance through the calibration steps
+2. Improved user experience:
+   - Separate buttons prevent confusion about which point is being marked
+   - Reset option allows starting over without canceling
+   - Clear status messages guide the user through the process
+3. Better error prevention:
+   - Button states prevent invalid operations
+   - Clear visual feedback helps users understand the current state
+   - Reset option helps recover from mistakes
+
+### Testing
+1. Tested point selection workflow:
+   - Verified start point selection and coordinate display
+   - Confirmed end point selection and coordinate display
+   - Validated button state changes during selection
+2. Tested calibration process:
+   - Confirmed calibration starts only with both points selected
+   - Verified reset functionality clears all points
+   - Tested error handling and feedback
+3. Validated UI feedback:
+   - Checked coordinate display accuracy
+   - Confirmed status message clarity
+   - Verified button state logic
+
+## 2023-08-04: Fixed CoordinateDisplayWidget Initialization
+
+### Changes Made
+- Fixed initialization of `CoordinateDisplayWidget` in `GameWorldSearchTab` to properly pass the `window_manager` parameter
+- Updated `_create_ui` method to include `window_manager` in widget initialization
+- Ensured proper parameter passing for position marking functionality
+
+### Impact
+1. Fixed application crash when initializing the Game World Search tab
+2. Restored proper functionality of coordinate display and calibration
+3. Enabled position marking for calibration points
+4. Maintained consistent window management across the application
+
+### Testing
+1. Verified that the Game World Search tab initializes correctly
+2. Confirmed that coordinate display works properly
+3. Tested position marking functionality
+4. Validated calibration process with position marking
+
+## July 27, 2023 - Calibration System Enhancement
+
+### Changes Made
+1. Implemented new point-based calibration system with automated drag:
+   - Added `CalibrationPoint` class to store screen and game coordinates
+   - Modified `GameWorldCoordinator` to use two fixed points for calibration
+   - Added automated drag operation between points for consistent measurements
+   - Integrated `PositionMarker` overlay for visual point selection
+   - Updated `CoordinateDisplayWidget` with new UI and workflow
+
+### Impact
+1. Improved calibration accuracy:
+   - Uses consistent drag operation instead of manual dragging
+   - Eliminates issues with mouse centering
+   - Provides visual feedback for point selection
+2. Enhanced user experience:
+   - Clear visual overlay for marking points
+   - Step-by-step instructions
+   - Better error handling and validation
+3. More reliable coordinate conversion:
+   - Consistent measurement process
+   - Better handling of game world coordinate changes
+   - Improved validation of calibration results
+
+### Testing
+1. Tested point marking system:
+   - Verified overlay appears and captures points correctly
+   - Confirmed ESC key cancels marking operation
+   - Validated point coordinates are stored accurately
+2. Tested calibration process:
+   - Verified automated drag operation works correctly
+   - Confirmed OCR readings at both points
+   - Validated calibration calculations
+3. Tested coordinate conversion:
+   - Verified screen-to-game and game-to-screen conversions
+   - Confirmed drag vector calculations
+   - Validated position tracking accuracy
+
 ## 2023-07-27: Unified OCR Region Handling
 
 ### Changes Made

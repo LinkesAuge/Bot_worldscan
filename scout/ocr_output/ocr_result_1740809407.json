@@ -1,0 +1,11 @@
+{
+    "timestamp": 1740809407,
+    "text": "K: 89 X:125 Y: 601",
+    "method": "thresh3",
+    "results_by_method": {
+        "thresh3_standard": "K: 89 X:125 Y: 601",
+        "thresh3_psm7": "K: 89 X:125 Y: 601",
+        "thresh3_whitelist": "K:89X:125Y:601",
+        "thresh3_specific": "K:89X:125Y:601"
+    }
+}

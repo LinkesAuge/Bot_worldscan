@@ -75,7 +75,7 @@ class GameWorldSearchTab(QWidget):
         self.game_state = game_state
         
         # Create game world coordinator and search
-        self.game_coordinator = GameWorldCoordinator(window_manager, text_ocr, game_state)
+        self.game_coordinator = GameWorldCoordinator(window_manager, text_ocr, game_state, game_actions)
         self.game_search = GameWorldSearch(
             window_manager,
             template_matcher,
@@ -112,7 +112,7 @@ class GameWorldSearchTab(QWidget):
         left_widget.setLayout(left_layout)
         
         # Coordinate display
-        self.coord_widget = CoordinateDisplayWidget(self.game_coordinator)
+        self.coord_widget = CoordinateDisplayWidget(self.game_coordinator, self.window_manager)
         left_layout.addWidget(self.coord_widget)
         
         # Search controls

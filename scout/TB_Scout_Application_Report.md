@@ -76,6 +76,70 @@ The application provides a powerful set of tools for game automation, including:
 - Tracks search history and statistics
 - Provides visual feedback during searches
 
+## Enhanced Calibration System
+
+The TB Scout application now features an improved calibration system that provides more accurate and consistent coordinate mapping between screen pixels and game world units. This enhancement ensures better navigation, position tracking, and automation capabilities.
+
+### Key Features
+
+1. **Point-Based Calibration**
+   - Visual overlay for marking calibration points
+   - Clear step-by-step instructions
+   - Automated drag operation between points
+   - Consistent measurement process
+
+2. **Improved Accuracy**
+   - Uses fixed points for consistent measurements
+   - Automated drag operation eliminates manual inconsistencies
+   - Better validation of calibration results
+   - Enhanced error handling and feedback
+
+3. **User-Friendly Interface**
+   - Visual overlay for point selection
+   - Clear status updates and instructions
+   - Intuitive workflow with step-by-step guidance
+   - Easy cancellation and retry options
+
+### Technical Implementation
+
+1. **Calibration Process**
+   - Two-point calibration system for accurate measurements
+   - Automated drag operation between points
+   - OCR readings at both start and end points
+   - Calculation of pixels-per-game-unit ratios
+
+2. **Coordinate Conversion**
+   - Accurate mapping between screen and game coordinates
+   - Consistent drag vector calculations
+   - Reliable position tracking
+   - Improved handling of coordinate system changes
+
+3. **Error Handling**
+   - Validation of point distances
+   - OCR reading verification
+   - Clear error messages and recovery options
+   - Graceful handling of cancellation
+
+### Benefits
+
+1. **Improved Navigation**
+   - More accurate coordinate conversion
+   - Better drag vector calculations
+   - Consistent position tracking
+   - Reliable automation sequences
+
+2. **Enhanced User Experience**
+   - Clear visual feedback
+   - Step-by-step guidance
+   - Easy error recovery
+   - Consistent results
+
+3. **Increased Reliability**
+   - Automated measurements
+   - Validated calibration results
+   - Better error handling
+   - Consistent coordinate mapping
+
 ## File Structure and Class Descriptions
 
 ### Core Components

@@ -11,12 +11,14 @@ import time
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QGroupBox, QFormLayout, QComboBox, QCheckBox, QMessageBox
+    QGroupBox, QFormLayout, QComboBox, QCheckBox, QMessageBox, QSpinBox
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont
+from PyQt6.QtWidgets import QApplication
 
 from scout.game_world_coordinator import GameWorldCoordinator, GameWorldPosition
+from scout.automation.gui.position_marker import PositionMarker
 
 logger = logging.getLogger(__name__)
 
@@ -28,18 +30,28 @@ class CoordinateDisplayWidget(QWidget):
     controls for updating coordinates and managing calibration.
     """
     
-    def __init__(self, game_world_coordinator: GameWorldCoordinator, parent=None):
+    def __init__(self, game_world_coordinator: GameWorldCoordinator, window_manager, parent=None):
         """
         Initialize the coordinate display widget.
         
         Args:
             game_world_coordinator: The game world coordinator instance
+            window_manager: The window manager instance
             parent: Parent widget
         """
         super().__init__(parent)
         self.game_world_coordinator = game_world_coordinator
+        self.window_manager = window_manager
         self.auto_update_timer = None
         self.auto_update_interval = 5000  # 5 seconds
+        
+        # Create position marker for calibration
+        self.position_marker = PositionMarker(window_manager)
+        self.position_marker.position_marked.connect(self._on_position_marked)
+        self.position_marker.marking_cancelled.connect(self._on_marking_cancelled)
+        
+        # Store which point we're currently marking
+        self.marking_start_point = True
         
         self._create_ui()
         self._connect_signals()
@@ -87,27 +99,59 @@ class CoordinateDisplayWidget(QWidget):
         self.calibration_status_label = QLabel("Calibration: Not calibrated")
         calibration_layout.addWidget(self.calibration_status_label)
         
-        # Calibration buttons
-        calibration_btn_layout = QHBoxLayout()
+        # Calibration results display
+        self.calibration_results_label = QLabel("")
+        self.calibration_results_label.setWordWrap(True)
+        calibration_layout.addWidget(self.calibration_results_label)
+        
+        # Drag count setting
+        drag_count_layout = QHBoxLayout()
+        drag_count_label = QLabel("Number of drags:")
+        self.drag_count_spinbox = QSpinBox()
+        self.drag_count_spinbox.setMinimum(1)
+        self.drag_count_spinbox.setMaximum(10)
+        self.drag_count_spinbox.setValue(3)  # Default to 3 drags
+        self.drag_count_spinbox.setToolTip("More drags increase calibration accuracy but take longer")
+        drag_count_layout.addWidget(drag_count_label)
+        drag_count_layout.addWidget(self.drag_count_spinbox)
+        drag_count_layout.addStretch()
+        calibration_layout.addLayout(drag_count_layout)
+        
+        # Point selection buttons
+        point_btn_layout = QHBoxLayout()
+        self.mark_start_btn = QPushButton("Select Start Point")
+        self.mark_end_btn = QPushButton("Select End Point")
+        point_btn_layout.addWidget(self.mark_start_btn)
+        point_btn_layout.addWidget(self.mark_end_btn)
+        calibration_layout.addLayout(point_btn_layout)
+        
+        # Point coordinates display
+        point_coord_layout = QFormLayout()
+        self.start_point_label = QLabel("Not selected")
+        self.end_point_label = QLabel("Not selected")
+        point_coord_layout.addRow("Start Point:", self.start_point_label)
+        point_coord_layout.addRow("End Point:", self.end_point_label)
+        calibration_layout.addLayout(point_coord_layout)
+        
+        # Calibration control buttons
+        control_btn_layout = QHBoxLayout()
         self.start_calibration_btn = QPushButton("Start Calibration")
-        self.complete_calibration_btn = QPushButton("Complete Calibration")
-        self.cancel_calibration_btn = QPushButton("Cancel")
+        self.reset_btn = QPushButton("Reset")
+        control_btn_layout.addWidget(self.start_calibration_btn)
+        control_btn_layout.addWidget(self.reset_btn)
+        calibration_layout.addLayout(control_btn_layout)
         
-        # Initially disable complete and cancel buttons
-        self.complete_calibration_btn.setEnabled(False)
-        self.cancel_calibration_btn.setEnabled(False)
-        
-        calibration_btn_layout.addWidget(self.start_calibration_btn)
-        calibration_btn_layout.addWidget(self.complete_calibration_btn)
-        calibration_btn_layout.addWidget(self.cancel_calibration_btn)
-        calibration_layout.addLayout(calibration_btn_layout)
+        # Initially disable buttons
+        self.mark_end_btn.setEnabled(False)
+        self.start_calibration_btn.setEnabled(False)
+        self.reset_btn.setEnabled(False)
         
         # Calibration instructions
         instructions_text = (
-            "1. Click 'Start Calibration' to begin\n"
-            "2. Drag/scroll the map to a different location\n"
-            "3. Click 'Complete Calibration' to finish\n"
-            "Note: Drag further for better accuracy"
+            "1. Click 'Select Start Point' and mark your first position\n"
+            "2. Click 'Select End Point' and mark your second position\n"
+            "3. Click 'Start Calibration' to perform the calibration\n"
+            "Note: Choose points that are far apart for better accuracy"
         )
         instructions_label = QLabel(instructions_text)
         instructions_label.setWordWrap(True)
@@ -129,64 +173,153 @@ class CoordinateDisplayWidget(QWidget):
         self.auto_update_cb.stateChanged.connect(self._toggle_auto_update)
         
         # Calibration buttons
+        self.mark_start_btn.clicked.connect(lambda: self._start_marking_point(True))
+        self.mark_end_btn.clicked.connect(lambda: self._start_marking_point(False))
         self.start_calibration_btn.clicked.connect(self._start_calibration)
-        self.complete_calibration_btn.clicked.connect(self._complete_calibration)
-        self.cancel_calibration_btn.clicked.connect(self._cancel_calibration)
+        self.reset_btn.clicked.connect(self._reset_calibration)
+        
+    def _start_marking_point(self, is_start: bool):
+        """
+        Start marking a calibration point.
+        
+        Args:
+            is_start: True if marking start point, False if marking end point
+        """
+        self.marking_start_point = is_start
+        
+        # Start calibration if this is the first point
+        if is_start:
+            self.game_world_coordinator.start_calibration()
+        
+        # Show instructions
+        QMessageBox.information(
+            self,
+            "Mark Position",
+            "Click anywhere on the game window to mark a position.\n"
+            "The overlay will show with a slight tint to help you see it.\n\n"
+            "Press ESC to cancel marking."
+        )
+        
+        # Start position marking
+        self.position_marker.start_marking()
+        self.mark_start_btn.setEnabled(False)
+        self.mark_end_btn.setEnabled(False)
+        
+    def _on_position_marked(self, point):
+        """Handle a position being marked."""
+        # Get current mouse position
+        screen_x, screen_y = point.x(), point.y()
+        
+        # Set the calibration point
+        self.game_world_coordinator.set_calibration_point(screen_x, screen_y, self.marking_start_point)
+        
+        # Update UI
+        if self.marking_start_point:
+            self.start_point_label.setText(f"({screen_x}, {screen_y})")
+            self.mark_start_btn.setEnabled(True)
+            self.mark_end_btn.setEnabled(True)
+            self.calibration_status_label.setText("Start point marked - select end point...")
+        else:
+            self.end_point_label.setText(f"({screen_x}, {screen_y})")
+            self.mark_start_btn.setEnabled(True)
+            self.mark_end_btn.setEnabled(True)
+            self.start_calibration_btn.setEnabled(True)
+            self.reset_btn.setEnabled(True)
+            self.calibration_status_label.setText("Both points marked - click Start Calibration to proceed")
+            
+    def _on_marking_cancelled(self):
+        """Handle position marking being cancelled."""
+        self.mark_start_btn.setEnabled(True)
+        if self.game_world_coordinator.start_point is not None:
+            self.mark_end_btn.setEnabled(True)
+            
+    def _start_calibration(self):
+        """Start the calibration process."""
+        # Get the number of drags from the spinbox
+        num_drags = self.drag_count_spinbox.value()
+        
+        # Show a progress message
+        self.calibration_status_label.setText(f"Calibrating with {num_drags} drags...")
+        self.calibration_status_label.setStyleSheet("color: orange;")
+        QApplication.processEvents()  # Ensure UI updates
+        
+        # Perform calibration with the specified number of drags
+        success = self.game_world_coordinator.complete_calibration(num_drags)
+        if success:
+            # Update UI state
+            self.mark_start_btn.setEnabled(True)
+            self.mark_end_btn.setEnabled(False)
+            self.start_calibration_btn.setEnabled(False)
+            self.reset_btn.setEnabled(True)
+            
+            # Update status and results
+            self.calibration_status_label.setText("Calibration completed successfully")
+            self.calibration_status_label.setStyleSheet("color: green;")
+            
+            # Show calibration results
+            x_ratio = self.game_world_coordinator.pixels_per_game_unit_x
+            y_ratio = self.game_world_coordinator.pixels_per_game_unit_y
+            self.calibration_results_label.setText(
+                f"Calibration Results (averaged over {num_drags} drags):\n"
+                f"X-axis: {x_ratio:.2f} pixels per game unit\n"
+                f"Y-axis: {y_ratio:.2f} pixels per game unit"
+            )
+            
+            # Show success message
+            QMessageBox.information(
+                self,
+                "Calibration Complete",
+                f"Calibration completed successfully using {num_drags} drags.\n\n"
+                f"X-axis: {x_ratio:.2f} pixels per game unit\n"
+                f"Y-axis: {y_ratio:.2f} pixels per game unit"
+            )
+        else:
+            QMessageBox.warning(
+                self,
+                "Calibration Failed",
+                "Failed to complete calibration. Make sure you've marked two points far enough apart "
+                "and coordinates can be read at both points."
+            )
+            
+    def _reset_calibration(self):
+        """Reset the calibration process."""
+        self.game_world_coordinator.cancel_calibration()
+        
+        # Reset UI state
+        self.mark_start_btn.setEnabled(True)
+        self.mark_end_btn.setEnabled(False)
+        self.start_calibration_btn.setEnabled(False)
+        self.reset_btn.setEnabled(False)
+        
+        # Reset point labels
+        self.start_point_label.setText("Not selected")
+        self.end_point_label.setText("Not selected")
+        
+        # Reset calibration status and results
+        self.calibration_status_label.setText("Calibration: Not calibrated")
+        self.calibration_status_label.setStyleSheet("color: black;")
+        self.calibration_results_label.setText("")
         
     def _update_coordinates(self):
         """Update the coordinate display from OCR."""
         try:
-            # Check if OCR has been cancelled
-            if hasattr(self.game_world_coordinator.text_ocr, '_cancellation_requested') and self.game_world_coordinator.text_ocr._cancellation_requested:
-                logger.info("Coordinate update cancelled due to OCR cancellation request")
-                self.coord_label.setText("OCR operation cancelled")
-                self.coord_label.setStyleSheet("color: orange;")
-                # Stop auto-update if OCR has been cancelled
+            # Create a timer for timeout
+            timeout_timer = QTimer()
+            timeout_timer.setSingleShot(True)
+            timeout_reached = [False]  # Use list to allow modification in lambda
+            
+            def on_timeout():
+                timeout_reached[0] = True
+                self.coord_label.setText("OCR operation timed out")
+                self.coord_label.setStyleSheet("color: red;")
+                logger.warning("OCR operation timed out")
+                # Stop auto-update if OCR times out
                 self._stop_auto_update()
                 self.auto_update_cb.setChecked(False)
-                return False
                 
-            # Set a timeout for the OCR process
-            max_wait_time = 3  # Reduced from 5 to 3 seconds
-            start_time = time.time()
-            
-            # Create a timer to check if the operation is taking too long
-            timeout_timer = QTimer()
-            timeout_reached = [False]  # Using a list to allow modification in the inner function
-            cancellation_check_interval = 200  # Check every 200ms
-            
-            def check_timeout():
-                # Check for cancellation first
-                if hasattr(self.game_world_coordinator.text_ocr, '_cancellation_requested') and self.game_world_coordinator.text_ocr._cancellation_requested:
-                    logger.info("Coordinate update cancelled during timeout check")
-                    timeout_timer.stop()
-                    timeout_reached[0] = True
-                    self.coord_label.setText("OCR operation cancelled")
-                    self.coord_label.setStyleSheet("color: orange;")
-                    # Stop auto-update
-                    self._stop_auto_update()
-                    self.auto_update_cb.setChecked(False)
-                    return
-                
-                # Then check for timeout
-                if time.time() - start_time > max_wait_time:
-                    timeout_reached[0] = True
-                    timeout_timer.stop()
-                    logger.warning(f"OCR operation timed out after {max_wait_time} seconds")
-                    self.coord_label.setText("OCR operation timed out")
-                    self.coord_label.setStyleSheet("color: red;")
-                    # Stop auto-update if there's a timeout to prevent continuous timeouts
-                    self._stop_auto_update()
-                    self.auto_update_cb.setChecked(False)
-                    
-                    # Set cancellation flag if timeout is reached
-                    if hasattr(self.game_world_coordinator.text_ocr, '_cancellation_requested'):
-                        self.game_world_coordinator.text_ocr._cancellation_requested = True
-                        logger.info("Setting cancellation flag due to timeout")
-            
-            # Start the timeout timer - check more frequently (200ms instead of 500ms)
-            timeout_timer.timeout.connect(check_timeout)
-            timeout_timer.start(cancellation_check_interval)
+            # Set timeout to 10 seconds
+            timeout_timer.timeout.connect(on_timeout)
+            timeout_timer.start(10000)  # 10 second timeout
             
             # Perform the OCR operation
             success = self.game_world_coordinator.update_current_position_from_ocr()
@@ -230,6 +363,7 @@ class CoordinateDisplayWidget(QWidget):
                 self.coord_label.setText("No valid coordinates")
                 self.coord_label.setStyleSheet("color: red;")
                 logger.warning("No valid coordinates available to display")
+                
         except Exception as e:
             logger.error(f"Error updating coordinates: {str(e)}")
             self.coord_label.setText("Error updating coordinates")
@@ -258,76 +392,6 @@ class CoordinateDisplayWidget(QWidget):
             self.auto_update_timer.stop()
             self.auto_update_timer = None
             
-    def _start_calibration(self):
-        """Start the calibration process."""
-        success = self.game_world_coordinator.start_calibration()
-        if success:
-            # Update UI state
-            self.start_calibration_btn.setEnabled(False)
-            self.complete_calibration_btn.setEnabled(True)
-            self.cancel_calibration_btn.setEnabled(True)
-            
-            # Update status
-            self.calibration_status_label.setText("Calibration in progress...")
-            self.calibration_status_label.setStyleSheet("color: blue;")
-            
-            # Show message box with instructions
-            QMessageBox.information(
-                self,
-                "Calibration Started",
-                "Calibration has started. Please drag/scroll the map to a different location, "
-                "then click 'Complete Calibration'.\n\n"
-                "For best results, drag the map a significant distance."
-            )
-        else:
-            QMessageBox.warning(
-                self,
-                "Calibration Failed",
-                "Failed to start calibration. Make sure coordinates are visible and can be read."
-            )
-            
-    def _complete_calibration(self):
-        """Complete the calibration process."""
-        success = self.game_world_coordinator.complete_calibration()
-        if success:
-            # Update UI state
-            self.start_calibration_btn.setEnabled(True)
-            self.complete_calibration_btn.setEnabled(False)
-            self.cancel_calibration_btn.setEnabled(False)
-            
-            # Update status
-            status = self.game_world_coordinator.get_calibration_status()
-            self.calibration_status_label.setText(status)
-            self.calibration_status_label.setStyleSheet("color: green;")
-            
-            # Show success message
-            QMessageBox.information(
-                self,
-                "Calibration Complete",
-                "Calibration completed successfully. The coordinate system has been calibrated."
-            )
-        else:
-            QMessageBox.warning(
-                self,
-                "Calibration Failed",
-                "Failed to complete calibration. Make sure you've dragged the map far enough "
-                "and coordinates can be read."
-            )
-            
-    def _cancel_calibration(self):
-        """Cancel the calibration process."""
-        self.game_world_coordinator.cancel_calibration()
-        
-        # Update UI state
-        self.start_calibration_btn.setEnabled(True)
-        self.complete_calibration_btn.setEnabled(False)
-        self.cancel_calibration_btn.setEnabled(False)
-        
-        # Update status
-        status = self.game_world_coordinator.get_calibration_status()
-        self.calibration_status_label.setText(status)
-        self.calibration_status_label.setStyleSheet("color: black;")
-        
     def get_current_position(self):
         """Get the current game world position."""
         return self.game_world_coordinator.current_position
@@ -338,7 +402,8 @@ class CoordinateDisplayWidget(QWidget):
         self.calibration_status_label.setText(status)
         
         # Update button states based on calibration status
-        is_calibrating = self.game_world_coordinator.is_calibration_in_progress()
-        self.start_calibration_btn.setEnabled(not is_calibrating)
-        self.complete_calibration_btn.setEnabled(is_calibrating)
-        self.cancel_calibration_btn.setEnabled(is_calibrating) 
+        is_calibrating = self.game_world_coordinator.calibration_in_progress
+        self.mark_start_btn.setEnabled(not is_calibrating)
+        self.mark_end_btn.setEnabled(not is_calibrating and self.game_world_coordinator.start_point is not None)
+        self.start_calibration_btn.setEnabled(not is_calibrating and self.game_world_coordinator.start_point is not None and self.game_world_coordinator.end_point is not None)
+        self.reset_btn.setEnabled(not is_calibrating and (self.game_world_coordinator.start_point is not None or self.game_world_coordinator.end_point is not None)) 

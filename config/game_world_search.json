@@ -1,5 +1,5 @@
 {
-    "min_confidence": 0.9,
+    "min_confidence": 0.8999999999999999,
     "max_positions": 100,
     "save_screenshots": true
 }

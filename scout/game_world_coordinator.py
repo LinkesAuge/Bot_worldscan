@@ -24,8 +24,25 @@ from scout.window_manager import WindowManager
 from scout.text_ocr import TextOCR
 from scout.game_world_position import GameWorldPosition
 from scout.config_manager import ConfigManager
+from scout.actions import GameActions
 
 logger = logging.getLogger(__name__)
+
+@dataclass
+class CalibrationPoint:
+    """
+    Represents a point used in the calibration process.
+    
+    Attributes:
+        screen_x: X coordinate in screen pixels
+        screen_y: Y coordinate in screen pixels
+        game_x: X coordinate in game world units
+        game_y: Y coordinate in game world units
+    """
+    screen_x: int
+    screen_y: int
+    game_x: Optional[float] = None
+    game_y: Optional[float] = None
 
 class GameWorldCoordinator:
     """
@@ -36,7 +53,7 @@ class GameWorldCoordinator:
     and calibration.
     """
     
-    def __init__(self, window_manager: WindowManager, text_ocr: TextOCR, game_state=None):
+    def __init__(self, window_manager: WindowManager, text_ocr: TextOCR, game_state=None, game_actions: GameActions=None):
         """
         Initialize the game world coordinator.
         
@@ -44,18 +61,22 @@ class GameWorldCoordinator:
             window_manager: The window manager instance
             text_ocr: The text OCR instance
             game_state: Optional game state instance
+            game_actions: The game actions instance
         """
         self.window_manager = window_manager
         self.text_ocr = text_ocr
         self.game_state = game_state
+        self.game_actions = game_actions
         
         # Current position in the game world
         self.current_position = GameWorldPosition(0, 0, 0)
         
-        # Calibration data
+        # Calibration state
         self.calibration_in_progress = False
-        self.calibration_start_position = None
-        self.calibration_start_screen = None
+        self.start_point: Optional[CalibrationPoint] = None
+        self.end_point: Optional[CalibrationPoint] = None
+        
+        # Calibration values (pixels per game world unit)
         self.pixels_per_game_unit_x = 10.0  # Default value
         self.pixels_per_game_unit_y = 10.0  # Default value
         
@@ -84,6 +105,18 @@ class GameWorldCoordinator:
             calibration_data = {
                 "pixels_per_game_unit_x": self.pixels_per_game_unit_x,
                 "pixels_per_game_unit_y": self.pixels_per_game_unit_y,
+                "start_point": {
+                    "screen_x": self.start_point.screen_x,
+                    "screen_y": self.start_point.screen_y,
+                    "game_x": self.start_point.game_x,
+                    "game_y": self.start_point.game_y
+                } if self.start_point else None,
+                "end_point": {
+                    "screen_x": self.end_point.screen_x,
+                    "screen_y": self.end_point.screen_y,
+                    "game_x": self.end_point.game_x,
+                    "game_y": self.end_point.game_y
+                } if self.end_point else None
             }
             
             # Save to file
@@ -110,175 +143,227 @@ class GameWorldCoordinator:
             # Update calibration values
             self.pixels_per_game_unit_x = calibration_data.get("pixels_per_game_unit_x", 10.0)
             self.pixels_per_game_unit_y = calibration_data.get("pixels_per_game_unit_y", 10.0)
+            
+            # Load calibration points if they exist
+            start_point_data = calibration_data.get("start_point")
+            if start_point_data:
+                self.start_point = CalibrationPoint(
+                    screen_x=start_point_data["screen_x"],
+                    screen_y=start_point_data["screen_y"],
+                    game_x=start_point_data["game_x"],
+                    game_y=start_point_data["game_y"]
+                )
+                
+            end_point_data = calibration_data.get("end_point")
+            if end_point_data:
+                self.end_point = CalibrationPoint(
+                    screen_x=end_point_data["screen_x"],
+                    screen_y=end_point_data["screen_y"],
+                    game_x=end_point_data["game_x"],
+                    game_y=end_point_data["game_y"]
+                )
                 
             logger.info(f"Loaded calibration data: X={self.pixels_per_game_unit_x:.2f}, Y={self.pixels_per_game_unit_y:.2f}")
+            if self.start_point:
+                logger.info(f"Loaded start point: screen=({self.start_point.screen_x}, {self.start_point.screen_y}), game=({self.start_point.game_x}, {self.start_point.game_y})")
+            if self.end_point:
+                logger.info(f"Loaded end point: screen=({self.end_point.screen_x}, {self.end_point.screen_y}), game=({self.end_point.game_x}, {self.end_point.game_y})")
             
         except Exception as e:
             logger.error(f"Error loading calibration data: {e}", exc_info=True)
             # Use default values
             self.pixels_per_game_unit_x = 10.0
             self.pixels_per_game_unit_y = 10.0
+            self.start_point = None
+            self.end_point = None
 
-    def start_calibration(self) -> bool:
+    def start_calibration(self) -> None:
         """
         Start the calibration process.
         
-        This records the current position as the starting point for calibration.
-        The user should then drag/scroll the map to a different position.
-        
-        Returns:
-            True if calibration started successfully, False otherwise
+        This method:
+        1. Updates the current position from OCR
+        2. Resets calibration points
+        3. Sets calibration_in_progress to True
         """
-        try:
-            # Update current position from OCR
-            success = self.update_current_position_from_ocr()
-            if not success:
-                logger.warning("Failed to get current position for calibration start")
-                return False
-                
-            # Get current position
-            start_pos = self.current_position
-            if not start_pos or start_pos.x is None or start_pos.y is None:
-                logger.warning("Invalid position data for calibration start")
-                return False
-                
-            # Get window center
-            window_pos = self.window_manager.get_window_position()
-            if not window_pos:
-                logger.error("Failed to get window position for calibration")
-                return False
-                
-            # Record starting position
-            self.calibration_start_position = GameWorldPosition(
-                start_pos.x, 
-                start_pos.y, 
-                start_pos.k
-            )
+        logger.info("Starting calibration process")
+        self.calibration_in_progress = True
+        self.start_point = None
+        self.end_point = None
+        
+    def set_calibration_point(self, screen_x: int, screen_y: int, is_start: bool = True) -> None:
+        """
+        Set a calibration point with screen coordinates.
+        
+        Args:
+            screen_x: X coordinate in screen pixels
+            screen_y: Y coordinate in screen pixels
+            is_start: True if this is the start point, False if it's the end point
+        """
+        if not self.calibration_in_progress:
+            logger.warning("Cannot set calibration point - calibration not in progress")
+            return
             
-            # Record screen center
-            self.calibration_start_screen = (
-                window_pos[0] + window_pos[2] // 2,
-                window_pos[1] + window_pos[3] // 2
-            )
+        point = CalibrationPoint(screen_x=screen_x, screen_y=screen_y)
+        
+        if is_start:
+            logger.info(f"Setting calibration start point at screen coordinates ({screen_x}, {screen_y})")
+            self.start_point = point
+        else:
+            logger.info(f"Setting calibration end point at screen coordinates ({screen_x}, {screen_y})")
+            self.end_point = point
             
-            # Set calibration in progress
-            self.calibration_in_progress = True
+    def perform_calibration(self, num_drags: int = 3) -> bool:
+        """
+        Perform the calibration process using the marked points.
+        
+        This method:
+        1. Takes an OCR reading at the start point
+        2. Performs multiple drags between start and end points
+        3. Takes OCR readings after each drag
+        4. Calculates the average calibration values
+        
+        Args:
+            num_drags: Number of drags to perform for increased accuracy (default: 3)
             
-            logger.info(f"Started calibration at position {self.calibration_start_position}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error starting calibration: {e}", exc_info=True)
-            self.calibration_in_progress = False
+        Returns:
+            bool: True if calibration was successful, False otherwise
+        """
+        if not self.calibration_in_progress:
+            logger.warning("Cannot perform calibration - calibration not in progress")
             return False
             
-    def complete_calibration(self) -> bool:
-        """
-        Complete the calibration process.
-        
-        This records the current position as the ending point for calibration
-        and calculates the pixels per game unit ratio.
-        
-        Returns:
-            True if calibration completed successfully, False otherwise
-        """
+        if not self.start_point or not self.end_point:
+            logger.warning("Cannot perform calibration - missing calibration points")
+            return False
+            
         try:
-            # Check if calibration is in progress
-            if not self.calibration_in_progress:
-                logger.warning("No calibration in progress")
+            # Lists to store calibration values from each drag
+            x_ratios = []
+            y_ratios = []
+            
+            # Perform multiple drags
+            for drag_num in range(num_drags):
+                logger.info(f"Performing drag {drag_num + 1} of {num_drags}")
+                
+                # Move mouse to start point and get initial coordinates
+                self.game_actions.move_mouse_to(self.start_point.screen_x, self.start_point.screen_y)
+                time.sleep(0.5)  # Wait for mouse movement
+                
+                # Update current position from OCR
+                if not self.update_current_position_from_ocr():
+                    logger.error(f"Failed to get initial coordinates from OCR on drag {drag_num + 1}")
+                    continue
+                    
+                # Store game coordinates for start point
+                start_x = self.current_position.x
+                start_y = self.current_position.y
+                
+                # Perform drag to end point
+                self.game_actions.drag_mouse(
+                    self.start_point.screen_x, self.start_point.screen_y,
+                    self.end_point.screen_x, self.end_point.screen_y
+                )
+                time.sleep(0.5)  # Wait for drag to complete
+                
+                # Update current position from OCR again
+                if not self.update_current_position_from_ocr():
+                    logger.error(f"Failed to get final coordinates from OCR on drag {drag_num + 1}")
+                    continue
+                    
+                # Store game coordinates for end point
+                end_x = self.current_position.x
+                end_y = self.current_position.y
+                
+                # Calculate pixels per game unit for this drag
+                dx_game = abs(end_x - start_x)
+                dy_game = abs(end_y - start_y)
+                dx_screen = abs(self.end_point.screen_x - self.start_point.screen_x)
+                dy_screen = abs(self.end_point.screen_y - self.start_point.screen_y)
+                
+                # Check for minimum drag distance
+                if dx_game < 1 and dy_game < 1:
+                    logger.warning(f"Drag {drag_num + 1} distance too small - skipping")
+                    continue
+                    
+                # Store ratios if valid
+                if dx_game > 0:
+                    x_ratio = dx_screen / dx_game
+                    x_ratios.append(x_ratio)
+                    logger.info(f"Drag {drag_num + 1} X ratio: {x_ratio:.2f}")
+                    
+                if dy_game > 0:
+                    y_ratio = dy_screen / dy_game
+                    y_ratios.append(y_ratio)
+                    logger.info(f"Drag {drag_num + 1} Y ratio: {y_ratio:.2f}")
+            
+            # Check if we have enough valid measurements
+            if not x_ratios and not y_ratios:
+                logger.error("No valid calibration measurements obtained")
                 return False
                 
-            # Update current position from OCR
-            success = self.update_current_position_from_ocr()
-            if not success:
-                logger.warning("Failed to get current position for calibration end")
-                return False
+            # Calculate average ratios
+            if x_ratios:
+                self.pixels_per_game_unit_x = sum(x_ratios) / len(x_ratios)
+                logger.info(f"Average X ratio: {self.pixels_per_game_unit_x:.2f} from {len(x_ratios)} measurements")
                 
-            # Get current position
-            end_pos = self.current_position
-            if not end_pos or end_pos.x is None or end_pos.y is None:
-                logger.warning("Invalid position data for calibration end")
-                return False
+            if y_ratios:
+                self.pixels_per_game_unit_y = sum(y_ratios) / len(y_ratios)
+                logger.info(f"Average Y ratio: {self.pixels_per_game_unit_y:.2f} from {len(y_ratios)} measurements")
                 
-            # Get window center
-            window_pos = self.window_manager.get_window_position()
-            if not window_pos:
-                logger.error("Failed to get window position for calibration end")
-                return False
-                
-            # Get end screen position
-            end_screen = (
-                window_pos[0] + window_pos[2] // 2,
-                window_pos[1] + window_pos[3] // 2
-            )
-            
-            # Calculate game world distance
-            dx_game = end_pos.x - self.calibration_start_position.x
-            dy_game = end_pos.y - self.calibration_start_position.y
-            
-            # Check if we have a meaningful distance
-            if abs(dx_game) < 5 and abs(dy_game) < 5:
-                logger.warning("Calibration distance too small, please drag further")
-                return False
-                
-            # Calculate screen distance (this will be 0 since we're using the center)
-            # Instead, we need to calculate the drag distance
-            # For this, we use the estimate_position_after_drag method in reverse
-            
-            # The drag vector is what we need to calculate
-            # We know the start and end game positions, and we need to find the drag vector
-            # that would cause this change
-            
-            # Calculate the drag distance based on the current pixels_per_game_unit values
-            # This is an approximation that will be refined
-            drag_x = -dx_game * self.pixels_per_game_unit_x
-            drag_y = -dy_game * self.pixels_per_game_unit_y
-            
-            # Now update the pixels_per_game_unit values
-            if dx_game != 0:
-                self.pixels_per_game_unit_x = abs(drag_x / dx_game)
-            
-            if dy_game != 0:
-                self.pixels_per_game_unit_y = abs(drag_y / dy_game)
-                
-            # Reset calibration state
-            self.calibration_in_progress = False
-            self.calibration_start_position = None
-            self.calibration_start_screen = None
-            
             # Save calibration data
             self._save_calibration_data()
             
-            logger.info(f"Completed calibration: X={self.pixels_per_game_unit_x:.2f}, Y={self.pixels_per_game_unit_y:.2f}")
+            logger.info(f"Calibration successful - x: {self.pixels_per_game_unit_x:.2f} px/unit, y: {self.pixels_per_game_unit_y:.2f} px/unit")
             return True
             
         except Exception as e:
-            logger.error(f"Error completing calibration: {e}", exc_info=True)
-            self.calibration_in_progress = False
+            logger.error(f"Error during calibration: {e}")
             return False
             
+    def complete_calibration(self, num_drags: int = 3) -> bool:
+        """
+        Complete the calibration process.
+        
+        Args:
+            num_drags: Number of drags to perform for increased accuracy (default: 3)
+            
+        Returns:
+            bool: True if calibration was successful, False otherwise
+        """
+        if not self.calibration_in_progress:
+            logger.warning("Cannot complete calibration - calibration not in progress")
+            return False
+            
+        success = self.perform_calibration(num_drags)
+        self.calibration_in_progress = False
+        self.start_point = None
+        self.end_point = None
+        return success
+        
     def cancel_calibration(self) -> None:
         """Cancel the current calibration process."""
+        logger.info("Canceling calibration")
         self.calibration_in_progress = False
-        self.calibration_start_position = None
-        self.calibration_start_screen = None
-        logger.info("Calibration cancelled")
-        
-    def is_calibration_in_progress(self) -> bool:
-        """Check if calibration is in progress."""
-        return self.calibration_in_progress
+        self.start_point = None
+        self.end_point = None
         
     def get_calibration_status(self) -> str:
         """
         Get the current calibration status.
         
         Returns:
-            A string describing the current calibration status
+            str: Status message describing the current calibration state
         """
-        if self.calibration_in_progress:
-            return f"Calibration in progress. Started at {self.calibration_start_position}"
+        if not self.calibration_in_progress:
+            return "Not calibrating"
+            
+        if not self.start_point:
+            return "Waiting for start point"
+        elif not self.end_point:
+            return "Waiting for end point"
         else:
-            return f"Calibration: X={self.pixels_per_game_unit_x:.2f}, Y={self.pixels_per_game_unit_y:.2f} pixels per game unit"
+            return "Ready to complete calibration"
     
     def update_current_position_from_ocr(self) -> bool:
         """
