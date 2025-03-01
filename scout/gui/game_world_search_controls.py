@@ -12,7 +12,7 @@ from pathlib import Path
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QComboBox, QSpinBox, QDoubleSpinBox, QCheckBox, QGroupBox,
-    QFormLayout, QListWidget, QListWidgetItem
+    QFormLayout, QListWidget, QListWidgetItem, QApplication, QMessageBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 
@@ -61,40 +61,31 @@ class SearchControlsWidget(QWidget):
         self.setLayout(layout)
         
         # Create template selection group
-        template_group = QGroupBox("Template Selection")
+        template_group = QGroupBox("Templates")
         template_layout = QVBoxLayout()
         
         # Template list
         self.template_list = QListWidget()
-        self.template_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
+        self.template_list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
         template_layout.addWidget(self.template_list)
         
-        # Select all/none buttons
-        select_layout = QHBoxLayout()
+        # Populate template list
+        self._populate_template_list()
         
-        self.select_all_btn = QPushButton("Select All")
-        self.select_all_btn.clicked.connect(self._select_all_templates)
-        select_layout.addWidget(self.select_all_btn)
-        
-        self.select_none_btn = QPushButton("Select None")
-        self.select_none_btn.clicked.connect(self._select_no_templates)
-        select_layout.addWidget(self.select_none_btn)
-        
-        template_layout.addLayout(select_layout)
         template_group.setLayout(template_layout)
         layout.addWidget(template_group)
         
-        # Create search pattern group
+        # Create pattern selection group
         pattern_group = QGroupBox("Search Pattern")
         pattern_layout = QFormLayout()
         
         # Pattern type
         self.pattern_combo = QComboBox()
         self.pattern_combo.addItems(["spiral", "grid", "circles", "quadtree"])
-        self.pattern_combo.currentTextChanged.connect(self._on_pattern_changed)
+        self.pattern_combo.currentTextChanged.connect(self._update_visible_params)
         pattern_layout.addRow("Pattern:", self.pattern_combo)
         
-        # Create pattern parameter widgets
+        # Pattern parameters
         self._create_pattern_params(pattern_layout)
         
         pattern_group.setLayout(pattern_layout)
@@ -252,24 +243,9 @@ class SearchControlsWidget(QWidget):
         except Exception as e:
             logger.error(f"Error loading templates: {e}", exc_info=True)
             
-    def _select_all_templates(self):
-        """Select all templates in the list."""
-        for i in range(self.template_list.count()):
-            self.template_list.item(i).setSelected(True)
-            
-    def _select_no_templates(self):
-        """Deselect all templates in the list."""
-        for i in range(self.template_list.count()):
-            self.template_list.item(i).setSelected(False)
-            
-    def _on_pattern_changed(self, pattern: str):
-        """
-        Handle pattern type change.
-        
-        Args:
-            pattern: New pattern type
-        """
-        self._update_visible_params()
+    def _populate_template_list(self):
+        """Populate the template list with available templates."""
+        self._load_templates()
         
     def _update_visible_params(self):
         """Show only the parameters for the selected pattern."""
@@ -373,35 +349,4 @@ class SearchControlsWidget(QWidget):
         for param_dict in [self.spiral_params, self.grid_params, 
                           self.circles_params, self.quadtree_params]:
             for widget in param_dict.values():
-                widget.setEnabled(not is_searching)
-                
-    def update_current_position(self):
-        """Update pattern parameters with current game position."""
-        try:
-            # Update current position from OCR
-            if self.game_coordinator.update_current_position_from_ocr():
-                pos = self.game_coordinator.current_position
-                
-                # Update spiral center
-                self.spiral_params['center_x'].setValue(pos.x)
-                self.spiral_params['center_y'].setValue(pos.y)
-                
-                # Update circles center
-                self.circles_params['center_x'].setValue(pos.x)
-                self.circles_params['center_y'].setValue(pos.y)
-                
-                # Update grid and quadtree start (offset by half width/height)
-                grid_width = self.grid_params['width'].value()
-                grid_height = self.grid_params['height'].value()
-                self.grid_params['start_x'].setValue(pos.x - grid_width // 2)
-                self.grid_params['start_y'].setValue(pos.y - grid_height // 2)
-                
-                quad_width = self.quadtree_params['width'].value()
-                quad_height = self.quadtree_params['height'].value()
-                self.quadtree_params['start_x'].setValue(pos.x - quad_width // 2)
-                self.quadtree_params['start_y'].setValue(pos.y - quad_height // 2)
-                
-                logger.info(f"Updated pattern parameters with current position: {pos}")
-                
-        except Exception as e:
-            logger.error(f"Error updating current position: {e}", exc_info=True) 
+                widget.setEnabled(not is_searching) 

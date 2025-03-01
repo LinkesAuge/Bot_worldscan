@@ -1,5 +1,51 @@
 # Memory
 
+## 2023-07-16: Continuous OCR Updates and Automatic Search Starting Point
+
+### Changes Made
+- Removed manual "Update Position" button from search controls
+- Removed "Update Now" and "Auto Update" buttons from coordinate display
+- Modified `CoordinateDisplayWidget` to always update automatically
+- Updated `GameWorldSearch.search_templates()` to always use current position from OCR as starting point
+- Enhanced `update_current_position_from_ocr()` with additional logging and verification
+- Improved error handling in the OCR update process
+
+### Impact
+- Simplified user interface by removing unnecessary manual controls
+- Ensured consistent coordinate updates across the application
+- Eliminated potential for outdated coordinates by maintaining a single source of truth
+- Improved reliability of search operations by always using current position
+- Enhanced debugging capabilities with more detailed logging
+- Reduced user confusion by removing toggles and manual update buttons
+
+### Testing
+- Verified that coordinates update automatically without manual intervention
+- Confirmed that search patterns always use the current position as starting point
+- Tested mouse centering reliability with enhanced logging
+- Validated that all components reflect the latest coordinates from OCR
+
+## 2023-07-15: Mouse Centering and Search Button Fixes
+
+### Changes Made
+- Enhanced the `_center_mouse_for_measurement` method in `GameWorldCoordinator` to use `win32api` for more reliable mouse movement, with `pyautogui` as a fallback
+- Added a "Update Position" button to the search controls widget to explicitly trigger position updates
+- Improved the `update_current_position` method to provide visual feedback with success/failure messages
+- Added wait cursor during position updates to indicate processing
+- Enhanced logging throughout the position update process
+
+### Impact
+- More reliable mouse centering before taking OCR screenshots
+- Better user experience with explicit controls for position updates
+- Improved feedback during position updates
+- More robust error handling and recovery
+- Better debugging capabilities with enhanced logging
+
+### Testing
+- Verified that the mouse is properly centered before taking OCR screenshots
+- Confirmed that the "Update Position" button correctly updates the current position
+- Tested error handling and feedback for various scenarios
+- Checked that the search buttons function correctly
+
 ## 2023-07-14: Strict Coordinate Format Enforcement
 
 ### Changes Made

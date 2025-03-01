@@ -1,6 +1,7 @@
 ---
 description: Everything that is important for our project, code guidelins, structure, features, important notes rules etc.
 globs: 
+alwaysApply: true
 ---
 ---
 description: General rules for the project

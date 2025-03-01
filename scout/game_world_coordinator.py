@@ -140,15 +140,14 @@ class GameWorldCoordinator:
     
     def update_current_position_from_ocr(self) -> bool:
         """
-        Update the current position by reading coordinates from the game screen.
+        Update the current position from OCR.
         
         This method:
-        1. Centers the mouse to ensure consistent measurements
-        2. Takes a screenshot of the game window
-        3. Crops it to the coordinate region
-        4. Passes the cropped image to TextOCR for text extraction
-        5. Parses coordinates from the extracted text
-        6. Updates the current position with the parsed coordinates
+        1. Centers the mouse in the game window
+        2. Takes a screenshot of the coordinate region
+        3. Processes the screenshot with OCR
+        4. Extracts coordinates from the OCR text
+        5. Updates the current position with the parsed coordinates
         
         Returns:
             True if coordinates were successfully read, False otherwise
@@ -157,11 +156,20 @@ class GameWorldCoordinator:
             logger.info("Starting OCR update process to get current position")
             
             # First center the mouse to ensure consistent measurements
+            logger.info("Centering mouse in game window...")
             self._center_mouse_for_measurement()
             
             # Force a delay to ensure the mouse movement is complete and the game UI has updated
             logger.info("Waiting for game UI to update after mouse centering...")
             time.sleep(0.5)  # Increased delay to ensure UI updates
+            
+            # Verify window position
+            window_pos = self.window_manager.get_window_position()
+            if not window_pos:
+                logger.error("Could not get window position for OCR update")
+                return False
+                
+            logger.info(f"Game window position: {window_pos}")
             
             # Instead of duplicating the OCR logic, use the TextOCR's region and processing method
             # This ensures we're using the same OCR processing path as the "old" OCR system
@@ -249,13 +257,36 @@ class GameWorldCoordinator:
             current_x, current_y = pyautogui.position()
             logger.info(f"Current mouse position: ({current_x}, {current_y})")
             
-            # Move mouse to center
-            logger.info(f"Moving mouse to center: ({center_x}, {center_y})")
+            # Try to move mouse using win32api first (more reliable)
+            try:
+                logger.info(f"Moving mouse to center using win32api: ({center_x}, {center_y})")
+                win32api.SetCursorPos((center_x, center_y))
+                
+                # Small delay to ensure the mouse movement is complete
+                time.sleep(0.1)
+                
+                # Verify mouse position after move
+                new_x, new_y = pyautogui.position()
+                logger.info(f"New mouse position after win32api: ({new_x}, {new_y})")
+                
+                # Check if mouse was actually moved
+                if abs(new_x - center_x) > 5 or abs(new_y - center_y) > 5:
+                    logger.warning(f"win32api mouse movement failed. Expected: ({center_x}, {center_y}), Actual: ({new_x}, {new_y})")
+                    # Fall back to pyautogui
+                    raise Exception("win32api mouse movement failed")
+                else:
+                    logger.info(f"Successfully centered mouse using win32api at ({center_x}, {center_y})")
+                    return
+            except Exception as win32_error:
+                logger.warning(f"Error using win32api for mouse movement: {win32_error}. Falling back to pyautogui.")
+                
+            # Fall back to pyautogui if win32api fails
+            logger.info(f"Moving mouse to center using pyautogui: ({center_x}, {center_y})")
             pyautogui.moveTo(center_x, center_y)
             
             # Verify mouse position after move
             new_x, new_y = pyautogui.position()
-            logger.info(f"New mouse position: ({new_x}, {new_y})")
+            logger.info(f"New mouse position after pyautogui: ({new_x}, {new_y})")
             
             # Check if mouse was actually moved
             if abs(new_x - center_x) > 5 or abs(new_y - center_y) > 5:

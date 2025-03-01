@@ -1,4 +1,62 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
 # Bug Fixing Log
+
+## 2023-07-16: Continuous OCR Updates and Automatic Search Starting Point
+
+### Issues Fixed
+- Manual "Update Position" button was required to update search pattern parameters
+- "Auto Update" toggle for coordinates was confusing and could be turned off
+- Search patterns required manual specification of starting coordinates
+- Mouse centering before OCR screenshots was not always reliable
+
+### Root Cause Analysis
+- The application had multiple ways to update coordinates, leading to inconsistency
+- The coordinate update system was designed with manual intervention in mind
+- Search patterns were using parameters from UI fields rather than always using current position
+- Mouse centering needed additional verification and error handling
+
+### Solutions Implemented
+- Removed "Update Position" button from search controls
+- Removed "Update Now" and "Auto Update" buttons from coordinate display
+- Modified coordinate display to always update automatically
+- Updated search functionality to always use current position from OCR as starting point
+- Enhanced mouse centering with additional logging and verification
+- Improved error handling in the OCR update process
+
+### Future Prevention Strategies
+- Maintain a single source of truth for game coordinates
+- Ensure all components automatically use the latest coordinates
+- Implement robust error handling and logging for all critical operations
+- Design UI components with continuous updates in mind rather than manual intervention
+
+## 2023-07-15: Mouse Centering and Search Button Fixes
+
+### Issues Fixed
+- Mouse not being centered before taking OCR screenshots
+- Search/screenshot buttons in the game world search tab not functioning properly
+- No visual feedback when updating position in the game world search tab
+
+### Root Cause Analysis
+- The `_center_mouse_for_measurement` method in `GameWorldCoordinator` was using only `pyautogui` for mouse movement, which can be unreliable
+- The game world search tab lacked a dedicated button to update the current position
+- The `update_current_position` method didn't provide user feedback on success or failure
+
+### Solutions Implemented
+- Enhanced the `_center_mouse_for_measurement` method to use `win32api` for more reliable mouse movement, with `pyautogui` as a fallback
+- Added a "Update Position" button to the search controls widget to explicitly trigger position updates
+- Improved the `update_current_position` method to provide visual feedback with success/failure messages
+- Added wait cursor during position updates to indicate processing
+- Enhanced logging throughout the position update process
+
+### Future Prevention
+- Use multiple mouse movement methods with fallbacks for greater reliability
+- Always provide explicit UI controls for important actions
+- Include visual feedback for long-running operations
+- Implement comprehensive error handling and user feedback
 
 ## 2023-07-14: Strict Coordinate Format Enforcement
 

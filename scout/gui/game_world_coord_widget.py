@@ -46,9 +46,8 @@ class CoordinateDisplayWidget(QWidget):
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self._update_coordinates)
         
-        # Start with auto-update enabled by default
-        self.auto_update_btn.setChecked(True)
-        self._toggle_auto_update(True)
+        # Start automatic updates immediately
+        self._start_auto_update()
         
         # Force an initial update
         QTimer.singleShot(500, self._update_coordinates)
@@ -83,20 +82,6 @@ class CoordinateDisplayWidget(QWidget):
         
         coord_group.setLayout(coord_layout)
         layout.addWidget(coord_group)
-        
-        # Create control buttons
-        button_layout = QHBoxLayout()
-        
-        self.update_btn = QPushButton("Update Now")
-        self.update_btn.clicked.connect(self._update_coordinates)
-        button_layout.addWidget(self.update_btn)
-        
-        self.auto_update_btn = QPushButton("Auto Update: Off")
-        self.auto_update_btn.setCheckable(True)
-        self.auto_update_btn.clicked.connect(self._toggle_auto_update)
-        button_layout.addWidget(self.auto_update_btn)
-        
-        layout.addLayout(button_layout)
         
         # Create calibration group
         calib_group = QGroupBox("Coordinate Calibration")
@@ -218,24 +203,12 @@ class CoordinateDisplayWidget(QWidget):
             logger.error(f"Error updating coordinates: {e}", exc_info=True)
             return False
             
-    def _toggle_auto_update(self, checked: bool):
-        """
-        Toggle automatic coordinate updates.
+    def _start_auto_update(self):
+        """Start automatic coordinate updates."""
+        # Start timer to update every second
+        self.update_timer.start(1000)  # Update every second
+        logger.info("Started automatic coordinate updates")
         
-        Args:
-            checked: Whether auto-update is enabled
-        """
-        if checked:
-            # Start timer
-            self.update_timer.start(1000)  # Update every second
-            self.auto_update_btn.setText("Auto Update: On")
-            logger.info("Started automatic coordinate updates")
-        else:
-            # Stop timer
-            self.update_timer.stop()
-            self.auto_update_btn.setText("Auto Update: Off")
-            logger.info("Stopped automatic coordinate updates")
-            
     def _add_calibration_point(self):
         """Add a calibration point using the current position."""
         try:

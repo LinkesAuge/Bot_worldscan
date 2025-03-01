@@ -166,188 +166,188 @@ class GameWorldSearch:
             self.screenshot_dir.mkdir(parents=True, exist_ok=True)
     
     def search_templates(
-        self, 
+        self,
         template_names: List[str],
-        start_position: Optional[GameWorldPosition] = None,
         pattern: str = 'spiral',
         pattern_params: Optional[Dict[str, Any]] = None,
-        max_positions: Optional[int] = None,
-        min_confidence: Optional[float] = None,
+        min_confidence: float = 0.7,
+        max_positions: int = 100,
+        start_position: Optional[GameWorldPosition] = None,
         callback: Optional[Callable[[SearchResult], None]] = None
     ) -> SearchResult:
         """
-        Search for templates using a specified pattern.
+        Search for templates in the game world using a search pattern.
         
         Args:
             template_names: List of template names to search for
-            start_position: Starting position for the search (default: current position)
             pattern: Search pattern to use ('spiral', 'grid', 'circles', 'quadtree')
             pattern_params: Parameters for the search pattern
+            min_confidence: Minimum confidence threshold for matches
             max_positions: Maximum number of positions to check
-            min_confidence: Minimum confidence level for template matches
-            callback: Optional callback function to call after each position check
+            start_position: Starting position for the search (ignored, always uses current position)
+            callback: Optional callback function for progress updates
             
         Returns:
             SearchResult object with the search results
         """
-        # Initialize result
-        result = SearchResult()
-        
-        # Set search parameters
-        if max_positions is not None:
+        try:
+            # Store search parameters
             self.max_positions = max_positions
-        if min_confidence is not None:
             self.min_confidence = min_confidence
             
-        # Use current position if no start position is provided
-        if start_position is None:
-            # Update current position from OCR
+            # Always update current position from OCR before starting search
+            logger.info("Updating current position from OCR before starting search...")
             self.game_coordinator.update_current_position_from_ocr()
             start_position = self.game_coordinator.current_position
+            logger.info(f"Using current position as search starting point: {start_position}")
             
-        # Initialize pattern parameters
-        if pattern_params is None:
-            pattern_params = {}
+            # Initialize pattern parameters
+            if pattern_params is None:
+                pattern_params = {}
             
-        # Set default pattern parameters based on pattern type
-        if pattern == 'spiral':
-            pattern_params.setdefault('center_x', start_position.x)
-            pattern_params.setdefault('center_y', start_position.y)
-            pattern_params.setdefault('max_radius', 1000)
-            pattern_params.setdefault('step_size', 100)
-        elif pattern == 'grid':
-            pattern_params.setdefault('start_x', start_position.x - 500)
-            pattern_params.setdefault('start_y', start_position.y - 500)
-            pattern_params.setdefault('width', 1000)
-            pattern_params.setdefault('height', 1000)
-            pattern_params.setdefault('step_size', 100)
-            pattern_params.setdefault('snake', True)
-        elif pattern == 'circles':
-            pattern_params.setdefault('center_x', start_position.x)
-            pattern_params.setdefault('center_y', start_position.y)
-            pattern_params.setdefault('max_radius', 1000)
-            pattern_params.setdefault('step_size', 100)
-            pattern_params.setdefault('points_per_circle', 8)
-        elif pattern == 'quadtree':
-            pattern_params.setdefault('start_x', start_position.x - 500)
-            pattern_params.setdefault('start_y', start_position.y - 500)
-            pattern_params.setdefault('width', 1000)
-            pattern_params.setdefault('height', 1000)
-            pattern_params.setdefault('min_cell_size', 100)
-        else:
-            logger.warning(f"Unknown pattern: {pattern}, using spiral")
-            pattern = 'spiral'
-            pattern_params = {
-                'center_x': start_position.x,
-                'center_y': start_position.y,
-                'max_radius': 1000,
-                'step_size': 100
-            }
-            
-        # Generate pattern
-        if pattern == 'spiral':
-            positions = spiral_pattern(**pattern_params)
-        elif pattern == 'grid':
-            positions = grid_pattern(**pattern_params)
-        elif pattern == 'circles':
-            positions = expanding_circles_pattern(**pattern_params)
-        elif pattern == 'quadtree':
-            positions = quadtree_pattern(**pattern_params)
-        else:
-            # This should never happen due to the check above
-            positions = spiral_pattern(**pattern_params)
-            
-        # Start search
-        start_time = time.time()
-        positions_checked = 0
-        
-        logger.info(f"Starting search for templates: {template_names} using {pattern} pattern")
-        
-        # Check each position in the pattern
-        for game_x, game_y in positions:
-            # Check if we've reached the maximum number of positions
-            if positions_checked >= self.max_positions:
-                logger.info(f"Reached maximum number of positions ({self.max_positions})")
-                break
-                
-            # Check if we've already visited this position (within radius)
-            position_key = (game_x // self.position_visit_radius, 
-                           game_y // self.position_visit_radius)
-            if position_key in self.visited_positions:
-                continue
-                
-            # Mark position as visited
-            self.visited_positions.add(position_key)
-            
-            # Check if the position is on screen
-            if self.game_coordinator.is_position_on_screen(game_x, game_y):
-                # Position is on screen, check for templates
-                match_result = self._check_for_templates(template_names)
-                positions_checked += 1
-                
-                if match_result.success:
-                    # Found a match, update result and return
-                    result = match_result
-                    result.search_time = time.time() - start_time
-                    result.positions_checked = positions_checked
-                    
-                    # Add to search history
-                    self.search_history.append(result)
-                    
-                    logger.info(f"Found template {result.template_name} at {result.game_position}")
-                    
-                    # Call callback if provided
-                    if callback:
-                        callback(result)
-                        
-                    return result
+            # Set default pattern parameters based on pattern type
+            if pattern == 'spiral':
+                pattern_params.setdefault('center_x', start_position.x)
+                pattern_params.setdefault('center_y', start_position.y)
+                pattern_params.setdefault('max_radius', 1000)
+                pattern_params.setdefault('step_size', 100)
+            elif pattern == 'grid':
+                pattern_params.setdefault('start_x', start_position.x - 500)
+                pattern_params.setdefault('start_y', start_position.y - 500)
+                pattern_params.setdefault('width', 1000)
+                pattern_params.setdefault('height', 1000)
+                pattern_params.setdefault('step_size', 100)
+                pattern_params.setdefault('snake', True)
+            elif pattern == 'circles':
+                pattern_params.setdefault('center_x', start_position.x)
+                pattern_params.setdefault('center_y', start_position.y)
+                pattern_params.setdefault('max_radius', 1000)
+                pattern_params.setdefault('step_size', 100)
+                pattern_params.setdefault('points_per_circle', 8)
+            elif pattern == 'quadtree':
+                pattern_params.setdefault('start_x', start_position.x - 500)
+                pattern_params.setdefault('start_y', start_position.y - 500)
+                pattern_params.setdefault('width', 1000)
+                pattern_params.setdefault('height', 1000)
+                pattern_params.setdefault('min_cell_size', 100)
             else:
-                # Position is not on screen, move to it
-                self._move_to_position(game_x, game_y)
-                
-                # Check for templates after moving
-                match_result = self._check_for_templates(template_names)
-                positions_checked += 1
-                
-                if match_result.success:
-                    # Found a match, update result and return
-                    result = match_result
-                    result.search_time = time.time() - start_time
-                    result.positions_checked = positions_checked
-                    
-                    # Add to search history
-                    self.search_history.append(result)
-                    
-                    logger.info(f"Found template {result.template_name} at {result.game_position}")
-                    
-                    # Call callback if provided
-                    if callback:
-                        callback(result)
-                        
-                    return result
-                    
-            # Call callback with progress update
-            if callback:
-                progress_result = SearchResult(False)
-                progress_result.positions_checked = positions_checked
-                progress_result.search_time = time.time() - start_time
-                callback(progress_result)
-                
-        # If we get here, we didn't find any matches
-        result.success = False
-        result.search_time = time.time() - start_time
-        result.positions_checked = positions_checked
-        
-        # Add to search history
-        self.search_history.append(result)
-        
-        logger.info(f"Search completed, no matches found after checking {positions_checked} positions")
-        
-        # Call callback with final result
-        if callback:
-            callback(result)
+                logger.warning(f"Unknown pattern: {pattern}, using spiral")
+                pattern = 'spiral'
+                pattern_params = {
+                    'center_x': start_position.x,
+                    'center_y': start_position.y,
+                    'max_radius': 1000,
+                    'step_size': 100
+                }
             
-        return result
+            # Generate pattern
+            if pattern == 'spiral':
+                positions = spiral_pattern(**pattern_params)
+            elif pattern == 'grid':
+                positions = grid_pattern(**pattern_params)
+            elif pattern == 'circles':
+                positions = expanding_circles_pattern(**pattern_params)
+            elif pattern == 'quadtree':
+                positions = quadtree_pattern(**pattern_params)
+            else:
+                # This should never happen due to the check above
+                positions = spiral_pattern(**pattern_params)
+            
+            # Start search
+            start_time = time.time()
+            positions_checked = 0
+            
+            logger.info(f"Starting search for templates: {template_names} using {pattern} pattern")
+            
+            # Check each position in the pattern
+            for game_x, game_y in positions:
+                # Check if we've reached the maximum number of positions
+                if positions_checked >= self.max_positions:
+                    logger.info(f"Reached maximum number of positions ({self.max_positions})")
+                    break
+                
+                # Check if we've already visited this position (within radius)
+                position_key = (game_x // self.position_visit_radius, 
+                               game_y // self.position_visit_radius)
+                if position_key in self.visited_positions:
+                    continue
+                
+                # Mark position as visited
+                self.visited_positions.add(position_key)
+                
+                # Check if the position is on screen
+                if self.game_coordinator.is_position_on_screen(game_x, game_y):
+                    # Position is on screen, check for templates
+                    match_result = self._check_for_templates(template_names)
+                    positions_checked += 1
+                    
+                    if match_result.success:
+                        # Found a match, update result and return
+                        result = match_result
+                        result.search_time = time.time() - start_time
+                        result.positions_checked = positions_checked
+                        
+                        # Add to search history
+                        self.search_history.append(result)
+                        
+                        logger.info(f"Found template {result.template_name} at {result.game_position}")
+                        
+                        # Call callback if provided
+                        if callback:
+                            callback(result)
+                            
+                        return result
+                else:
+                    # Position is not on screen, move to it
+                    self._move_to_position(game_x, game_y)
+                    
+                    # Check for templates after moving
+                    match_result = self._check_for_templates(template_names)
+                    positions_checked += 1
+                    
+                    if match_result.success:
+                        # Found a match, update result and return
+                        result = match_result
+                        result.search_time = time.time() - start_time
+                        result.positions_checked = positions_checked
+                        
+                        # Add to search history
+                        self.search_history.append(result)
+                        
+                        logger.info(f"Found template {result.template_name} at {result.game_position}")
+                        
+                        # Call callback if provided
+                        if callback:
+                            callback(result)
+                            
+                        return result
+                    
+                # Call callback with progress update
+                if callback:
+                    progress_result = SearchResult(False)
+                    progress_result.positions_checked = positions_checked
+                    progress_result.search_time = time.time() - start_time
+                    callback(progress_result)
+                
+            # If we get here, we didn't find any matches
+            result = SearchResult()
+            result.success = False
+            result.search_time = time.time() - start_time
+            result.positions_checked = positions_checked
+            
+            # Add to search history
+            self.search_history.append(result)
+            
+            logger.info(f"Search completed, no matches found after checking {positions_checked} positions")
+            
+            # Call callback with final result
+            if callback:
+                callback(result)
+            
+            return result
+        except Exception as e:
+            logger.error(f"Error searching for templates: {e}", exc_info=True)
+            return SearchResult()
     
     def _check_for_templates(self, template_names: List[str]) -> SearchResult:
         """
