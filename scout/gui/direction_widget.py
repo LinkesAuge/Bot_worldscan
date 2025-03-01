@@ -19,6 +19,7 @@ from PyQt6.QtWidgets import (
     QMessageBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtWidgets import QApplication
 
 from scout.window_manager import WindowManager
 from scout.text_ocr import TextOCR
@@ -481,42 +482,74 @@ class DirectionWidget(QWidget):
     def _start_calibration(self) -> None:
         """Start the calibration process."""
         try:
+            # Get number of runs from spinbox
             num_runs = self.calibration_runs_spin.value()
             
-            # Show progress dialog
-            msg = QMessageBox()
-            msg.setIcon(QMessageBox.Icon.Information)
-            msg.setText("Performing calibration...")
-            msg.setStandardButtons(QMessageBox.StandardButton.NoButton)
-            msg.show()
+            # Show progress message
+            self.calibration_status_label.setText("Calibrating...")
+            self.calibration_status_label.setStyleSheet("color: orange")
+            QApplication.processEvents()  # Update UI
             
-            # Run calibration
-            success = self.direction_manager.calibrate(num_runs)
-            
-            # Close progress dialog
-            msg.close()
-            
-            if success:
+            # Perform calibration
+            if self.direction_manager.calibrate(num_runs):
+                # Update UI
                 self._update_ui_state()
                 self.calibration_complete.emit()
+                
+                # Get screen distances
+                north_screen_dy = abs(self.direction_manager.north_definition.screen_end[1] - 
+                                    self.direction_manager.north_definition.screen_start[1])
+                east_screen_dx = abs(self.direction_manager.east_definition.screen_end[0] - 
+                                   self.direction_manager.east_definition.screen_start[0])
+                
+                # Get game units moved (with wrapping)
+                north_game_dy = 0
+                east_game_dx = 0
+                
+                if (self.direction_manager.north_definition.game_start and 
+                    self.direction_manager.north_definition.game_end):
+                    # Calculate wrapped distance considering direction
+                    y_diff = self.direction_manager.north_definition.game_end.y - self.direction_manager.north_definition.game_start.y
+                    north_game_dy = y_diff % 1000
+                    # If the wrapped distance is more than half the world size, it's shorter to go the other way
+                    if north_game_dy > 500:
+                        north_game_dy = -(1000 - north_game_dy)
+                
+                if (self.direction_manager.east_definition.game_start and 
+                    self.direction_manager.east_definition.game_end):
+                    # Calculate wrapped distance considering direction
+                    x_diff = self.direction_manager.east_definition.game_end.x - self.direction_manager.east_definition.game_start.x
+                    east_game_dx = x_diff % 1000
+                    # If the wrapped distance is more than half the world size, it's shorter to go the other way
+                    if east_game_dx > 500:
+                        east_game_dx = -(1000 - east_game_dx)
+                
+                # Show detailed results
                 QMessageBox.information(
                     self,
-                    "Success",
-                    "Calibration completed successfully!\n\n"
+                    "Calibration Successful",
+                    f"Calibration completed successfully!\n\n"
+                    f"Ratios (pixels per game unit):\n"
                     f"X Ratio: {self.direction_manager.pixels_per_game_unit_x:.2f}\n"
-                    f"Y Ratio: {self.direction_manager.pixels_per_game_unit_y:.2f}"
+                    f"Y Ratio: {self.direction_manager.pixels_per_game_unit_y:.2f}\n\n"
+                    f"Map to Pixel Translation:\n"
+                    f"North: {north_screen_dy} pixels = {abs(north_game_dy)} game units (ratio: {north_screen_dy/abs(north_game_dy):.2f})\n"
+                    f"East: {east_screen_dx} pixels = {abs(east_game_dx)} game units (ratio: {east_screen_dx/abs(east_game_dx):.2f})"
                 )
             else:
                 QMessageBox.warning(
                     self,
-                    "Error",
-                    "Failed to complete calibration"
+                    "Calibration Failed",
+                    "Failed to complete calibration. Please ensure:\n"
+                    "1. Both directions are defined\n"
+                    "2. OCR is working correctly\n"
+                    "3. Points are far enough apart"
                 )
                 
         except Exception as e:
-            logger.error(f"Error during calibration: {e}")
+            logger.error(f"Error during calibration: {e}", exc_info=True)
             QMessageBox.critical(
                 self,
-                "Error",
-                f"Error during calibration: {str(e)}"
+                "Calibration Error",
+                f"An error occurred during calibration: {str(e)}"
             ) 

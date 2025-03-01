@@ -174,30 +174,57 @@ class CoordinateDisplayWidget(QWidget):
             self.calibration_status_label.setText("Calibration: Calibrated")
             self.calibration_status_label.setStyleSheet("color: green;")
             
+            # Get screen distances
+            north_screen_dy = 0
+            east_screen_dx = 0
+            north_game_dy = 0
+            east_game_dx = 0
+            
+            # Get direction definitions from coordinator
+            direction_manager = self.game_world_coordinator.direction_manager
+            if direction_manager:
+                if direction_manager.north_definition:
+                    north_screen_dy = abs(direction_manager.north_definition.screen_end[1] - 
+                                        direction_manager.north_definition.screen_start[1])
+                    if (direction_manager.north_definition.game_start and 
+                        direction_manager.north_definition.game_end):
+                        # Calculate wrapped distance considering direction
+                        y_diff = direction_manager.north_definition.game_end.y - direction_manager.north_definition.game_start.y
+                        north_game_dy = y_diff % 1000
+                        # If the wrapped distance is more than half the world size, it's shorter to go the other way
+                        if north_game_dy > 500:
+                            north_game_dy = -(1000 - north_game_dy)
+                            
+                if direction_manager.east_definition:
+                    east_screen_dx = abs(direction_manager.east_definition.screen_end[0] - 
+                                       direction_manager.east_definition.screen_start[0])
+                    if (direction_manager.east_definition.game_start and 
+                        direction_manager.east_definition.game_end):
+                        # Calculate wrapped distance considering direction
+                        x_diff = direction_manager.east_definition.game_end.x - direction_manager.east_definition.game_start.x
+                        east_game_dx = x_diff % 1000
+                        # If the wrapped distance is more than half the world size, it's shorter to go the other way
+                        if east_game_dx > 500:
+                            east_game_dx = -(1000 - east_game_dx)
+            
             # Show calibration results
             x_ratio = self.game_world_coordinator.pixels_per_game_unit_x
             y_ratio = self.game_world_coordinator.pixels_per_game_unit_y
-            self.calibration_results_label.setText(
+            
+            results_text = (
                 f"Calibration Results:\n"
                 f"X-axis: {x_ratio:.2f} pixels per game unit\n"
-                f"Y-axis: {y_ratio:.2f} pixels per game unit"
+                f"Y-axis: {y_ratio:.2f} pixels per game unit\n\n"
+                f"Map to Pixel Translation:\n"
             )
             
-            # Update point labels if available
-            if self.game_world_coordinator.start_point:
-                start = self.game_world_coordinator.start_point
-                self.start_point_label.setText(
-                    f"Screen: ({start.screen_x}, {start.screen_y})\n"
-                    f"Game: ({start.game_x:.2f}, {start.game_y:.2f})"
-                )
-                
-            if self.game_world_coordinator.end_point:
-                end = self.game_world_coordinator.end_point
-                self.end_point_label.setText(
-                    f"Screen: ({end.screen_x}, {end.screen_y})\n"
-                    f"Game: ({end.game_x:.2f}, {end.game_y:.2f})"
-                )
-                
+            if north_screen_dy > 0 and north_game_dy != 0:
+                results_text += f"North: {north_screen_dy} pixels = {abs(north_game_dy)} game units (ratio: {north_screen_dy/abs(north_game_dy):.2f})\n"
+            if east_screen_dx > 0 and east_game_dx != 0:
+                results_text += f"East: {east_screen_dx} pixels = {abs(east_game_dx)} game units (ratio: {east_screen_dx/abs(east_game_dx):.2f})"
+            
+            self.calibration_results_label.setText(results_text)
+            
             # Enable reset button since we have calibration data
             self.reset_btn.setEnabled(True)
         else:

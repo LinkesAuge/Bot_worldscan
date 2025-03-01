@@ -78,67 +78,68 @@ The application provides a powerful set of tools for game automation, including:
 
 ## Enhanced Calibration System
 
-The TB Scout application now features an improved calibration system that provides more accurate and consistent coordinate mapping between screen pixels and game world units. This enhancement ensures better navigation, position tracking, and automation capabilities.
+The calibration system has been improved to provide more accurate and consistent results:
 
-### Key Features
+1. **Coordinate System**
+   - Uses game world coordinates (K, X, Y)
+   - Handles coordinate wrapping in 0-999 range
+   - Maintains consistent calculations across all components
 
-1. **Point-Based Calibration**
-   - Visual overlay for marking calibration points
-   - Clear step-by-step instructions
-   - Automated drag operation between points
-   - Consistent measurement process
+2. **Direction-Based Calibration**
+   - North/South axis for Y-coordinate calibration
+   - East/West axis for X-coordinate calibration
+   - Automatic wrapping for distances > 500 units
+   - Validation against window dimensions
 
-2. **Improved Accuracy**
-   - Uses fixed points for consistent measurements
-   - Automated drag operation eliminates manual inconsistencies
-   - Better validation of calibration results
-   - Enhanced error handling and feedback
+3. **Calibration Process**
+   - Multiple calibration runs for accuracy
+   - Automated drag operations
+   - Position verification at each step
+   - Detailed movement logging
 
-3. **User-Friendly Interface**
-   - Visual overlay for point selection
-   - Clear status updates and instructions
-   - Intuitive workflow with step-by-step guidance
-   - Easy cancellation and retry options
+4. **Display Components**
+   - DirectionWidget for defining cardinal directions
+   - CoordinateDisplayWidget for position tracking
+   - Consistent display of calibration results
+   - Real-time validation feedback
 
-### Technical Implementation
+5. **Calibration Results**
+   - Screen distances in pixels
+   - Game unit movements with wrapping
+   - Pixels per game unit ratios
+   - Detailed movement information
 
-1. **Calibration Process**
-   - Two-point calibration system for accurate measurements
-   - Automated drag operation between points
-   - OCR readings at both start and end points
-   - Calculation of pixels-per-game-unit ratios
+6. **Validation and Error Handling**
+   - Screen distance validation
+   - Coordinate wrapping validation
+   - Movement verification
+   - Comprehensive error logging
 
-2. **Coordinate Conversion**
-   - Accurate mapping between screen and game coordinates
-   - Consistent drag vector calculations
-   - Reliable position tracking
-   - Improved handling of coordinate system changes
+7. **User Interface Improvements**
+   - Clear calibration instructions
+   - Progress feedback during calibration
+   - Detailed results display
+   - Consistent information across all views
 
-3. **Error Handling**
-   - Validation of point distances
-   - OCR reading verification
-   - Clear error messages and recovery options
-   - Graceful handling of cancellation
-
-### Benefits
-
-1. **Improved Navigation**
-   - More accurate coordinate conversion
-   - Better drag vector calculations
-   - Consistent position tracking
-   - Reliable automation sequences
-
-2. **Enhanced User Experience**
-   - Clear visual feedback
-   - Step-by-step guidance
-   - Easy error recovery
-   - Consistent results
-
-3. **Increased Reliability**
-   - Automated measurements
-   - Validated calibration results
-   - Better error handling
-   - Consistent coordinate mapping
+8. **Technical Implementation**
+   - Wrapped distance calculation:
+     ```python
+     # Calculate wrapped distance considering direction
+     diff = end_pos - start_pos
+     wrapped_diff = diff % 1000
+     if wrapped_diff > 500:
+         wrapped_diff = -(1000 - wrapped_diff)
+     ```
+   - Screen distance validation:
+     ```python
+     max_screen_distance = max(window_width, window_height)
+     if screen_distance > max_screen_distance:
+         return False  # Invalid distance
+     ```
+   - Ratio calculation:
+     ```python
+     pixels_per_game_unit = screen_distance / abs(game_distance)
+     ```
 
 ## File Structure and Class Descriptions
 
@@ -348,19 +349,7 @@ tb-scout/
 
 ## Code Flow
 
-### 1. Application Startup
-1. `main.py` initializes the application
-2. Creates `WindowManager` to find and track the game window
-3. Initializes `ConfigManager` to load settings
-4. Creates `TemplateMatcher` for pattern detection
-5. Creates `TextOCR` for text extraction
-6. Creates `GameActions` for mouse and keyboard control
-7. Creates `Overlay` for visualization
-8. Creates `OverlayController` for the user interface
-9. Starts the PyQt6 event loop
-
-### 1. Application Startup Flow Diagram
-
+### 1. Application Startup and Component Initialization
 ```
 ┌─────────────┐     ┌─────────────────┐     ┌───────────────┐     ┌─────────────────┐
 │   main.py   │────▶│ WindowManager   │────▶│ ConfigManager │────▶│ TemplateMatcher │
@@ -383,130 +372,64 @@ tb-scout/
                                               └─────────────┘
 ```
 
-### 2. Pattern Matching Process
-1. User toggles pattern matching via the UI or keyboard shortcut
-2. `OverlayController._toggle_pattern_matching()` is called
-3. Updates button state and calls `overlay.start_template_matching()`
-4. `Overlay` starts a timer to periodically capture screenshots
-5. For each screenshot, `TemplateMatcher.find_matches()` is called
-6. Matches are visualized on the overlay
-7. Process continues until stopped by user
-
-### 2. Pattern Matching Process Flow Diagram
-
+### 2. Calibration Process Flow
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│ User Interface  │────▶│ OverlayController│────▶│ Overlay.start_  │
-│  (Button/Key)   │     │ _toggle_pattern_ │     │template_matching│
-└─────────────────┘     │    matching()    │     └─────────────────┘
-                        └─────────────────┘              │
-                                                         ▼
+│DirectionWidget  │────▶│GameWorldDirection│────▶│ GameCoordinator │
+│  Start Calib   │     │ start_calibration│     │ update_position │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+       │                         │                        │
+       │                         ▼                        ▼
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│ Overlay.draw_   │◀────│TemplateMatcher. │◀────│ WindowManager.  │
-│   matches()     │     │ find_matches()  │     │capture_screenshot│
+│  User Marks     │────▶│ Calculate Ratios│────▶│ Save Calibration│
+│Start/End Points │     │ and Distances   │     │     Data        │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+                                │                        │
+                                ▼                        ▼
+                        ┌─────────────────┐     ┌─────────────────┐
+                        │ Update Display  │◀────│ Load Calibration│
+                        │  Components    │     │  on Startup     │
+                        └─────────────────┘     └─────────────────┘
+```
+
+### 3. OCR and Coordinate Update Flow
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│ TextOCR Process │────▶│ Extract Text    │────▶│ Parse Game      │
+│    Region       │     │ with Tesseract  │     │ Coordinates     │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+       │                         │                        │
+       │                         ▼                        ▼
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│ Update Game     │◀────│ Validate and    │◀────│ Apply Coordinate│
+│    State        │     │ Wrap Coordinates│     │    Format       │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+       │                         │                        │
+       ▼                         ▼                        ▼
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│Update UI Display│     │ Log Coordinate  │     │ Handle OCR      │
+│   Components    │     │    Changes      │     │   Errors        │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
 ```
 
-### 3. OCR Process
-1. User toggles OCR via the UI or keyboard shortcut
-2. `OverlayController._toggle_ocr()` is called
-3. Updates button state and calls `_start_ocr()` or `_stop_ocr()`
-4. `TextOCR` starts processing the specified region
-5. Extracted text is processed to find coordinates
-6. Coordinates are updated in `GameWorldCoordinator`
-7. Process continues until stopped by user
-
-### 3. OCR Process Flow Diagram
-
+### 4. Template Matching and Search Flow
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│ User Interface  │────▶│ OverlayController│────▶│ _start_ocr() or │
-│  (Button/Key)   │     │   _toggle_ocr()  │     │   _stop_ocr()   │
+│ Start Search    │────▶│ Get Current     │────▶│ Generate Search │
+│   Pattern       │     │   Position      │     │    Pattern      │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
-                                                         │
-                                                         ▼
+       │                         │                        │
+       │                         ▼                        ▼
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│GameCoordinator. │◀────│ TextOCR._extract_│◀────│ TextOCR._process│
-│update_current_  │     │  coordinates()   │     │    _region()    │
-│position_from_ocr│     └─────────────────┘     └─────────────────┘
-└─────────────────┘
-```
-
-### 4. Game World Search
-1. User initiates a search via the UI
-2. `GameWorldSearch.search_templates()` is called
-3. Current position is updated from OCR
-4. Search pattern is generated (spiral, grid, etc.)
-5. For each position in the pattern:
-   - If position is on screen, check for templates
-   - If position is not on screen, move to it and then check
-6. If a match is found, search result is returned
-7. Search statistics are updated
-
-### 4. Game World Search Flow Diagram
-
-```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│ User Interface  │────▶│ GameWorldSearch.│────▶│GameCoordinator. │
-│  (Search Button)│     │search_templates()│     │update_current_  │
-└─────────────────┘     └─────────────────┘     │position_from_ocr│
-                                                └─────────────────┘
-                                                         │
-                                                         ▼
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│ Search Pattern  │────▶│For each position│────▶│ Is position on  │
-│   Generation    │     │   in pattern    │     │     screen?     │
+│ Check Position  │◀────│ Move to Next    │◀────│ Calculate Next  │
+│  for Templates  │     │   Position      │     │   Position      │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
-                                                    ┌──────┴──────┐
-                                                    ▼             ▼
-                                          ┌─────────────┐  ┌─────────────┐
-                                          │ Check for   │  │ Move to     │
-                                          │ templates   │  │ position    │
-                                          └─────────────┘  └─────────────┘
-                                                    │             │
-                                                    └──────┬──────┘
-                                                           ▼
-                                                  ┌─────────────────┐
-                                                  │ Return search   │
-                                                  │    result       │
-                                                  └─────────────────┘
-```
-
-### 5. Automation Sequence Execution
-1. User builds a sequence using `SequenceBuilder`
-2. User clicks "Run" to execute the sequence
-3. `SequenceExecutor` is created with the current context
-4. For each action in the sequence:
-   - Action is executed based on its type
-   - Progress is updated in the UI
-   - Debug information is displayed
-5. Sequence completes or is stopped by user
-
-### 5. Automation Sequence Execution Flow Diagram
-
-```
+       │                         │                        │
+       ▼                         ▼                        ▼
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│ SequenceBuilder │────▶│ _on_run_clicked()│────▶│ SequenceExecutor│
-│  (Run Button)   │     │                  │     │                 │
+│ Process Search  │     │ Update Search   │     │ Handle Search   │
+│    Results      │     │   Progress      │     │ Cancellation    │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
-                                                         │
-                                                         ▼
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│ Update progress │◀────│ For each action │◀────│ Create execution│
-│    in UI        │     │  in sequence    │     │     context     │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-        │                        │
-        │                        ▼
-        │               ┌─────────────────┐
-        │               │ Execute action  │
-        │               │ based on type   │
-        │               └─────────────────┘
-        │                        │
-        ▼                        ▼
-┌─────────────────┐     ┌─────────────────┐
-│ Update debug    │◀────│ Sequence        │
-│   window        │     │ completed/stopped│
-└─────────────────┘     └─────────────────┘
 ```
 
 ## Libraries Used
@@ -535,6 +458,13 @@ tb-scout/
 - **re**: Regular expression operations
 
 ## Recent Updates
+
+### March 1, 2024 - Calibration System Enhancement
+- Improved consistency in calibration displays
+- Added screen distance validation
+- Enhanced movement logging
+- Updated GUI components for better feedback
+- Implemented consistent calculation methods
 
 ### OCR Process Performance Improvements
 

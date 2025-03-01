@@ -158,7 +158,7 @@ class GameActions:
             return False
             
     def drag_mouse(self, start_x: int, start_y: int, end_x: int, end_y: int, 
-                   relative_to_window: bool = True, duration: float = 0.5) -> None:
+                   relative_to_window: bool = True, duration: float = 0.5) -> bool:
         """
         Perform a mouse drag operation from start to end coordinates.
         
@@ -169,6 +169,9 @@ class GameActions:
             end_y: Ending Y coordinate
             relative_to_window: If True, coordinates are relative to game window
             duration: Duration of the drag operation in seconds
+            
+        Returns:
+            bool: True if drag was successful, False otherwise
         """
         try:
             if relative_to_window:
@@ -179,9 +182,29 @@ class GameActions:
                 end_screen_x, end_screen_y = end_x, end_y
                 
             logger.debug(f"Dragging mouse from ({start_screen_x}, {start_screen_y}) to ({end_screen_x}, {end_screen_y})")
-            pyautogui.moveTo(start_screen_x, start_screen_y)
+            
+            # Move to start position using pydirectinput
+            pydirectinput.moveTo(start_screen_x, start_screen_y)
             sleep(self.click_delay)
-            pyautogui.dragTo(end_screen_x, end_screen_y, duration=duration, button='left')
+            
+            # Perform drag operation using pydirectinput
+            pydirectinput.mouseDown(button='left')
+            sleep(0.1)  # Short delay after pressing button
+            
+            # Move to end position in small steps for smoother dragging
+            steps = int(duration * 60)  # 60 steps per second
+            for i in range(1, steps + 1):
+                t = i / steps
+                current_x = int(start_screen_x + (end_screen_x - start_screen_x) * t)
+                current_y = int(start_screen_y + (end_screen_y - start_screen_y) * t)
+                pydirectinput.moveTo(current_x, current_y)
+                sleep(duration / steps)
+            
+            sleep(0.1)  # Short delay before releasing button
+            pydirectinput.mouseUp(button='left')
+            
+            return True
             
         except Exception as e:
-            logger.error(f"Failed to perform mouse drag: {e}", exc_info=True) 
+            logger.error(f"Failed to perform mouse drag: {e}", exc_info=True)
+            return False 

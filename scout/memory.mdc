@@ -1174,3 +1174,42 @@ The TB Scout application was still experiencing issues with the OCR process:
 
 ### Date
 Last updated: 2023-08-04 
+
+## March 1, 2024 - Calibration System Improvements
+
+### Calibration Display Consistency
+Fixed inconsistency in calibration result display across different parts of the UI:
+1. DirectionWidget and CoordinateDisplayWidget now use the same calculation methods
+2. All displays show consistent values for:
+   - Screen distances in pixels
+   - Game unit movements with proper wrapping
+   - Pixels per game unit ratios
+3. Added validation against window dimensions
+4. Enhanced logging for better debugging
+
+### Current Status
+1. Calibration System:
+   - Fully functional with consistent display
+   - Proper wrapping of coordinates (0-999 range)
+   - Accurate ratio calculations
+   - Detailed movement information in logs and UI
+2. GUI Components:
+   - DirectionWidget shows complete calibration details
+   - CoordinateDisplayWidget matches log output
+   - Both widgets validate screen distances
+3. Validation:
+   - Screen distances checked against window size
+   - Game unit movements properly wrapped
+   - Ratios calculated consistently
+
+### Next Steps
+1. Consider adding:
+   - Visual representation of calibration movements
+   - Calibration history tracking
+   - Automatic validation of calibration accuracy
+2. Potential improvements:
+   - Save calibration profiles for different zoom levels
+   - Add calibration verification tools
+   - Implement automatic recalibration detection
+
+[Rest of the document remains unchanged...] 

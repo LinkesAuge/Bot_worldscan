@@ -17,32 +17,9 @@ import win32api
 import win32con
 from PyQt6.QtCore import QDateTime
 from scout.window_manager import WindowManager
+from scout.game_world_position import GameWorldPosition, GameCoordinates
 
 logger = logging.getLogger(__name__)
-
-@dataclass
-class GameCoordinates:
-    """Represents coordinates in the game world."""
-    k: Optional[int] = None  # Kingdom/world number
-    x: Optional[int] = None  # X coordinate
-    y: Optional[int] = None  # Y coordinate
-    timestamp: Optional[str] = None  # When coordinates were captured
-
-    def is_valid(self) -> bool:
-        """Check if all coordinates are present."""
-        return all(isinstance(v, int) for v in [self.k, self.x, self.y])
-
-    def __str__(self) -> str:
-        """String representation of coordinates with timestamp."""
-        # Format coordinates with a maximum of 3 digits
-        k_str = f"{self.k:03d}" if self.k is not None else "---"
-        x_str = f"{self.x:03d}" if self.x is not None else "---"
-        y_str = f"{self.y:03d}" if self.y is not None else "---"
-        
-        coords = f"K: {k_str}, X: {x_str}, Y: {y_str}"
-        if self.timestamp:
-            coords += f" ({self.timestamp})"
-        return coords
 
 class DragButton(Enum):
     """Mouse button used for dragging."""
@@ -96,7 +73,7 @@ class GameState:
         self.window_manager = window_manager
         self.drag_state = DragState()
         self.template_state = TemplateMatchState()
-        self.coordinates = GameCoordinates()  # Current game coordinates
+        self._coordinates = GameCoordinates()  # Current game coordinates
         
         # Configuration
         self.drag_start_delay = 0.1  # seconds
@@ -104,6 +81,11 @@ class GameState:
         
         # Internal state
         self._last_check_time = 0.0
+        
+    @property
+    def coordinates(self) -> GameCoordinates:
+        """Get the current coordinates."""
+        return self._coordinates
         
     def update(self) -> None:
         """Update game state including drag detection and timeout checking."""
@@ -217,57 +199,40 @@ class GameState:
         updated = False
         
         # Only update valid values
-        if k is not None and self._is_valid_coordinate(k, 'k'):
-            self.coordinates.k = k
+        if k is not None and isinstance(k, int) and 0 <= k <= 999:
+            self._coordinates.k = k
             updated = True
             
-        if x is not None and self._is_valid_coordinate(x, 'x'):
-            self.coordinates.x = x
+        if x is not None and isinstance(x, int) and 0 <= x <= 999:
+            self._coordinates.x = x
             updated = True
             
-        if y is not None and self._is_valid_coordinate(y, 'y'):
-            self.coordinates.y = y
+        if y is not None and isinstance(y, int) and 0 <= y <= 999:
+            self._coordinates.y = y
             updated = True
             
         if updated:
             # Update timestamp only if something changed
-            self.coordinates.timestamp = QDateTime.currentDateTime().toString("yyyy-MM-dd hh:mm:ss")
-            logger.info(f"Updated game coordinates: {self.coordinates}")
+            self._coordinates.timestamp = QDateTime.currentDateTime().toString("yyyy-MM-dd hh:mm:ss")
+            logger.info(f"Updated game coordinates: {self._coordinates}")
+            
+            # Log validity state
+            if self._coordinates.is_valid():
+                logger.debug("Coordinates are now valid")
+            else:
+                logger.warning("Coordinates are still incomplete or invalid")
         
         return updated
         
-    def _is_valid_coordinate(self, value: int, coord_type: str) -> bool:
-        """
-        Validate a coordinate value.
-        
-        Args:
-            value: Value to validate
-            coord_type: Type of coordinate ('k', 'x', or 'y')
-            
-        Returns:
-            True if the coordinate is valid, False otherwise
-        """
-        try:
-            if coord_type.lower() == 'k':
-                return 1 <= value <= 999  # Kingdom numbers are typically 1-999
-            elif coord_type.lower() in ('x', 'y'):
-                return 0 <= value <= 999  # Game world coordinates are typically 0-999
-            return False
-        except (TypeError, ValueError):
-            return False
-            
-    def get_coordinates(self) -> GameCoordinates:
-        """
-        Get current game coordinates.
-        
-        This will always return the last valid coordinates, even if some values
-        are missing. The coordinates object has an is_valid() method that can be
-        used to check if all coordinates are present.
-        
-        Returns:
-            GameCoordinates object with the current coordinates
-        """
-        return self.coordinates
+    def get_coordinates(self) -> Optional[GameWorldPosition]:
+        """Get the current game world coordinates."""
+        if self._coordinates and self._coordinates.is_valid():
+            return GameWorldPosition(
+                k=self._coordinates.k,
+                x=self._coordinates.x,
+                y=self._coordinates.y
+            )
+        return None
         
     def reset_coordinates(self) -> None:
         """
@@ -277,7 +242,7 @@ class GameState:
         the application is restarted or when coordinates need to be
         completely reset.
         """
-        self.coordinates = GameCoordinates()
+        self._coordinates = GameCoordinates()
         logger.info("Reset game coordinates to None")
         
     def is_dragging(self) -> bool:

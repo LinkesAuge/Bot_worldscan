@@ -403,185 +403,31 @@ class GameWorldCoordinator:
     
     def update_current_position_from_ocr(self) -> bool:
         """
-        Update the current position from OCR.
-        
-        This method:
-        1. Takes a screenshot of the coordinate region
-        2. Processes the image to extract text
-        3. Extracts coordinates from the text
-        4. Updates the current position
+        Update current position from OCR text.
         
         Returns:
-            True if coordinates were successfully updated, False otherwise
+            bool: True if position was successfully updated
         """
         try:
-            # Check if we're rate limited
-            current_time = time.time()
-            # Increase rate limiting from 0.5s to 2.0s to prevent excessive updates
-            if hasattr(self, '_last_ocr_update') and current_time - self._last_ocr_update < 2.0:
-                logger.debug(f"OCR update rate limited (last update: {current_time - self._last_ocr_update:.2f}s ago)")
-                # If we have valid coordinates, consider this a success
-                if self.current_position.x is not None or self.current_position.y is not None or self.current_position.k is not None:
-                    return True
-                return False
-                
-            # Update the last OCR update time
-            self._last_ocr_update = current_time
-            
-            # Check if TextOCR has been cancelled
-            if hasattr(self.text_ocr, '_cancellation_requested') and self.text_ocr._cancellation_requested:
-                logger.info("OCR update cancelled due to cancellation request")
-                return False
-                
-            # Get the game window position
-            window_pos = self.window_manager.get_window_position()
-            if not window_pos:
-                logger.warning("Could not get game window position")
-                # If we have valid coordinates in the game state, consider this a success
-                if self.game_state and self.game_state.get_coordinates() and self.game_state.get_coordinates().is_valid():
-                    return True
-                return False
-            
-            # First check if we already have valid coordinates in the game state
-            if self.game_state and self.game_state.get_coordinates():
+            # Get coordinates from game state
+            if self.game_state:
                 coords = self.game_state.get_coordinates()
-                if coords.is_valid():
-                    logger.info(f"Using existing valid coordinates from game state: {coords}")
-                    # Update our current position with the game state coordinates
-                    self.current_position.x = coords.x
-                    self.current_position.y = coords.y
-                    self.current_position.k = coords.k
-                    # We'll still try to get fresh coordinates from OCR, but we have valid ones if that fails
-            
-            # Ensure the game window is active before trying to center the mouse
-            if not self._ensure_window_active():
-                logger.warning("Could not activate game window for OCR update")
-                # If we have valid coordinates in the game state, consider this a success
-                if self.game_state and self.game_state.get_coordinates() and self.game_state.get_coordinates().is_valid():
+                if coords and coords.k > 0:  # Only update if we have valid coordinates
+                    self.current_position = GameWorldPosition(
+                        k=coords.k,
+                        x=coords.x,
+                        y=coords.y
+                    )
+                    logger.info(f"Updated position from game state: {self.current_position}")
                     return True
-                return False
-            
-            # Center the mouse to ensure consistent measurements
-            logger.info("Centering mouse in game window...")
-            self._center_mouse_for_measurement()
-            
-            # Force a delay to ensure the mouse movement is complete and the game UI has updated
-            logger.info("Waiting for game UI to update after mouse centering...")
-            time.sleep(0.5)  # Increased delay to ensure UI updates
-            
-            # Verify window position
-            window_pos = self.window_manager.get_window_position()
-            if not window_pos:
-                logger.error("Could not get window position for OCR update")
-                # If we have valid coordinates in the game state, consider this a success
-                if self.game_state and self.game_state.get_coordinates() and self.game_state.get_coordinates().is_valid():
-                    return True
-                return False
-                
-            logger.info(f"Game window position: {window_pos}")
-            
-            # Check if TextOCR has a region set
-            if not self.text_ocr.region:
-                logger.warning("No OCR region set. Please select an OCR region in the overlay tab.")
-                # If we have valid coordinates in the game state, consider this a success
-                if self.game_state and self.game_state.get_coordinates() and self.game_state.get_coordinates().is_valid():
-                    return True
-                return False
-            
-            # Take a screenshot of the OCR region for debugging
-            if self.text_ocr.region:
-                # Get debug settings
-                config = ConfigManager()
-                debug_settings = config.get_debug_settings()
-                debug_enabled = debug_settings["enabled"]
-                
-                # Only save debug screenshots if debug mode is enabled
-                if debug_enabled:
-                    # Ensure the debug directory exists
-                    debug_dir = Path('scout/debug_screenshots')
-                    debug_dir.mkdir(exist_ok=True, parents=True)
                     
-                    # Capture the region
-                    with mss.mss() as sct:
-                        screenshot = np.array(sct.grab(self.text_ocr.region))
-                        
-                    # Save the screenshot for debugging
-                    cv2.imwrite(str(debug_dir / 'ocr_region_from_game_world.png'), screenshot)
-                    logger.info("Saved OCR region screenshot for debugging")
-            
-            # Trigger the TextOCR processing with a timeout
-            logger.info("Triggering TextOCR processing...")
-            
-            # Use a simple timeout approach instead of threading
-            start_time = time.time()
-            ocr_timeout = 3.0  # 3 seconds timeout
-            ocr_result = False
-            
-            try:
-                # Process the OCR region directly
-                self.text_ocr._process_region()
-                ocr_result = True
-                logger.info("OCR processing completed successfully")
-            except Exception as e:
-                logger.error(f"Error in OCR processing: {e}", exc_info=True)
-                ocr_result = False
-            
-            # Check if the operation took too long
-            elapsed_time = time.time() - start_time
-            if elapsed_time > ocr_timeout:
-                logger.warning(f"OCR processing took too long: {elapsed_time:.2f} seconds (timeout: {ocr_timeout} seconds)")
-            
-            if not ocr_result:
-                logger.warning("OCR processing failed")
-                # If we have valid coordinates in the game state, consider this a success
-                if self.game_state and self.game_state.get_coordinates() and self.game_state.get_coordinates().is_valid():
-                    return True
-                # If we have valid coordinates in our current position, consider this a success
-                if self.current_position.x is not None or self.current_position.y is not None or self.current_position.k is not None:
-                    logger.info(f"Using existing coordinates after OCR failure: {self.current_position}")
-                    return True
-                return False
-            
-            # Check if coordinates were updated
-            if self.game_state and self.game_state.get_coordinates():
-                coords = self.game_state.get_coordinates()
-                if coords.is_valid():
-                    self.current_position.x = coords.x
-                    self.current_position.y = coords.y
-                    self.current_position.k = coords.k
-                    logger.info(f"Successfully updated current position from OCR: {self.current_position}")
-                    return True
-                else:
-                    logger.warning("Coordinates in game state are not fully valid")
-                    # If we have partial coordinates, still use what we have
-                    if coords.x is not None:
-                        self.current_position.x = coords.x
-                    if coords.y is not None:
-                        self.current_position.y = coords.y
-                    if coords.k is not None:
-                        self.current_position.k = coords.k
-                    
-                    # Check if we have at least some valid coordinates
-                    if self.current_position.x is not None or self.current_position.y is not None or self.current_position.k is not None:
-                        logger.info(f"Using partial coordinates: {self.current_position}")
-                        return True
-                    return False
-            else:
-                logger.warning("No coordinates were extracted from OCR")
-                # If we have valid coordinates in our current position, consider this a success
-                if self.current_position.x is not None or self.current_position.y is not None or self.current_position.k is not None:
-                    logger.info(f"Using existing coordinates: {self.current_position}")
-                    return True
-                return False
+            logger.warning("No valid coordinates in game state")
+            return False
             
         except Exception as e:
-            logger.error(f"Error updating position from OCR: {e}", exc_info=True)
-            # If we have valid coordinates in our current position, consider this a success
-            if self.current_position.x is not None or self.current_position.y is not None or self.current_position.k is not None:
-                logger.info(f"Using existing coordinates after error: {self.current_position}")
-                return True
+            logger.error(f"Error updating position from OCR: {e}")
             return False
-    
+            
     def _center_mouse_for_measurement(self) -> None:
         """
         Center the mouse in the game window to ensure consistent coordinate measurements.
@@ -978,21 +824,31 @@ class GameWorldCoordinator:
         Returns:
             Estimated new position in game world coordinates
         """
-        # Calculate drag distance in pixels
-        drag_x = end_x - start_x
-        drag_y = end_y - start_y
-        
-        # Convert to game units
-        # Note: Drag is in opposite direction of coordinate change
-        dx_game = -drag_x / self.pixels_per_game_unit_x
-        dy_game = drag_y / self.pixels_per_game_unit_y
-        
-        # Calculate new position
-        new_x = self.current_position.x + dx_game
-        new_y = self.current_position.y + dy_game
-        
-        logger.info(f"Estimated position after drag: ({new_x:.2f}, {new_y:.2f})")
-        return GameWorldPosition(new_x, new_y, self.current_position.k)
+        try:
+            # Calculate drag distance in pixels
+            drag_x = end_x - start_x
+            drag_y = end_y - start_y
+            
+            logger.debug(f"Drag distance in pixels: dx={drag_x}, dy={drag_y}")
+            
+            # Convert to game units
+            # Note: Drag is in opposite direction of coordinate change
+            dx_game = -drag_x / max(self.pixels_per_game_unit_x, 0.1)  # Avoid division by zero
+            dy_game = drag_y / max(self.pixels_per_game_unit_y, 0.1)  # Avoid division by zero
+            
+            logger.debug(f"Drag distance in game units: dx={dx_game:.2f}, dy={dy_game:.2f}")
+            
+            # Calculate new position with wrapping
+            new_x = (self.current_position.x + dx_game) % 1000
+            new_y = (self.current_position.y + dy_game) % 1000
+            
+            logger.info(f"Estimated position after drag: ({new_x:.2f}, {new_y:.2f})")
+            return GameWorldPosition(new_x, new_y, self.current_position.k)
+            
+        except Exception as e:
+            logger.error(f"Error estimating position after drag: {e}")
+            # Return current position if estimation fails
+            return self.current_position
     
     def update_position_after_drag(self, start_x: int, start_y: int, end_x: int, end_y: int) -> None:
         """
@@ -1004,9 +860,25 @@ class GameWorldCoordinator:
             end_x: End X coordinate for drag
             end_y: End Y coordinate for drag
         """
-        new_position = self.estimate_position_after_drag(start_x, start_y, end_x, end_y)
-        self.current_position = new_position
-        logger.info(f"Updated position after drag: {self.current_position}")
+        try:
+            # Calculate new position
+            new_position = self.estimate_position_after_drag(start_x, start_y, end_x, end_y)
+            
+            # Update current position
+            self.current_position = new_position
+            
+            # Update game state
+            if self.game_state:
+                self.game_state.coordinates.update(
+                    new_position.k,
+                    new_position.x,
+                    new_position.y
+                )
+                
+            logger.info(f"Updated position after drag: {self.current_position}")
+            
+        except Exception as e:
+            logger.error(f"Error updating position after drag: {e}")
     
     def is_position_on_screen(self, game_x: float, game_y: float) -> bool:
         """

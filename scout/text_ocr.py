@@ -18,7 +18,8 @@ from PyQt6.QtCore import QObject, QTimer, pyqtSignal
 import re
 from scout.debug_window import DebugWindow
 from scout.window_manager import WindowManager
-from scout.game_state import GameState, GameCoordinates
+from scout.game_state import GameState
+from scout.game_world_position import GameCoordinates
 import mss
 from pathlib import Path
 from scout.config_manager import ConfigManager
@@ -660,10 +661,13 @@ class TextOCR(QObject):
                         
                         # Get the updated coordinates from the game state
                         # This might include previously valid coordinates for any values that failed validation
-                        coords = self.game_state.get_coordinates()
+                        coords = self.game_state.coordinates
                         
                         # Emit updated coordinates
                         self.coordinates_updated.emit(coords)
+                        
+                        # Log success
+                        logger.info(f"Successfully extracted coordinates: K:{k_val} X:{x_val} Y:{y_val}")
                         
                         return coords
                     else:
@@ -672,21 +676,21 @@ class TextOCR(QObject):
                 else:
                     logger.warning("One or more coordinates failed validation")
                     # Even if validation fails, still emit the last known coordinates
-                    if self.game_state and self.game_state.get_coordinates():
-                        self.coordinates_updated.emit(self.game_state.get_coordinates())
+                    if self.game_state and self.game_state.coordinates:
+                        self.coordinates_updated.emit(self.game_state.coordinates)
                     return None
             else:
                 logger.warning("Text does not match the expected coordinate format")
                 # Even if pattern matching fails, still emit the last known coordinates
-                if self.game_state and self.game_state.get_coordinates():
-                    self.coordinates_updated.emit(self.game_state.get_coordinates())
+                if self.game_state and self.game_state.coordinates:
+                    self.coordinates_updated.emit(self.game_state.coordinates)
                 return None
             
         except Exception as e:
             logger.error(f"Error parsing coordinates: {e}", exc_info=True)
             # Even if an error occurs, still emit the last known coordinates
-            if self.game_state and self.game_state.get_coordinates():
-                self.coordinates_updated.emit(self.game_state.get_coordinates())
+            if self.game_state and self.game_state.coordinates:
+                self.coordinates_updated.emit(self.game_state.coordinates)
             return None
             
     def _validate_coordinate(self, value: int, coord_type: str) -> Optional[int]:

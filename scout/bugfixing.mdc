@@ -702,4 +702,62 @@ This dual approach led to inconsistent results, as the game world search system 
 2. Confirmed that the mouse is not constantly being centered
 3. Tested that Escape/Q keys properly stop all OCR-related processes
 4. Verified that auto-update is properly disabled when OCR is stopped
-5. Confirmed that the application remains responsive during OCR operations 
+5. Confirmed that the application remains responsive during OCR operations
+
+## Calibration Display Inconsistency (Fixed)
+**Date:** March 1, 2024
+**Status:** FIXED
+
+### Issue Description
+The calibration results were displaying inconsistent values between the GUI widgets and the logs. Specifically:
+- The East direction values were showing different results in different parts of the UI
+- The wrapped distance calculations were not consistently applied across all display locations
+- The ratios shown in the GUI didn't match the actual calculations in the logs
+
+### Root Cause
+1. Different widgets (DirectionWidget and CoordinateDisplayWidget) were using different methods to calculate and display the calibration results
+2. The wrapped distance calculation was not consistently implemented across all display locations
+3. The GUI wasn't showing the detailed movement information that was available in the logs
+
+### Solution
+1. Updated both DirectionWidget and CoordinateDisplayWidget to:
+   - Use the same wrapped distance calculation logic
+   - Show consistent ratio calculations
+   - Display detailed movement information
+2. Improved the display format to show:
+   - Raw screen distances
+   - Absolute game unit values
+   - Calculated ratios for both directions
+3. Added validation for screen distances against window dimensions
+4. Enhanced logging to show more detailed movement information
+
+### Implementation Details
+1. Modified DirectionWidget._start_calibration():
+   - Added proper wrapped distance calculation
+   - Improved progress feedback
+   - Enhanced results display with ratios
+2. Updated CoordinateDisplayWidget._update_calibration_display():
+   - Added detailed movement information
+   - Implemented consistent distance calculations
+   - Improved results formatting
+3. Both widgets now show:
+   - Screen distances in pixels
+   - Game unit movements with proper wrapping
+   - Calculated ratios for verification
+
+### Verification
+- Calibration results now match between:
+  - Log output
+  - DirectionWidget display
+  - CoordinateDisplayWidget display
+- All displays show the same:
+  - Screen distances
+  - Game unit movements
+  - Pixels per game unit ratios
+
+### Prevention
+To prevent similar issues in the future:
+1. Always implement consistent calculation methods across all display locations
+2. Use the same validation and wrapping logic throughout the application
+3. Show detailed information in the GUI to match log output
+4. Validate displayed values against actual calculations 
