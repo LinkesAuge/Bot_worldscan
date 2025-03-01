@@ -394,8 +394,18 @@ class GameWorldSearch:
                 
                 # Check if the confidence is high enough
                 if best_match.confidence >= self.min_confidence:
-                    # Update current position from OCR
-                    self.game_coordinator.update_current_position_from_ocr()
+                    # Try to update current position from OCR
+                    ocr_success = self.game_coordinator.update_current_position_from_ocr()
+                    
+                    # If OCR fails, use the last known coordinates from the game state
+                    if not ocr_success and self.game_state:
+                        logger.info("OCR failed, using last known coordinates from game state")
+                        coords = self.game_state.get_coordinates()
+                        if coords and coords.is_valid():
+                            self.game_coordinator.current_position.x = coords.x
+                            self.game_coordinator.current_position.y = coords.y
+                            self.game_coordinator.current_position.k = coords.k
+                            logger.info(f"Using last known coordinates: {self.game_coordinator.current_position}")
                     
                     # Calculate screen position (center of match)
                     screen_x = best_match.bounds[0] + best_match.bounds[2] // 2

@@ -198,30 +198,87 @@ class GameState:
         self.template_state.last_update_time = time.time()
         
     def update_coordinates(self, k: Optional[int] = None, x: Optional[int] = None, 
-                         y: Optional[int] = None) -> None:
+                         y: Optional[int] = None) -> bool:
         """
         Update game world coordinates.
+        
+        This method only updates coordinates if they are valid. If any coordinate
+        is None or invalid, it will not update that specific coordinate and will
+        maintain the last valid value.
         
         Args:
             k: Kingdom/world number
             x: X coordinate
             y: Y coordinate
-        """
-        # Only update non-None values
-        if k is not None:
-            self.coordinates.k = k
-        if x is not None:
-            self.coordinates.x = x
-        if y is not None:
-            self.coordinates.y = y
             
-        # Update timestamp
-        self.coordinates.timestamp = QDateTime.currentDateTime().toString("yyyy-MM-dd hh:mm:ss")
-        logger.debug(f"Updated game coordinates: {self.coordinates}")
+        Returns:
+            True if any coordinates were updated, False otherwise
+        """
+        updated = False
         
+        # Only update valid values
+        if k is not None and self._is_valid_coordinate(k, 'k'):
+            self.coordinates.k = k
+            updated = True
+            
+        if x is not None and self._is_valid_coordinate(x, 'x'):
+            self.coordinates.x = x
+            updated = True
+            
+        if y is not None and self._is_valid_coordinate(y, 'y'):
+            self.coordinates.y = y
+            updated = True
+            
+        if updated:
+            # Update timestamp only if something changed
+            self.coordinates.timestamp = QDateTime.currentDateTime().toString("yyyy-MM-dd hh:mm:ss")
+            logger.info(f"Updated game coordinates: {self.coordinates}")
+        
+        return updated
+        
+    def _is_valid_coordinate(self, value: int, coord_type: str) -> bool:
+        """
+        Validate a coordinate value.
+        
+        Args:
+            value: Value to validate
+            coord_type: Type of coordinate ('k', 'x', or 'y')
+            
+        Returns:
+            True if the coordinate is valid, False otherwise
+        """
+        try:
+            if coord_type.lower() == 'k':
+                return 1 <= value <= 999  # Kingdom numbers are typically 1-999
+            elif coord_type.lower() in ('x', 'y'):
+                return 0 <= value <= 999  # Game world coordinates are typically 0-999
+            return False
+        except (TypeError, ValueError):
+            return False
+            
     def get_coordinates(self) -> GameCoordinates:
-        """Get current game coordinates."""
+        """
+        Get current game coordinates.
+        
+        This will always return the last valid coordinates, even if some values
+        are missing. The coordinates object has an is_valid() method that can be
+        used to check if all coordinates are present.
+        
+        Returns:
+            GameCoordinates object with the current coordinates
+        """
         return self.coordinates
+        
+    def reset_coordinates(self) -> None:
+        """
+        Reset all coordinates to None.
+        
+        This should only be called when explicitly needed, such as when
+        the application is restarted or when coordinates need to be
+        completely reset.
+        """
+        self.coordinates = GameCoordinates()
+        logger.info("Reset game coordinates to None")
         
     def is_dragging(self) -> bool:
         """Check if drag operation is in progress."""

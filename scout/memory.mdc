@@ -1,5 +1,33 @@
 # Memory
 
+## 2023-07-17: Persistent Game World Coordinates
+
+### Changes Made
+- Modified `GameState` class to maintain the last valid coordinates and never reset them unless explicitly told to do so
+- Added `_is_valid_coordinate` method to validate coordinates before updating them
+- Updated `update_coordinates` method to return a boolean indicating whether any coordinates were updated
+- Added `reset_coordinates` method to explicitly reset coordinates when needed
+- Updated `TextOCR` class to always emit the latest coordinates, even if OCR fails
+- Enhanced `GameWorldCoordinator` to use the last valid coordinates when OCR fails
+- Updated `GameWorldSearch` to use the last valid coordinates from the game state when checking for templates
+- Added comprehensive logging to track coordinate updates and usage
+
+### Impact
+- Game world coordinates are now maintained consistently across the application
+- OCR failures no longer cause coordinates to be lost or reset
+- Template matching now uses the last valid coordinates when OCR fails
+- All components now share coordinate information effectively
+- Invalid coordinates are now properly validated and rejected
+- Improved reliability of coordinate-dependent operations
+- Enhanced debugging capabilities with detailed logging
+
+### Testing
+- Verified that coordinates are maintained when OCR fails
+- Confirmed that template matching uses the last valid coordinates
+- Tested coordinate validation to ensure only valid values are stored
+- Verified that coordinates are shared effectively between components
+- Confirmed that coordinates are never reset unless explicitly requested
+
 ## 2023-07-16: Continuous OCR Updates and Automatic Search Starting Point
 
 ### Changes Made

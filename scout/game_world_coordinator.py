@@ -149,11 +149,26 @@ class GameWorldCoordinator:
         4. Extracts coordinates from the OCR text
         5. Updates the current position with the parsed coordinates
         
+        If OCR fails but we have valid coordinates in the game state,
+        those coordinates will still be used.
+        
         Returns:
-            True if coordinates were successfully read, False otherwise
+            True if coordinates were successfully read or retrieved from game state,
+            False if no valid coordinates are available
         """
         try:
             logger.info("Starting OCR update process to get current position")
+            
+            # First check if we already have valid coordinates in the game state
+            if self.game_state and self.game_state.get_coordinates():
+                coords = self.game_state.get_coordinates()
+                if coords.is_valid():
+                    logger.info(f"Using existing valid coordinates from game state: {coords}")
+                    # Update our current position with the game state coordinates
+                    self.current_position.x = coords.x
+                    self.current_position.y = coords.y
+                    self.current_position.k = coords.k
+                    # We'll still try to get fresh coordinates from OCR, but we have valid ones if that fails
             
             # First center the mouse to ensure consistent measurements
             logger.info("Centering mouse in game window...")
@@ -167,6 +182,9 @@ class GameWorldCoordinator:
             window_pos = self.window_manager.get_window_position()
             if not window_pos:
                 logger.error("Could not get window position for OCR update")
+                # If we have valid coordinates in the game state, consider this a success
+                if self.game_state and self.game_state.get_coordinates() and self.game_state.get_coordinates().is_valid():
+                    return True
                 return False
                 
             logger.info(f"Game window position: {window_pos}")
@@ -219,17 +237,41 @@ class GameWorldCoordinator:
             # Check if coordinates were updated
             if self.game_state and self.game_state.get_coordinates():
                 coords = self.game_state.get_coordinates()
-                self.current_position.x = coords.x
-                self.current_position.y = coords.y
-                self.current_position.k = coords.k
-                logger.info(f"Successfully updated current position from OCR: {self.current_position}")
-                return True
+                if coords.is_valid():
+                    self.current_position.x = coords.x
+                    self.current_position.y = coords.y
+                    self.current_position.k = coords.k
+                    logger.info(f"Successfully updated current position from OCR: {self.current_position}")
+                    return True
+                else:
+                    logger.warning("Coordinates in game state are not fully valid")
+                    # If we have partial coordinates, still use what we have
+                    if coords.x is not None:
+                        self.current_position.x = coords.x
+                    if coords.y is not None:
+                        self.current_position.y = coords.y
+                    if coords.k is not None:
+                        self.current_position.k = coords.k
+                    
+                    # Check if we have at least some valid coordinates
+                    if self.current_position.x is not None or self.current_position.y is not None or self.current_position.k is not None:
+                        logger.info(f"Using partial coordinates: {self.current_position}")
+                        return True
+                    return False
             else:
                 logger.warning("No coordinates were extracted from OCR")
+                # If we have valid coordinates in our current position, consider this a success
+                if self.current_position.x is not None or self.current_position.y is not None or self.current_position.k is not None:
+                    logger.info(f"Using existing coordinates: {self.current_position}")
+                    return True
                 return False
             
         except Exception as e:
             logger.error(f"Error updating position from OCR: {e}", exc_info=True)
+            # If we have valid coordinates in our current position, consider this a success
+            if self.current_position.x is not None or self.current_position.y is not None or self.current_position.k is not None:
+                logger.info(f"Using existing coordinates after error: {self.current_position}")
+                return True
             return False
     
     def _center_mouse_for_measurement(self) -> None:

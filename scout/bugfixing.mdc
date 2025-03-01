@@ -5,6 +5,35 @@ alwaysApply: false
 ---
 # Bug Fixing Log
 
+## 2023-07-17: Persistent Game World Coordinates
+
+### Issues Fixed
+- Game world coordinates being reset when OCR fails
+- Template matching not using last valid coordinates when OCR fails
+- Inconsistent coordinate handling across different components
+- Coordinates not being maintained between OCR and template matching runs
+
+### Root Cause Analysis
+- The application was not properly maintaining the last valid coordinates
+- OCR failures were causing coordinates to be lost or reset
+- Different components (OCR, template matching) were not sharing coordinate information effectively
+- No validation was performed before updating coordinates, allowing invalid values to be set
+
+### Solutions Implemented
+- Modified `GameState` class to maintain the last valid coordinates and never reset them unless explicitly told to do so
+- Added validation to ensure only valid coordinates are stored
+- Updated `TextOCR` class to always emit the latest coordinates, even if OCR fails
+- Enhanced `GameWorldCoordinator` to use the last valid coordinates when OCR fails
+- Updated `GameWorldSearch` to use the last valid coordinates from the game state when checking for templates
+- Added comprehensive logging to track coordinate updates and usage
+
+### Future Prevention Strategies
+- Always validate coordinates before updating them
+- Maintain a single source of truth for game coordinates (GameState)
+- Ensure all components use the last valid coordinates when new ones can't be obtained
+- Implement robust error handling for coordinate updates
+- Add detailed logging for coordinate-related operations
+
 ## 2023-07-16: Continuous OCR Updates and Automatic Search Starting Point
 
 ### Issues Fixed
@@ -283,7 +312,8 @@ This dual approach led to inconsistent results, as the game world search system 
 5. Ensured the game world search tab properly updates when coordinates change
 
 ### Future Prevention
-- Maintain a single source of truth for OCR processing (TextOCR)
-- Ensure consistent naming for debug images to make comparison easier
+- Maintain a single source of truth for OCR processing
+- Use consistent naming for debug images
+- Ensure all UI components are properly connected to the OCR system's signals
 - Add more comprehensive logging for coordinate updates
 - Implement better error handling for OCR failures 

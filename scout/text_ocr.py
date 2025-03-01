@@ -412,6 +412,9 @@ class TextOCR(QObject):
         try:
             if not self.region:
                 logger.warning("No region selected for OCR")
+                # Even if no region is selected, still emit the last known coordinates
+                if self.game_state and self.game_state.get_coordinates():
+                    self.coordinates_updated.emit(self.game_state.get_coordinates())
                 return
                 
             logger.info(f"Processing OCR region: {self.region}")
@@ -458,16 +461,23 @@ class TextOCR(QObject):
                 logger.info(f"Successfully extracted coordinates: {coords}")
             else:
                 logger.warning("Failed to extract valid coordinates from OCR text")
+                # Even if extraction fails, still emit the last known coordinates
+                if self.game_state and self.game_state.get_coordinates():
+                    self.coordinates_updated.emit(self.game_state.get_coordinates())
             
         except Exception as e:
             logger.error(f"Error processing OCR region: {e}", exc_info=True)
+            # Even if an error occurs, still emit the last known coordinates
+            if self.game_state and self.game_state.get_coordinates():
+                self.coordinates_updated.emit(self.game_state.get_coordinates())
             
     def _extract_coordinates(self, text: str) -> Optional[GameCoordinates]:
         """
         Extract coordinates from OCR text, handling noise and invalid characters.
         
         Strictly enforces the expected format of K: 000 X: 000 Y: 000 and rejects
-        anything that doesn't match this pattern.
+        anything that doesn't match this pattern. If extraction fails but we have
+        previous valid coordinates, those will still be emitted.
         
         Args:
             text: The OCR text to parse
@@ -506,9 +516,11 @@ class TextOCR(QObject):
                 if k_val is not None and x_val is not None and y_val is not None:
                     # Update game state with new coordinates
                     if self.game_state:
-                        self.game_state.update_coordinates(k_val, x_val, y_val)
+                        # Update the game state with the new coordinates
+                        updated = self.game_state.update_coordinates(k_val, x_val, y_val)
                         
                         # Get the updated coordinates from the game state
+                        # This might include previously valid coordinates for any values that failed validation
                         coords = self.game_state.get_coordinates()
                         
                         # Emit updated coordinates
@@ -520,13 +532,22 @@ class TextOCR(QObject):
                         return None
                 else:
                     logger.warning("One or more coordinates failed validation")
+                    # Even if validation fails, still emit the last known coordinates
+                    if self.game_state and self.game_state.get_coordinates():
+                        self.coordinates_updated.emit(self.game_state.get_coordinates())
                     return None
             else:
                 logger.warning("Text does not match the expected coordinate format")
+                # Even if pattern matching fails, still emit the last known coordinates
+                if self.game_state and self.game_state.get_coordinates():
+                    self.coordinates_updated.emit(self.game_state.get_coordinates())
                 return None
             
         except Exception as e:
             logger.error(f"Error parsing coordinates: {e}", exc_info=True)
+            # Even if an error occurs, still emit the last known coordinates
+            if self.game_state and self.game_state.get_coordinates():
+                self.coordinates_updated.emit(self.game_state.get_coordinates())
             return None
             
     def _validate_coordinate(self, value: int, coord_type: str) -> Optional[int]:
