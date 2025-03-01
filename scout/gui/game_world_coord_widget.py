@@ -56,6 +56,9 @@ class CoordinateDisplayWidget(QWidget):
         self._create_ui()
         self._connect_signals()
         
+        # Initialize calibration display with loaded data
+        self._update_calibration_display()
+        
         # Ensure auto-update is disabled by default
         self.auto_update_cb.setChecked(False)
         
@@ -164,6 +167,44 @@ class CoordinateDisplayWidget(QWidget):
         # Set the main layout
         self.setLayout(layout)
         
+    def _update_calibration_display(self):
+        """Update the calibration display with current calibration data."""
+        # Update calibration status and results
+        if self.game_world_coordinator.pixels_per_game_unit_x != 10.0 or self.game_world_coordinator.pixels_per_game_unit_y != 10.0:
+            self.calibration_status_label.setText("Calibration: Calibrated")
+            self.calibration_status_label.setStyleSheet("color: green;")
+            
+            # Show calibration results
+            x_ratio = self.game_world_coordinator.pixels_per_game_unit_x
+            y_ratio = self.game_world_coordinator.pixels_per_game_unit_y
+            self.calibration_results_label.setText(
+                f"Calibration Results:\n"
+                f"X-axis: {x_ratio:.2f} pixels per game unit\n"
+                f"Y-axis: {y_ratio:.2f} pixels per game unit"
+            )
+            
+            # Update point labels if available
+            if self.game_world_coordinator.start_point:
+                start = self.game_world_coordinator.start_point
+                self.start_point_label.setText(
+                    f"Screen: ({start.screen_x}, {start.screen_y})\n"
+                    f"Game: ({start.game_x:.2f}, {start.game_y:.2f})"
+                )
+                
+            if self.game_world_coordinator.end_point:
+                end = self.game_world_coordinator.end_point
+                self.end_point_label.setText(
+                    f"Screen: ({end.screen_x}, {end.screen_y})\n"
+                    f"Game: ({end.game_x:.2f}, {end.game_y:.2f})"
+                )
+                
+            # Enable reset button since we have calibration data
+            self.reset_btn.setEnabled(True)
+        else:
+            self.calibration_status_label.setText("Calibration: Not calibrated")
+            self.calibration_status_label.setStyleSheet("color: black;")
+            self.calibration_results_label.setText("")
+            
     def _connect_signals(self):
         """Connect signals to slots."""
         # Update button

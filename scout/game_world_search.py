@@ -1,17 +1,20 @@
 """
 Game World Search
 
-This module provides intelligent search strategies for finding templates in the game world.
-It combines the search patterns with the game world coordinator to efficiently search for templates.
+This module provides search functionality for finding templates in the game world.
+It implements various search patterns and coordinates the movement between search positions.
 """
 
-from typing import List, Tuple, Dict, Optional, Any, Set, Callable
+from typing import List, Tuple, Dict, Optional, Any, Set, Callable, Generator
 import logging
 import time
 import json
 from pathlib import Path
 import numpy as np
 import cv2
+import math
+from dataclasses import dataclass
+from enum import Enum
 
 from scout.window_manager import WindowManager
 from scout.template_matcher import TemplateMatcher, GroupedMatch
@@ -26,98 +29,26 @@ from scout.config_manager import ConfigManager
 
 logger = logging.getLogger(__name__)
 
-class SearchResult:
-    """
-    Result of a template search operation.
-    
-    Attributes:
-        success: Whether the search was successful
-        template_name: Name of the template that was found
-        screen_position: Position on screen where the template was found
-        game_position: Position in game world coordinates
-        confidence: Confidence level of the match
-        search_time: Time taken for the search in seconds
-        positions_checked: Number of positions checked during the search
-        screenshot_path: Path to the screenshot where the template was found (if saved)
-    """
-    
-    def __init__(self, success: bool = False):
-        """Initialize a search result."""
-        self.success = success
-        self.template_name: Optional[str] = None
-        self.screen_position: Optional[Tuple[int, int]] = None
-        self.game_position: Optional[GameWorldPosition] = None
-        self.confidence: float = 0.0
-        self.search_time: float = 0.0
-        self.positions_checked: int = 0
-        self.screenshot_path: Optional[str] = None
-        
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for storage."""
-        result = {
-            'success': self.success,
-            'template_name': self.template_name,
-            'confidence': self.confidence,
-            'search_time': self.search_time,
-            'positions_checked': self.positions_checked,
-            'screenshot_path': self.screenshot_path
-        }
-        
-        if self.screen_position:
-            result['screen_position'] = {
-                'x': self.screen_position[0],
-                'y': self.screen_position[1]
-            }
-            
-        if self.game_position:
-            result['game_position'] = {
-                'x': self.game_position.x,
-                'y': self.game_position.y,
-                'k': self.game_position.k
-            }
-            
-        return result
-        
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'SearchResult':
-        """Create from dictionary."""
-        result = cls(data.get('success', False))
-        result.template_name = data.get('template_name')
-        result.confidence = data.get('confidence', 0.0)
-        result.search_time = data.get('search_time', 0.0)
-        result.positions_checked = data.get('positions_checked', 0)
-        result.screenshot_path = data.get('screenshot_path')
-        
-        if 'screen_position' in data:
-            result.screen_position = (
-                data['screen_position'].get('x', 0),
-                data['screen_position'].get('y', 0)
-            )
-            
-        if 'game_position' in data:
-            result.game_position = GameWorldPosition(
-                data['game_position'].get('x', 0),
-                data['game_position'].get('y', 0),
-                data['game_position'].get('k', 0)
-            )
-            
-        return result
-        
-    def __str__(self) -> str:
-        """String representation of the search result."""
-        if not self.success:
-            return "SearchResult(success=False)"
-            
-        return (f"SearchResult(success=True, template={self.template_name}, "
-                f"position={self.game_position}, confidence={self.confidence:.2f})")
+class SearchPattern(Enum):
+    """Available search patterns."""
+    SPIRAL = "spiral"
+    GRID = "grid"
+    EXPANDING_CIRCLES = "expanding_circles"
 
+@dataclass
+class SearchResult:
+    """Result of a template search operation."""
+    template_name: str
+    screen_position: Tuple[int, int]
+    game_position: GameWorldPosition
+    confidence: float
 
 class GameWorldSearch:
     """
-    Intelligent search strategies for finding templates in the game world.
+    Implements search functionality for finding templates in the game world.
     
-    This class combines the search patterns with the game world coordinator
-    to efficiently search for templates in the game world.
+    This class coordinates between the template matcher and game world coordinator
+    to systematically search for templates using various patterns.
     """
     
     def __init__(
@@ -162,315 +93,272 @@ class GameWorldSearch:
         self.drag_delay = 1.0  # Seconds to wait after drag
         self.template_search_delay = 0.5  # Seconds to wait after template search
         
+        # Get the view area dimensions based on 2:1 ratio
+        window_pos = self.game_coordinator.window_manager.get_window_position()
+        if window_pos:
+            self.view_width_pixels = window_pos[2]
+            self.view_height_pixels = window_pos[3]
+        else:
+            # Default to a reasonable size if window not found
+            self.view_width_pixels = 1600
+            self.view_height_pixels = 800
+            
+        # Calculate game world units per view
+        self.view_width_units = self.view_width_pixels / self.game_coordinator.pixels_per_game_unit_x
+        self.view_height_units = self.view_height_pixels / self.game_coordinator.pixels_per_game_unit_y
+        
+        logger.info(f"View dimensions: {self.view_width_units:.1f}x{self.view_height_units:.1f} game units")
+        
         # Initialize
         if self.save_screenshots:
             self.screenshot_dir.mkdir(parents=True, exist_ok=True)
     
-    def search_templates(
-        self,
-        template_names: List[str],
-        pattern: str = 'spiral',
-        pattern_params: Optional[Dict[str, Any]] = None,
-        min_confidence: float = 0.7,
-        max_positions: int = 100,
-        start_position: Optional[GameWorldPosition] = None,
-        callback: Optional[Callable[[SearchResult], None]] = None
-    ) -> SearchResult:
+    def _generate_spiral_pattern(self, max_distance: float) -> Generator[Tuple[float, float], None, None]:
         """
-        Search for templates in the game world using a search pattern.
+        Generate positions in a spiral pattern, accounting for 2:1 view ratio.
         
         Args:
-            template_names: List of template names to search for
-            pattern: Search pattern to use ('spiral', 'grid', 'circles', 'quadtree')
-            pattern_params: Parameters for the search pattern
-            min_confidence: Minimum confidence threshold for matches
-            max_positions: Maximum number of positions to check
-            start_position: Starting position for the search (ignored, always uses current position)
-            callback: Optional callback function for progress updates
+            max_distance: Maximum distance from center in game units
+            
+        Yields:
+            (x, y) tuples of game world coordinates to search
+        """
+        # Start at center
+        x, y = 0, 0
+        yield (x, y)
+        
+        # Calculate step sizes based on view dimensions
+        # Use 80% overlap between views to ensure we don't miss anything
+        step_x = self.view_width_units * 0.2
+        step_y = self.view_height_units * 0.2
+        
+        # Spiral outward
+        layer = 1
+        while max(abs(x), abs(y)) < max_distance:
+            # Move right
+            for _ in range(layer):
+                x += step_x
+                if max(abs(x), abs(y)) >= max_distance:
+                    return
+                yield (x, y)
+            
+            # Move down
+            for _ in range(layer):
+                y += step_y
+                if max(abs(x), abs(y)) >= max_distance:
+                    return
+                yield (x, y)
+            
+            # Move left
+            for _ in range(layer + 1):
+                x -= step_x
+                if max(abs(x), abs(y)) >= max_distance:
+                    return
+                yield (x, y)
+            
+            # Move up
+            for _ in range(layer + 1):
+                y -= step_y
+                if max(abs(x), abs(y)) >= max_distance:
+                    return
+                yield (x, y)
+            
+            layer += 2
+            
+    def _generate_grid_pattern(self, max_distance: float) -> Generator[Tuple[float, float], None, None]:
+        """
+        Generate positions in a grid pattern, accounting for 2:1 view ratio.
+        
+        Args:
+            max_distance: Maximum distance from center in game units
+            
+        Yields:
+            (x, y) tuples of game world coordinates to search
+        """
+        # Calculate step sizes based on view dimensions with 80% overlap
+        step_x = self.view_width_units * 0.2
+        step_y = self.view_height_units * 0.2
+        
+        # Calculate grid dimensions
+        grid_size = math.ceil(max_distance * 2 / min(step_x, step_y))
+        start_pos = -max_distance
+        
+        # Generate grid positions in a snake pattern for efficiency
+        for row in range(grid_size):
+            y = start_pos + row * step_y
+            # Alternate direction for each row
+            x_range = range(grid_size) if row % 2 == 0 else range(grid_size - 1, -1, -1)
+            for col in x_range:
+                x = start_pos + col * step_x
+                if max(abs(x), abs(y)) <= max_distance:
+                    yield (x, y)
+                    
+    def _generate_expanding_circles_pattern(self, max_distance: float) -> Generator[Tuple[float, float], None, None]:
+        """
+        Generate positions in expanding circles, accounting for 2:1 view ratio.
+        
+        Args:
+            max_distance: Maximum distance from center in game units
+            
+        Yields:
+            (x, y) tuples of game world coordinates to search
+        """
+        # Start at center
+        yield (0, 0)
+        
+        # Calculate step sizes for circles based on view dimensions
+        step_radius = min(self.view_width_units, self.view_height_units) * 0.2
+        
+        # Generate circles with increasing radius
+        radius = step_radius
+        while radius <= max_distance:
+            # Calculate number of points based on circle circumference
+            circumference = 2 * math.pi * radius
+            num_points = max(8, int(circumference / min(step_radius, step_radius)))
+            
+            # Generate points around the circle
+            for i in range(num_points):
+                angle = (2 * math.pi * i) / num_points
+                x = radius * math.cos(angle)
+                y = radius * math.sin(angle)
+                yield (x, y)
+                
+            radius += step_radius
+            
+    def _move_to_position(self, target_x: float, target_y: float) -> bool:
+        """
+        Move to a target position using drag operations.
+        
+        Args:
+            target_x: Target X coordinate in game world units
+            target_y: Target Y coordinate in game world units
             
         Returns:
-            SearchResult object with the search results
+            bool: True if movement was successful, False otherwise
         """
         try:
-            # Store search parameters
-            self.max_positions = max_positions
-            self.min_confidence = min_confidence
+            # Calculate drag vector
+            drag_x, drag_y = self.game_coordinator.calculate_drag_vector(target_x, target_y)
             
-            # Always update current position from OCR before starting search
-            logger.info("Updating current position from OCR before starting search...")
-            self.game_coordinator.update_current_position_from_ocr()
-            start_position = self.game_coordinator.current_position
-            logger.info(f"Using current position as search starting point: {start_position}")
-            
-            # Initialize pattern parameters
-            if pattern_params is None:
-                pattern_params = {}
-            
-            # Set default pattern parameters based on pattern type
-            if pattern == 'spiral':
-                pattern_params.setdefault('center_x', start_position.x)
-                pattern_params.setdefault('center_y', start_position.y)
-                pattern_params.setdefault('max_radius', 1000)
-                pattern_params.setdefault('step_size', 100)
-            elif pattern == 'grid':
-                pattern_params.setdefault('start_x', start_position.x - 500)
-                pattern_params.setdefault('start_y', start_position.y - 500)
-                pattern_params.setdefault('width', 1000)
-                pattern_params.setdefault('height', 1000)
-                pattern_params.setdefault('step_size', 100)
-                pattern_params.setdefault('snake', True)
-            elif pattern == 'circles':
-                pattern_params.setdefault('center_x', start_position.x)
-                pattern_params.setdefault('center_y', start_position.y)
-                pattern_params.setdefault('max_radius', 1000)
-                pattern_params.setdefault('step_size', 100)
-                pattern_params.setdefault('points_per_circle', 8)
-            elif pattern == 'quadtree':
-                pattern_params.setdefault('start_x', start_position.x - 500)
-                pattern_params.setdefault('start_y', start_position.y - 500)
-                pattern_params.setdefault('width', 1000)
-                pattern_params.setdefault('height', 1000)
-                pattern_params.setdefault('min_cell_size', 100)
-            else:
-                logger.warning(f"Unknown pattern: {pattern}, using spiral")
-                pattern = 'spiral'
-                pattern_params = {
-                    'center_x': start_position.x,
-                    'center_y': start_position.y,
-                    'max_radius': 1000,
-                    'step_size': 100
-                }
-            
-            # Generate pattern
-            if pattern == 'spiral':
-                positions = spiral_pattern(**pattern_params)
-            elif pattern == 'grid':
-                positions = grid_pattern(**pattern_params)
-            elif pattern == 'circles':
-                positions = expanding_circles_pattern(**pattern_params)
-            elif pattern == 'quadtree':
-                positions = quadtree_pattern(**pattern_params)
-            else:
-                # This should never happen due to the check above
-                positions = spiral_pattern(**pattern_params)
-            
-            # Start search
-            start_time = time.time()
-            positions_checked = 0
-            
-            logger.info(f"Starting search for templates: {template_names} using {pattern} pattern")
-            
-            # Check each position in the pattern
-            for game_x, game_y in positions:
-                # Check if we've reached the maximum number of positions
-                if positions_checked >= self.max_positions:
-                    logger.info(f"Reached maximum number of positions ({self.max_positions})")
-                    break
+            # Get window center for drag operation
+            window_pos = self.game_coordinator.window_manager.get_window_position()
+            if not window_pos:
+                logger.error("Failed to get window position")
+                return False
                 
-                # Check if we've already visited this position (within radius)
-                position_key = (game_x // self.position_visit_radius, 
-                               game_y // self.position_visit_radius)
-                if position_key in self.visited_positions:
-                    continue
+            center_x = window_pos[0] + window_pos[2] // 2
+            center_y = window_pos[1] + window_pos[3] // 2
+            
+            # Perform drag operation
+            self.game_actions.drag_mouse(
+                center_x, center_y,
+                center_x + drag_x, center_y + drag_y
+            )
+            
+            # Wait for view to settle
+            time.sleep(0.5)
+            
+            # Update position from OCR
+            if not self.game_coordinator.update_current_position_from_ocr():
+                logger.warning("Failed to update position after movement")
+                return False
                 
-                # Mark position as visited
-                self.visited_positions.add(position_key)
-                
-                # Check if the position is on screen
-                if self.game_coordinator.is_position_on_screen(game_x, game_y):
-                    # Position is on screen, check for templates
-                    match_result = self._check_for_templates(template_names)
-                    positions_checked += 1
-                    
-                    if match_result.success:
-                        # Found a match, update result and return
-                        result = match_result
-                        result.search_time = time.time() - start_time
-                        result.positions_checked = positions_checked
-                        
-                        # Add to search history
-                        self.search_history.append(result)
-                        
-                        logger.info(f"Found template {result.template_name} at {result.game_position}")
-                        
-                        # Call callback if provided
-                        if callback:
-                            callback(result)
-                            
-                        return result
-                else:
-                    # Position is not on screen, move to it
-                    self._move_to_position(game_x, game_y)
-                    
-                    # Check for templates after moving
-                    match_result = self._check_for_templates(template_names)
-                    positions_checked += 1
-                    
-                    if match_result.success:
-                        # Found a match, update result and return
-                        result = match_result
-                        result.search_time = time.time() - start_time
-                        result.positions_checked = positions_checked
-                        
-                        # Add to search history
-                        self.search_history.append(result)
-                        
-                        logger.info(f"Found template {result.template_name} at {result.game_position}")
-                        
-                        # Call callback if provided
-                        if callback:
-                            callback(result)
-                            
-                        return result
-                    
-                # Call callback with progress update
-                if callback:
-                    progress_result = SearchResult(False)
-                    progress_result.positions_checked = positions_checked
-                    progress_result.search_time = time.time() - start_time
-                    callback(progress_result)
-                
-            # If we get here, we didn't find any matches
-            result = SearchResult()
-            result.success = False
-            result.search_time = time.time() - start_time
-            result.positions_checked = positions_checked
+            return True
             
-            # Add to search history
-            self.search_history.append(result)
-            
-            logger.info(f"Search completed, no matches found after checking {positions_checked} positions")
-            
-            # Call callback with final result
-            if callback:
-                callback(result)
-            
-            return result
         except Exception as e:
-            logger.error(f"Error searching for templates: {e}", exc_info=True)
-            return SearchResult()
-    
-    def _check_for_templates(self, template_names: List[str]) -> SearchResult:
+            logger.error(f"Error moving to position: {e}")
+            return False
+            
+    def _check_for_templates(self, templates: List[str]) -> Optional[SearchResult]:
         """
         Check for templates at the current position.
         
         Args:
-            template_names: List of template names to check for
+            templates: List of template names to search for
             
         Returns:
-            SearchResult object with the search results
+            SearchResult if a template is found, None otherwise
         """
-        result = SearchResult()
-        
         try:
-            # Take a screenshot
-            screenshot = self.window_manager.capture_screenshot()
-            if screenshot is None:
-                logger.error("Failed to capture screenshot for template matching")
-                return result
+            # Perform template matching
+            matches = self.template_matcher.find_matches(templates)
+            if not matches:
+                return None
                 
-            # Get debug settings
-            config = ConfigManager()
-            debug_settings = config.get_debug_settings()
-            debug_enabled = debug_settings["enabled"]
+            # Get the best match
+            best_match = max(matches, key=lambda m: m.confidence)
             
-            # Save debug screenshot if debug mode is enabled
-            timestamp = int(time.time())
-            debug_dir = Path('scout/debug_screenshots')
-            debug_dir.mkdir(exist_ok=True, parents=True)
-            debug_screenshot_path = str(debug_dir / f"search_debug_{timestamp}.png")
+            # Convert screen position to game position
+            game_pos = self.game_coordinator.screen_to_game_coords(
+                best_match.center[0],
+                best_match.center[1]
+            )
             
-            if debug_enabled:
-                cv2.imwrite(debug_screenshot_path, screenshot)
+            return SearchResult(
+                template_name=best_match.template_name,
+                screen_position=best_match.center,
+                game_position=game_pos,
+                confidence=best_match.confidence
+            )
             
-            # Save screenshot to search results directory if enabled
-            screenshot_path = None
-            if self.save_screenshots:
-                screenshot_path = str(self.screenshot_dir / f"search_{timestamp}.png")
-                cv2.imwrite(screenshot_path, screenshot)
-            else:
-                # Even if save_screenshots is disabled, we still want to have a path for the result
-                screenshot_path = debug_screenshot_path
-                
-            # Find matches
-            matches = self.template_matcher.find_matches(screenshot, template_names)
-            
-            # Check if we found any matches
-            if matches:
-                # Get the match with the highest confidence
-                best_match = max(matches, key=lambda m: m.confidence)
-                
-                # Check if the confidence is high enough
-                if best_match.confidence >= self.min_confidence:
-                    # Try to update current position from OCR
-                    ocr_success = self.game_coordinator.update_current_position_from_ocr()
-                    
-                    # If OCR fails, use the last known coordinates from the game state
-                    if not ocr_success and self.game_state:
-                        logger.info("OCR failed, using last known coordinates from game state")
-                        coords = self.game_state.get_coordinates()
-                        if coords and coords.is_valid():
-                            self.game_coordinator.current_position.x = coords.x
-                            self.game_coordinator.current_position.y = coords.y
-                            self.game_coordinator.current_position.k = coords.k
-                            logger.info(f"Using last known coordinates: {self.game_coordinator.current_position}")
-                    
-                    # Calculate screen position (center of match)
-                    screen_x = best_match.bounds[0] + best_match.bounds[2] // 2
-                    screen_y = best_match.bounds[1] + best_match.bounds[3] // 2
-                    
-                    # Convert to game world coordinates
-                    game_position = self.game_coordinator.screen_to_game_coords(screen_x, screen_y)
-                    
-                    # Update result
-                    result.success = True
-                    result.template_name = best_match.template_name
-                    result.screen_position = (screen_x, screen_y)
-                    result.game_position = game_position
-                    result.confidence = best_match.confidence
-                    result.screenshot_path = screenshot_path
-                    
-                    logger.info(f"Found template {best_match.template_name} with confidence {best_match.confidence:.2f}")
-            else:
-                # Even if no matches were found, still set the screenshot path for debugging
-                result.screenshot_path = screenshot_path
-                    
-            # Wait a bit to avoid overloading the system
-            time.sleep(self.template_search_delay)
-                
         except Exception as e:
-            logger.error(f"Error checking for templates: {e}", exc_info=True)
+            logger.error(f"Error checking for templates: {e}")
+            return None
             
-        return result
-    
-    def _move_to_position(self, game_x: int, game_y: int) -> None:
+    def search_templates(self, templates: List[str], pattern: SearchPattern = SearchPattern.SPIRAL,
+                        max_distance: float = 100.0) -> Optional[SearchResult]:
         """
-        Move the view to a specific game world position.
+        Search for templates using the specified pattern.
         
         Args:
-            game_x: X coordinate in game world
-            game_y: Y coordinate in game world
+            templates: List of template names to search for
+            pattern: Search pattern to use
+            max_distance: Maximum distance from current position to search
+            
+        Returns:
+            SearchResult if a template is found, None otherwise
         """
         try:
-            # Calculate drag vector
-            start_x, start_y, end_x, end_y = self.game_coordinator.calculate_drag_vector(game_x, game_y)
-            
-            # Perform drag
-            self.game_actions.drag_mouse(start_x, start_y, end_x, end_y)
-            
-            # Update position after drag
-            self.game_coordinator.update_position_after_drag(start_x, start_y, end_x, end_y)
-            
-            # Wait for the view to settle
-            time.sleep(self.drag_delay)
-            
-            # Update position from OCR for accuracy
-            self.game_coordinator.update_current_position_from_ocr()
-            
-            logger.debug(f"Moved to position ({game_x}, {game_y})")
+            # Get pattern generator
+            if pattern == SearchPattern.SPIRAL:
+                positions = self._generate_spiral_pattern(max_distance)
+            elif pattern == SearchPattern.GRID:
+                positions = self._generate_grid_pattern(max_distance)
+            else:  # EXPANDING_CIRCLES
+                positions = self._generate_expanding_circles_pattern(max_distance)
+                
+            # Get current position as reference
+            start_pos = self.game_coordinator.current_position
+            if not start_pos:
+                logger.error("No current position available")
+                return None
+                
+            # Search at each position
+            for dx, dy in positions:
+                # Calculate target position
+                target_x = start_pos.x + dx
+                target_y = start_pos.y + dy
+                
+                logger.info(f"Searching at position ({target_x:.1f}, {target_y:.1f})")
+                
+                # Move to position if not already there
+                if not self.game_coordinator.is_position_on_screen(target_x, target_y):
+                    if not self._move_to_position(target_x, target_y):
+                        logger.warning(f"Failed to move to position ({target_x:.1f}, {target_y:.1f})")
+                        continue
+                
+                # Check for templates
+                result = self._check_for_templates(templates)
+                if result:
+                    logger.info(f"Found template {result.template_name} at {result.game_position}")
+                    return result
+                    
+            logger.info("No templates found within search area")
+            return None
             
         except Exception as e:
-            logger.error(f"Error moving to position: {e}", exc_info=True)
+            logger.error(f"Error during template search: {e}")
+            return None
     
     def save_search_history(self, file_path: str) -> None:
         """
@@ -480,7 +368,7 @@ class GameWorldSearch:
             file_path: Path to save the search history
         """
         try:
-            history_data = [result.to_dict() for result in self.search_history]
+            history_data = [result.__dict__ for result in self.search_history]
             
             with open(file_path, 'w') as f:
                 json.dump(history_data, f, indent=4)
@@ -501,7 +389,7 @@ class GameWorldSearch:
             with open(file_path, 'r') as f:
                 history_data = json.load(f)
                 
-            self.search_history = [SearchResult.from_dict(data) for data in history_data]
+            self.search_history = [SearchResult(**data) for data in history_data]
             
             logger.info(f"Loaded search history from {file_path} ({len(self.search_history)} entries)")
             

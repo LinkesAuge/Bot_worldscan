@@ -10,6 +10,144 @@ alwaysApply: false
 ---
 # Memory
 
+## Fixed Game World Search Implementation
+**Date**: 2024-03-01
+**Component**: GameWorldSearchTab
+**Issue**: Search functionality was failing due to incorrect parameter passing and unclear documentation
+**Changes Made**:
+1. Fixed `_search_thread` method to correctly call `search_templates`
+2. Removed unused `pattern_params` and `callback` parameters
+3. Added proper parameter extraction for max_distance
+4. Added comprehensive documentation of search functionality:
+   - Detailed explanation of search patterns
+   - Description of search settings
+   - Step-by-step usage instructions
+   - Preview functionality explanation
+**Impact**:
+- Search functionality now works correctly
+- Users have clear guidance on how to use search features
+- Better understanding of search pattern parameters
+- Improved search reliability and usability
+**Testing**:
+- Verified search works with different patterns
+- Tested template matching and preview
+- Confirmed results display correctly
+- Validated search settings functionality
+
+## Fixed Calibration Data Display in GUI
+**Date**: 2024-03-01
+**Component**: CoordinateDisplayWidget
+**Issue**: Calibration data was being loaded correctly but not displayed in the GUI
+**Changes Made**:
+1. Added new `_update_calibration_display()` method to update GUI with loaded calibration data
+2. Method is called during widget initialization
+3. Added display of:
+   - Calibration status and color
+   - X and Y axis ratios
+   - Start and end point coordinates (screen and game)
+   - Reset button enabled state
+**Impact**:
+- Calibration data is now visible immediately upon application start
+- Users can see their saved calibration settings without needing to recalibrate
+- Better feedback about the current calibration state
+**Testing**:
+- Verified calibration data loads and displays correctly on startup
+- Confirmed all UI elements update properly with loaded data
+- Tested with both calibrated and uncalibrated states
+
+## 2024-03-01: Fixed Calibration Data Persistence
+
+### Changes Made
+1. Fixed calibration data saving and loading:
+   - Updated paths to use correct relative paths from workspace root
+   - Ensured config directory exists with proper permissions
+   - Added proper error handling for file operations
+   - Improved logging with file paths and calibration values
+2. Enhanced data persistence:
+   - Save calibration ratios and points to scout/config/calibration_data.json
+   - Load calibration data on application startup
+   - Maintain calibration between sessions
+   - Handle missing or corrupt data gracefully
+3. Improved logging and feedback:
+   - Added detailed logging of save/load operations
+   - Included file paths in log messages
+   - Added comprehensive error messages
+   - Enhanced debug information for calibration points
+
+### Impact
+1. Reliable calibration persistence:
+   - Calibration settings now survive application restarts
+   - Proper handling of file paths and permissions
+   - Graceful fallback to defaults if needed
+2. Better error handling:
+   - Clear error messages for file operations
+   - Proper handling of missing config directory
+   - Graceful recovery from corrupt data
+3. Enhanced debugging:
+   - More detailed logging
+   - Clear tracking of file operations
+   - Better visibility into calibration state
+
+### Testing
+1. Verified data persistence:
+   - Tested saving and loading calibration data
+   - Confirmed data survives application restarts
+   - Validated file paths and permissions
+2. Tested error handling:
+   - Verified behavior with missing config directory
+   - Tested recovery from corrupt data
+   - Confirmed proper default values
+3. Validated logging:
+   - Checked log messages for file operations
+   - Verified calibration value logging
+   - Confirmed error message clarity
+
+## 2024-03-01: Enhanced Search Patterns for Game World Navigation
+
+### Changes Made
+1. Redesigned search patterns to account for game view characteristics:
+   - Implemented 2:1 width-to-height ratio for view area
+   - Added automatic calculation of view dimensions in game units
+   - Created step sizes based on view dimensions with 80% overlap
+   - Optimized pattern generation for efficient coverage
+2. Improved search movement and coordination:
+   - Added drag-based movement between search positions
+   - Implemented proper OCR updates after each movement
+   - Added position validation and error handling
+   - Enhanced logging for movement tracking
+3. Implemented three optimized search patterns:
+   - Spiral: Outward spiral with view-based step sizes
+   - Grid: Snake pattern with 80% view overlap
+   - Expanding Circles: Radial search with dynamic point density
+
+### Impact
+1. More efficient searching:
+   - Better coverage of game area with minimal overlap
+   - Reduced unnecessary movements
+   - More accurate position tracking
+2. Improved reliability:
+   - Proper handling of view area constraints
+   - Better error recovery during search
+   - More consistent coordinate updates
+3. Enhanced user experience:
+   - Faster template finding
+   - More predictable search patterns
+   - Better feedback during search
+
+### Testing
+1. Verified search patterns:
+   - Tested all three patterns with different distances
+   - Confirmed proper view overlap
+   - Validated movement between positions
+2. Tested coordinate handling:
+   - Verified OCR updates after movements
+   - Confirmed proper drag vector calculations
+   - Tested error handling for failed movements
+3. Validated search efficiency:
+   - Measured coverage of search area
+   - Tested template finding accuracy
+   - Verified proper termination of searches
+
 ## 2024-03-01: Enhanced Calibration with Multiple Drags
 
 ### Changes Made

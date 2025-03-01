@@ -1,15 +1,15 @@
 {
-    "pixels_per_game_unit_x": 109.93939393939395,
-    "pixels_per_game_unit_y": 54.71212458286986,
+    "pixels_per_game_unit_x": 110.28125,
+    "pixels_per_game_unit_y": 55.033333333333324,
     "start_point": {
-        "screen_x": 124,
-        "screen_y": 216,
+        "screen_x": 136,
+        "screen_y": 201,
         "game_x": null,
         "game_y": null
     },
     "end_point": {
-        "screen_x": 3752,
-        "screen_y": 1889,
+        "screen_x": 3665,
+        "screen_y": 1852,
         "game_x": null,
         "game_y": null
     }

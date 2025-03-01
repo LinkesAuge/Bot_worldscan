@@ -276,12 +276,14 @@ class GameWorldSearchTab(QWidget):
             pattern_params: Parameters for the search pattern
         """
         try:
+            # Get max distance from pattern params
+            max_distance = pattern_params.get('max_radius', 1000)  # Default to 1000 game units
+            
             # Start search
             result = self.game_search.search_templates(
-                template_names,
+                templates=template_names,
                 pattern=pattern,
-                pattern_params=pattern_params,
-                callback=self._search_callback
+                max_distance=max_distance
             )
             
             # Process final result

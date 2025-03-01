@@ -86,20 +86,25 @@ class GameWorldCoordinator:
     def _initialize(self) -> None:
         """Initialize the coordinator."""
         # Create config directory if it doesn't exist
-        config_dir = Path("config")
-        config_dir.mkdir(exist_ok=True)
+        config_dir = Path("scout/config")
+        config_dir.mkdir(parents=True, exist_ok=True)
         
-        # Load calibration points if they exist
+        # Load calibration data
         self._load_calibration_data()
         
+        # Log calibration state
         logger.info(f"Game world coordinator initialized with pixels per game unit: X={self.pixels_per_game_unit_x:.2f}, Y={self.pixels_per_game_unit_y:.2f}")
-
+        if self.start_point and self.start_point.game_x is not None:
+            logger.info(f"Loaded start point: screen=({self.start_point.screen_x}, {self.start_point.screen_y}), game=({self.start_point.game_x:.2f}, {self.start_point.game_y:.2f})")
+        if self.end_point and self.end_point.game_x is not None:
+            logger.info(f"Loaded end point: screen=({self.end_point.screen_x}, {self.end_point.screen_y}), game=({self.end_point.game_x:.2f}, {self.end_point.game_y:.2f})")
+            
     def _save_calibration_data(self) -> None:
         """Save calibration data to disk."""
         try:
             # Create config directory if it doesn't exist
-            config_dir = Path("config")
-            config_dir.mkdir(exist_ok=True)
+            config_dir = Path("scout/config")
+            config_dir.mkdir(parents=True, exist_ok=True)
             
             # Prepare calibration data
             calibration_data = {
@@ -108,22 +113,27 @@ class GameWorldCoordinator:
                 "start_point": {
                     "screen_x": self.start_point.screen_x,
                     "screen_y": self.start_point.screen_y,
-                    "game_x": self.start_point.game_x,
-                    "game_y": self.start_point.game_y
+                    "game_x": float(self.start_point.game_x) if self.start_point.game_x is not None else None,
+                    "game_y": float(self.start_point.game_y) if self.start_point.game_y is not None else None
                 } if self.start_point else None,
                 "end_point": {
                     "screen_x": self.end_point.screen_x,
                     "screen_y": self.end_point.screen_y,
-                    "game_x": self.end_point.game_x,
-                    "game_y": self.end_point.game_y
+                    "game_x": float(self.end_point.game_x) if self.end_point.game_x is not None else None,
+                    "game_y": float(self.end_point.game_y) if self.end_point.game_y is not None else None
                 } if self.end_point else None
             }
             
             # Save to file
-            with open("config/calibration_data.json", "w") as f:
+            calibration_file = config_dir / "calibration_data.json"
+            with open(calibration_file, "w") as f:
                 json.dump(calibration_data, f, indent=4)
                 
-            logger.info(f"Saved calibration data: X={self.pixels_per_game_unit_x:.2f}, Y={self.pixels_per_game_unit_y:.2f}")
+            logger.info(f"Saved calibration data to {calibration_file}: X={self.pixels_per_game_unit_x:.2f}, Y={self.pixels_per_game_unit_y:.2f}")
+            if self.start_point and self.start_point.game_x is not None:
+                logger.info(f"Saved start point: screen=({self.start_point.screen_x}, {self.start_point.screen_y}), game=({self.start_point.game_x:.2f}, {self.start_point.game_y:.2f})")
+            if self.end_point and self.end_point.game_x is not None:
+                logger.info(f"Saved end point: screen=({self.end_point.screen_x}, {self.end_point.screen_y}), game=({self.end_point.game_x:.2f}, {self.end_point.game_y:.2f})")
             
         except Exception as e:
             logger.error(f"Error saving calibration data: {e}", exc_info=True)
@@ -132,12 +142,15 @@ class GameWorldCoordinator:
         """Load calibration data from disk."""
         try:
             # Check if file exists
-            if not Path("config/calibration_data.json").exists():
+            config_dir = Path("scout/config")
+            calibration_file = config_dir / "calibration_data.json"
+            
+            if not calibration_file.exists():
                 logger.info("No calibration data found, using default values")
                 return
                 
             # Load from file
-            with open("config/calibration_data.json", "r") as f:
+            with open(calibration_file, "r") as f:
                 calibration_data = json.load(f)
                 
             # Update calibration values
@@ -163,7 +176,7 @@ class GameWorldCoordinator:
                     game_y=end_point_data["game_y"]
                 )
                 
-            logger.info(f"Loaded calibration data: X={self.pixels_per_game_unit_x:.2f}, Y={self.pixels_per_game_unit_y:.2f}")
+            logger.info(f"Loaded calibration data from {calibration_file}: X={self.pixels_per_game_unit_x:.2f}, Y={self.pixels_per_game_unit_y:.2f}")
             if self.start_point:
                 logger.info(f"Loaded start point: screen=({self.start_point.screen_x}, {self.start_point.screen_y}), game=({self.start_point.game_x}, {self.start_point.game_y})")
             if self.end_point:
@@ -241,6 +254,8 @@ class GameWorldCoordinator:
             # Lists to store calibration values from each drag
             x_ratios = []
             y_ratios = []
+            start_game_coords = []
+            end_game_coords = []
             
             # Perform multiple drags
             for drag_num in range(num_drags):
@@ -258,6 +273,7 @@ class GameWorldCoordinator:
                 # Store game coordinates for start point
                 start_x = self.current_position.x
                 start_y = self.current_position.y
+                start_game_coords.append((start_x, start_y))
                 
                 # Perform drag to end point
                 self.game_actions.drag_mouse(
@@ -274,6 +290,7 @@ class GameWorldCoordinator:
                 # Store game coordinates for end point
                 end_x = self.current_position.x
                 end_y = self.current_position.y
+                end_game_coords.append((end_x, end_y))
                 
                 # Calculate pixels per game unit for this drag
                 dx_game = abs(end_x - start_x)
@@ -311,6 +328,21 @@ class GameWorldCoordinator:
                 self.pixels_per_game_unit_y = sum(y_ratios) / len(y_ratios)
                 logger.info(f"Average Y ratio: {self.pixels_per_game_unit_y:.2f} from {len(y_ratios)} measurements")
                 
+            # Calculate average game coordinates for start and end points
+            if start_game_coords:
+                avg_start_x = sum(x for x, _ in start_game_coords) / len(start_game_coords)
+                avg_start_y = sum(y for _, y in start_game_coords) / len(start_game_coords)
+                self.start_point.game_x = avg_start_x
+                self.start_point.game_y = avg_start_y
+                logger.info(f"Average start point game coordinates: ({avg_start_x:.2f}, {avg_start_y:.2f})")
+                
+            if end_game_coords:
+                avg_end_x = sum(x for x, _ in end_game_coords) / len(end_game_coords)
+                avg_end_y = sum(y for _, y in end_game_coords) / len(end_game_coords)
+                self.end_point.game_x = avg_end_x
+                self.end_point.game_y = avg_end_y
+                logger.info(f"Average end point game coordinates: ({avg_end_x:.2f}, {avg_end_y:.2f})")
+            
             # Save calibration data
             self._save_calibration_data()
             
@@ -336,10 +368,14 @@ class GameWorldCoordinator:
             return False
             
         success = self.perform_calibration(num_drags)
+        if not success:
+            # Don't clear calibration points if calibration failed
+            self.calibration_in_progress = False
+            return False
+            
+        # Only clear points after successful calibration and saving
         self.calibration_in_progress = False
-        self.start_point = None
-        self.end_point = None
-        return success
+        return True
         
     def cancel_calibration(self) -> None:
         """Cancel the current calibration process."""
