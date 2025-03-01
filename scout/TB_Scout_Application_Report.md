@@ -141,211 +141,113 @@ The calibration system has been improved to provide more accurate and consistent
      pixels_per_game_unit = screen_distance / abs(game_distance)
      ```
 
-## File Structure and Class Descriptions
+## File Structure
 
 ### Core Components
-
-#### 1. `main.py`
-The application entry point that initializes all components and sets up the main event loop.
-
-**Key Functions:**
-- `main()`: Initializes the application, components, and starts the event loop
-- `is_key_pressed()`: Utility function to check if a key is pressed
-
-#### 2. `window_manager.py` - `WindowManager` Class
-Manages finding, tracking, and interacting with the game window.
-
-**Key Methods:**
-- `find_window()`: Locates the game window by title
-- `get_window_position()`: Returns the position and size of the game window
-- `capture_screenshot()`: Takes a screenshot of the game window
-- `get_client_rect()`: Gets the client area of the window
-- `get_window_frame_offset()`: Calculates the window frame offset
-
-#### 3. `overlay.py` - `Overlay` Class
-Creates and manages the transparent overlay window for visualizing game information.
-
-**Key Methods:**
-- `create_overlay_window()`: Creates the transparent overlay window
-- `_draw_empty_overlay()`: Clears the overlay
-- `_update_window_position()`: Updates the overlay position to match the game window
-- `start_template_matching()`: Starts the template matching process
-- `toggle()`: Toggles the overlay visibility
-
-#### 4. `gui_controller.py` - `OverlayController` Class
-Manages the user interface for controlling the overlay and application features.
-
-**Key Methods:**
-- `_toggle_pattern_matching()`: Toggles the pattern matching process
-- `_toggle_ocr()`: Toggles the OCR process
-- `_toggle_game_world_search()`: Toggles the game world search process
-- `keyPressEvent()`: Handles keyboard shortcuts (Escape/Q to stop processes)
-- `_update_ocr_button_state()`: Updates the OCR button state
-
-#### 5. `template_matcher.py` - `TemplateMatcher` Class
-Implements pattern matching logic to detect game elements in screenshots.
-
-**Key Methods:**
-- `find_matches()`: Finds matches for specified templates in a screenshot
-- `_find_template()`: Finds a single template in a screenshot
-- `start_template_matching()`: Starts continuous template matching
-- `group_similar_matches()`: Groups similar matches to avoid duplicates
-- `track_match_frequency()`: Tracks match frequency for performance optimization
-
-#### 6. `text_ocr.py` - `TextOCR` Class
-Handles OCR processing to extract text from the game window.
-
-**Key Methods:**
-- `set_region()`: Sets the region for OCR processing
-- `set_frequency()`: Adjusts the update frequency
-- `extract_text()`: Extracts text from a screenshot
-- `_extract_coordinates()`: Extracts coordinates from OCR text (K, X, Y)
-- `_process_region()`: Processes the OCR region
-
-#### 7. `game_world_coordinator.py` - `GameWorldCoordinator` Class
-Coordinates between screen coordinates and game world coordinates.
-
-**Key Methods:**
-- `update_current_position_from_ocr()`: Updates the current position from OCR
-- `screen_to_game_coords()`: Converts screen coordinates to game world coordinates
-- `game_to_screen_coords()`: Converts game world coordinates to screen coordinates
-- `calculate_drag_vector()`: Calculates drag vector to move to target coordinates
-- `is_position_on_screen()`: Checks if a game world position is visible on screen
-- `start_calibration()`: Starts the drag distance calibration process
-- `complete_calibration()`: Completes the calibration and calculates pixels per game unit
-- `cancel_calibration()`: Cancels the current calibration process
-- `get_calibration_status()`: Gets the current calibration status
-
-#### 8. `game_world_search.py` - `GameWorldSearch` Class
-Implements intelligent search strategies for finding templates in the game world.
-
-**Key Methods:**
-- `search_templates()`: Searches for templates using a specified pattern
-- `_check_for_templates()`: Checks for templates at the current position
-- `_move_to_position()`: Moves the view to a specific game world position
-- `get_search_statistics()`: Gets statistics about the search history
-
-#### 9. `automation/gui/automation_tab.py` - `AutomationTab` Class
-Provides the main automation tab in the GUI.
-
-**Key Methods:**
-- `is_sequence_running()`: Checks if a sequence is currently running
-- `_toggle_sequence()`: Toggles sequence execution
-- `_toggle_ocr()`: Toggles OCR functionality
-- `_on_position_marked()`: Handles new position being marked
-- `_on_sequence_execution()`: Handles sequence execution request
-
-### Supporting Classes
-
-#### 1. `automation/gui/automation_tab.py` - `PositionList` Class
-Widget for managing marked positions.
-
-**Key Methods:**
-- `update_positions()`: Updates the position list with new positions
-- `_on_position_selected()`: Handles position selection
-- `_on_add_clicked()`: Handles add button click
-- `_on_remove_clicked()`: Handles remove button click
-- `_on_details_changed()`: Handles changes to position details
-
-#### 2. `automation/gui/automation_tab.py` - `SequenceBuilder` Class
-Widget for building and editing action sequences.
-
-**Key Methods:**
-- `_new_sequence()`: Creates a new empty sequence
-- `update_positions()`: Updates available positions
-- `_on_sequence_changed()`: Handles sequence changes
-- `_on_action_selected()`: Handles action selection
-- `_on_add_clicked()`: Handles add action button click
-
-#### 3. `game_world_search.py` - `SearchResult` Class
-Result of a template search operation.
-
-**Key Methods:**
-- `to_dict()`: Converts to dictionary for storage
-- `from_dict()`: Creates from dictionary
-- `__str__()`: String representation of the search result
-
-#### 4. `game_world_coordinator.py` - `GameWorldPosition` Class
-Represents a position in the game world.
-
-**Key Methods:**
-- `__str__()`: String representation of the position (K, X, Y format)
-
-#### 5. `gui/game_world_coord_widget.py` - `CoordinateDisplayWidget` Class
-Widget for displaying and updating game world coordinates and managing calibration.
-
-**Key Methods:**
-- `_update_coordinates()`: Updates the coordinate display from OCR
-- `_toggle_auto_update()`: Toggles automatic coordinate updates
-- `_start_auto_update()`: Starts automatic coordinate updates
-- `_stop_auto_update()`: Stops automatic coordinate updates
-- `_start_calibration()`: Starts the drag distance calibration process
-- `_complete_calibration()`: Completes the calibration process with the second point
-- `_cancel_calibration()`: Cancels the current calibration process
-- `update_calibration_status()`: Updates the calibration status display
-- `get_current_position()`: Gets the current game world position
-
-## File Structure Diagram
-
 ```
 tb-scout/
 ├── scout/                           # Main package directory
 │   ├── __init__.py                  # Package initialization
 │   ├── main.py                      # Application entry point
-│   ├── overlay.py                   # Overlay visualization
-│   ├── gui_controller.py            # Main GUI controller
-│   ├── window_manager.py            # Game window management
-│   ├── template_matcher.py          # Pattern matching
-│   ├── text_ocr.py                  # OCR text extraction
+│   ├── game_world_direction.py      # Direction and calibration system
+│   │   ├── DirectionDefinition      # Direction movement definitions
+│   │   └── GameWorldDirection       # Direction management and calibration
+│   ├── game_world_position.py       # Game world coordinate handling
+│   │   └── GameWorldPosition        # Position representation and math
 │   ├── game_world_coordinator.py    # Coordinate system management
-│   ├── game_world_search.py         # Search strategies
-│   ├── game_state.py                # Game state tracking
-│   ├── actions.py                   # Game actions
-│   ├── config_manager.py            # Configuration management
-│   ├── sound_manager.py             # Sound notifications
-│   ├── debug_window.py              # Debug visualization
-│   ├── selector_tool.py             # Region selection tool
-│   ├── window_capture.py            # Window capture utilities
-│   ├── world_scanner.py             # World scanning functionality
-│   ├── config.ini                   # Configuration file
-│   ├── memory.mdc                   # Memory documentation
-│   ├── bugfixing.mdc                # Bug fixing documentation
+│   │   └── GameWorldCoordinator     # Screen/game coordinate conversion
+│   ├── game_state.py               # Game state tracking
+│   │   ├── GameState               # Current game state management
+│   │   └── GameCoordinates         # Coordinate data structure
+│   ├── text_ocr.py                 # OCR text extraction
+│   │   └── TextOCR                 # OCR processing and coordinate extraction
+│   ├── actions.py                  # Game actions and mouse control
+│   │   └── GameActions             # Mouse and keyboard automation
+│   ├── template_matcher.py         # Pattern matching system
+│   │   └── TemplateMatcher        # Template detection and matching
+│   ├── overlay.py                  # Overlay visualization
+│   │   └── Overlay                # Transparent overlay window
+│   ├── gui/                        # GUI components
+│   │   ├── __init__.py
+│   │   ├── direction_widget.py      # Direction calibration UI
+│   │   │   └── DirectionWidget     # Direction definition and testing
+│   │   ├── game_world_coord_widget.py # Coordinate display UI
+│   │   │   └── CoordinateDisplayWidget # Position display and updates
+│   │   ├── game_world_search_tab.py  # Search interface
+│   │   │   └── GameWorldSearchTab   # Search control and results
+│   │   ├── game_world_grid.py       # Grid visualization
+│   │   │   └── GameWorldGrid       # Search grid display
+│   │   └── overlay_controller.py    # Main GUI controller
+│   │       └── OverlayController   # Application control
 │   ├── automation/                  # Automation functionality
 │   │   ├── __init__.py
 │   │   ├── core.py                  # Core automation classes
+│   │   │   ├── AutomationSequence  # Action sequence definition
+│   │   │   └── SequenceExecutor    # Sequence execution
 │   │   ├── actions.py               # Action definitions
+│   │   │   └── AutomationAction    # Base action class
 │   │   ├── executor.py              # Sequence execution
+│   │   │   └── SequenceExecutor    # Action execution
 │   │   ├── search_patterns.py       # Search pattern generators
-│   │   ├── gui/                     # Automation GUI components
-│   │       ├── __init__.py
-│   │       ├── automation_tab.py    # Main automation tab
+│   │   │   ├── SpiralPattern      # Outward spiral search
+│   │   │   ├── GridPattern        # Grid-based search
+│   │   │   └── CirclePattern      # Radial search
+│   │   └── gui/                     # Automation GUI components
+│   │       ├── automation_tab.py    # Main automation interface
 │   │       ├── position_marker.py   # Position marking tool
-│   │       ├── action_params.py     # Action parameter widgets
-│   │       ├── debug_window.py      # Automation debug window
-│   │       └── search_pattern_dialog.py # Search pattern configuration
-│   ├── gui/                         # GUI components
-│   │   ├── __init__.py
-│   │   └── overlay_controller.py    # Overlay controller
+│   │       └── sequence_builder.py  # Sequence creation interface
+│   ├── config/                      # Configuration files
+│   │   ├── direction_definitions.json # Saved direction data
+│   │   └── calibration_data.json    # Calibration settings
 │   ├── templates/                   # Template images
-│   │   ├── buildings/               # Building templates
-│   │   ├── resources/               # Resource templates
-│   │   ├── monsters/                # Monster templates
-│   │   └── ui/                      # UI element templates
-│   ├── sounds/                      # Sound files
-│   │   ├── notification.wav
-│   │   ├── success.wav
-│   │   └── error.wav
+│   │   ├── buildings/              # Building templates
+│   │   ├── resources/              # Resource templates
+│   │   └── monsters/              # Monster templates
+│   ├── sounds/                      # Sound notifications
+│   │   ├── notification.wav        # General notification
+│   │   ├── success.wav            # Success sound
+│   │   └── error.wav              # Error sound
 │   └── debug_screenshots/           # Debug screenshots
-├── tests/                           # Test directory
+├── tests/                          # Test directory
 │   ├── __init__.py
-│   ├── test_window_manager.py
-│   ├── test_template_matcher.py
-│   ├── test_text_ocr.py
-│   └── ...
-├── pyproject.toml                   # Project configuration
-├── uv.lock                          # Dependency lock file
-└── README.md                        # Project documentation
+│   ├── test_game_world_direction.py # Direction system tests
+│   ├── test_text_ocr.py           # OCR system tests
+│   └── test_template_matcher.py    # Pattern matching tests
+├── pyproject.toml                  # Project configuration
+└── README.md                       # Project documentation
 ```
+
+### Key Component Relationships
+
+1. **Direction and Calibration System**
+   - `GameWorldDirection` manages cardinal directions and calibration
+   - Uses `TextOCR` for coordinate reading
+   - Uses `GameActions` for mouse movement
+   - Coordinates with `GameWorldCoordinator` for position updates
+
+2. **Coordinate System**
+   - `GameWorldCoordinator` handles coordinate conversion
+   - Uses `GameWorldPosition` for position representation
+   - Updates `GameState` with current position
+   - Provides coordinate services to other components
+
+3. **OCR System**
+   - `TextOCR` handles coordinate extraction
+   - Updates `GameState` with new coordinates
+   - Coordinates with `GameWorldCoordinator` for position updates
+   - Provides coordinate data to GUI components
+
+4. **GUI Components**
+   - `DirectionWidget` manages direction definition and calibration
+   - `CoordinateDisplayWidget` shows current position
+   - `GameWorldSearchTab` controls search operations
+   - `GameWorldGrid` visualizes search patterns
+
+5. **Automation System**
+   - `AutomationSequence` defines action sequences
+   - `SequenceExecutor` runs automation sequences
+   - Uses `GameActions` for input simulation
+   - Coordinates with `GameWorldCoordinator` for navigation
 
 ## Code Flow
 
