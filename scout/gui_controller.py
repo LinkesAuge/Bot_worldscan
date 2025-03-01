@@ -1376,25 +1376,25 @@ class OverlayController(QMainWindow):
         logger.info(f"Selected OCR region: {region}")
         
         try:
-            # Update OCR settings
+            # Use logical coordinates for OCR region
+            logical = region['logical_coords']
             ocr_settings = self.config_manager.get_ocr_settings()
             ocr_settings['region'] = {
-                'left': region['left'],
-                'top': region['top'],
-                'width': region['width'],
-                'height': region['height'],
+                'left': logical['left'],
+                'top': logical['top'],
+                'width': logical['width'],
+                'height': logical['height'],
                 'dpi_scale': region['dpi_scale']
             }
             self.config_manager.update_ocr_settings(ocr_settings)
             
-            # Update TextOCR instance
+            # Update TextOCR instance with logical coordinates
             self.text_ocr.set_region(ocr_settings['region'])
             
             # Update status with logical coordinates
-            logical = region['logical_coords']
             self.ocr_status.setText(
                 f"OCR region: ({logical['left']}, {logical['top']}) "
-                f"[Physical: ({region['left']}, {region['top']})]"
+                f"[Size: {logical['width']}x{logical['height']}]"
             )
             
         except Exception as e:

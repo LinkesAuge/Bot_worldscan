@@ -292,139 +292,134 @@ class GameWorldDirection:
                 logger.error("Missing direction definitions")
                 return False
             
-            # Lists to store measurements
-            north_measurements = []
-            east_measurements = []
+            # Store OCR state to restore later
+            was_ocr_active = self.text_ocr.active
             
-            # Store initial position for reference
-            initial_pos = self._get_current_position()
-            if not initial_pos:
-                logger.error("Failed to get initial position")
-                return False
-                
-            if not initial_pos.is_valid():
-                logger.error(f"Invalid initial position: {initial_pos}")
-                return False
-            
-            logger.info(f"Initial position: {initial_pos}")
-            
-            # Get screen dimensions for validation
-            window_rect = self.window_manager.get_window_position()
-            if not window_rect:
-                logger.error("Failed to get window dimensions")
-                return False
-            max_screen_distance = max(window_rect[2], window_rect[3])  # Use larger window dimension
-            logger.info(f"Window dimensions: {window_rect}, Max screen distance: {max_screen_distance}")
-            
-            # Perform calibration runs
-            for i in range(num_runs):
-                logger.info(f"Calibration run {i+1}/{num_runs}")
-                
-                # Calibrate North
-                logger.info("Starting North calibration...")
-                if not self._calibrate_direction(self.north_definition, north_measurements):
-                    logger.error("North calibration failed")
-                    return False
-                logger.info(f"North measurements: {north_measurements}")
+            try:
+                # Activate OCR if not already active
+                if not self.text_ocr.active:
+                    logger.info("Activating OCR for calibration")
+                    self.text_ocr.start()
+                    time.sleep(1.0)  # Wait for OCR to initialize
                     
-                # Calibrate East
-                logger.info("Starting East calibration...")
-                if not self._calibrate_direction(self.east_definition, east_measurements):
-                    logger.error("East calibration failed")
-                    return False
-                logger.info(f"East measurements: {east_measurements}")
+                    # Force several OCR updates to ensure stability
+                    for _ in range(3):
+                        self.text_ocr._process_region()
+                        time.sleep(0.5)
+                        
+                    # Get initial position to verify OCR is working
+                    test_pos = self._get_current_position()
+                    if not test_pos or not test_pos.is_valid():
+                        logger.error("OCR not providing valid coordinates after activation")
+                        return False
+                    logger.info("OCR stabilized and providing valid coordinates")
                 
-            # Calculate average ratios
-            if north_measurements and east_measurements:
-                # Calculate Y ratio from North measurements (only use Y values)
-                y_values = [m[1] for m in north_measurements if m[1] > 0]
-                x_values = [m[0] for m in east_measurements if m[0] > 0]
+                # Lists to store measurements
+                north_measurements = []
+                east_measurements = []
                 
-                if not y_values:
-                    logger.error("No valid Y measurements for North direction")
+                # Store initial position for reference
+                initial_pos = self._get_current_position()
+                if not initial_pos:
+                    logger.error("Failed to get initial position")
                     return False
                     
-                if not x_values:
-                    logger.error("No valid X measurements for East direction")
+                if not initial_pos.is_valid():
+                    logger.error(f"Invalid initial position: {initial_pos}")
                     return False
                 
-                # Calculate average ratios from all measurements
-                self.pixels_per_game_unit_y = np.mean(y_values)
-                self.pixels_per_game_unit_x = np.mean(x_values)
+                logger.info(f"Initial position: {initial_pos}")
                 
-                # Calculate screen distances
-                north_screen_dy = abs(self.north_definition.screen_end[1] - self.north_definition.screen_start[1])
-                east_screen_dx = abs(self.east_definition.screen_end[0] - self.east_definition.screen_start[0])
-                
-                # Validate screen distances
-                if north_screen_dy > max_screen_distance or east_screen_dx > max_screen_distance:
-                    logger.error(f"Screen distances exceed window size - North: {north_screen_dy}, East: {east_screen_dx}")
+                # Get screen dimensions for validation
+                window_rect = self.window_manager.get_window_position()
+                if not window_rect:
+                    logger.error("Failed to get window dimensions")
                     return False
+                max_screen_distance = max(window_rect[2], window_rect[3])  # Use larger window dimension
+                logger.info(f"Window dimensions: {window_rect}, Max screen distance: {max_screen_distance}")
                 
-                logger.info(f"Screen distances - North: {north_screen_dy} pixels, East: {east_screen_dx} pixels")
-                
-                # Calculate game units moved (with wrapping)
-                north_game_dy = 0
-                east_game_dx = 0
-                
-                # Safely check North movement
-                if (self.north_definition.game_start and self.north_definition.game_end and 
-                    self.north_definition.game_start.is_valid() and self.north_definition.game_end.is_valid()):
-                    # Calculate wrapped distance considering direction
-                    y_diff = self.north_definition.game_end.y - self.north_definition.game_start.y
-                    north_game_dy = y_diff % 1000
-                    # If the wrapped distance is more than half the world size, it's shorter to go the other way
-                    if north_game_dy > 500:
-                        north_game_dy = -(1000 - north_game_dy)
-                    logger.info(f"North movement details:")
-                    logger.info(f"  Start: {self.north_definition.game_start}")
-                    logger.info(f"  End: {self.north_definition.game_end}")
-                    logger.info(f"  Raw Y diff: {y_diff}")
-                    logger.info(f"  Wrapped Y diff: {north_game_dy}")
-                    logger.info(f"  Screen Y distance: {north_screen_dy}")
-                else:
-                    logger.error("Invalid North game positions")
-                    return False
+                # Perform calibration runs
+                for i in range(num_runs):
+                    logger.info(f"Calibration run {i+1}/{num_runs}")
                     
-                # Safely check East movement
-                if (self.east_definition.game_start and self.east_definition.game_end and 
-                    self.east_definition.game_start.is_valid() and self.east_definition.game_end.is_valid()):
-                    # Calculate wrapped distance considering direction
-                    x_diff = self.east_definition.game_end.x - self.east_definition.game_start.x
-                    east_game_dx = x_diff % 1000
-                    # If the wrapped distance is more than half the world size, it's shorter to go the other way
-                    if east_game_dx > 500:
-                        east_game_dx = -(1000 - east_game_dx)
-                    logger.info(f"East movement details:")
-                    logger.info(f"  Start: {self.east_definition.game_start}")
-                    logger.info(f"  End: {self.east_definition.game_end}")
-                    logger.info(f"  Raw X diff: {x_diff}")
-                    logger.info(f"  Wrapped X diff: {east_game_dx}")
-                    logger.info(f"  Screen X distance: {east_screen_dx}")
-                else:
-                    logger.error("Invalid East game positions")
-                    return False
+                    # Calibrate North
+                    logger.info("Starting North calibration...")
+                    if not self._calibrate_direction(self.north_definition, north_measurements):
+                        logger.error("North calibration failed")
+                        return False
+                    
+                    # Log intermediate results
+                    if north_measurements:
+                        y_values = [m[1] for m in north_measurements if m[1] > 0]
+                        logger.info(f"North measurements after run {i+1}: {y_values}")
+                        
+                    # Calibrate East
+                    logger.info("Starting East calibration...")
+                    if not self._calibrate_direction(self.east_definition, east_measurements):
+                        logger.error("East calibration failed")
+                        return False
+                    
+                    # Log intermediate results
+                    if east_measurements:
+                        x_values = [m[0] for m in east_measurements if m[0] > 0]
+                        logger.info(f"East measurements after run {i+1}: {x_values}")
                 
-                # Log calibration results using the averaged measurements
-                logger.info("Calibration Results:")
-                logger.info(f"Average ratios from {num_runs} calibration runs:")
-                logger.info(f"X Ratio (pixels per game unit): {self.pixels_per_game_unit_x:.2f}")
-                logger.info(f"Y Ratio (pixels per game unit): {self.pixels_per_game_unit_y:.2f}")
-                logger.info(f"Individual run measurements:")
-                logger.info(f"North measurements: {y_values}")
-                logger.info(f"East measurements: {x_values}")
-                logger.info(f"Final movement measurements:")
-                logger.info(f"  North: {north_screen_dy} pixels = {abs(north_game_dy)} game units")
-                logger.info(f"  East: {east_screen_dx} pixels = {abs(east_game_dx)} game units")
+                # Calculate final results
+                if north_measurements and east_measurements:
+                    # Calculate Y ratio from North measurements (only use Y values)
+                    y_values = [m[1] for m in north_measurements if m[1] > 0]
+                    x_values = [m[0] for m in east_measurements if m[0] > 0]
+                    
+                    if not y_values:
+                        logger.error("No valid Y measurements for North direction")
+                        return False
+                        
+                    if not x_values:
+                        logger.error("No valid X measurements for East direction")
+                        return False
+                    
+                    # Verify measurement consistency
+                    y_std = np.std(y_values)
+                    x_std = np.std(x_values)
+                    y_mean = np.mean(y_values)
+                    x_mean = np.mean(x_values)
+                    
+                    # Check if measurements are consistent (within 10% of mean)
+                    if y_std > y_mean * 0.1 or x_std > x_mean * 0.1:
+                        logger.error(f"Inconsistent measurements detected:")
+                        logger.error(f"Y values (mean: {y_mean:.2f}, std: {y_std:.2f}): {y_values}")
+                        logger.error(f"X values (mean: {x_mean:.2f}, std: {x_std:.2f}): {x_values}")
+                        return False
+                    
+                    # Store final calibration values
+                    self.pixels_per_game_unit_y = y_mean
+                    self.pixels_per_game_unit_x = x_mean
+                    
+                    # Log final results
+                    logger.info("Final Calibration Results:")
+                    logger.info(f"X Ratio: {self.pixels_per_game_unit_x:.2f} pixels per game unit (std: {x_std:.2f})")
+                    logger.info(f"Y Ratio: {self.pixels_per_game_unit_y:.2f} pixels per game unit (std: {y_std:.2f})")
+                    logger.info(f"Measurements:")
+                    logger.info(f"  North: {y_values}")
+                    logger.info(f"  East: {x_values}")
+                    
+                    # Save definitions with updated game positions
+                    self._save_definitions()
+                    
+                    return True
                 
-                # Save definitions with updated game positions
-                self._save_definitions()
+                logger.error("No valid measurements collected")
+                return False
                 
-                return True
-            
-            logger.error("No valid measurements collected")
-            return False
-            
+            finally:
+                # Restore original OCR state
+                if self.text_ocr.active != was_ocr_active:
+                    logger.info("Restoring original OCR state")
+                    if was_ocr_active:
+                        self.text_ocr.start()
+                    else:
+                        self.text_ocr.stop()
+                
         except Exception as e:
             logger.error(f"Error during calibration: {e}", exc_info=True)
             return False
@@ -471,9 +466,18 @@ class GameWorldDirection:
         max_retries = 3
         retry_delay = 0.5
         
+        # Check if we have a valid OCR region
+        if not self.text_ocr.region:
+            logger.error("No OCR region set - please set an OCR region in the overlay tab first")
+            return None
+            
+        # Log current OCR region for debugging
+        logger.info(f"Current OCR region: {self.text_ocr.region}")
+        
         for attempt in range(max_retries):
-            # Process OCR region to get fresh coordinates
+            # Force OCR to process region and wait for result
             self.text_ocr._process_region()
+            time.sleep(0.5)  # Wait for OCR to complete
             
             # Get coordinates from game state
             coords = self.game_state.coordinates
@@ -492,11 +496,17 @@ class GameWorldDirection:
                     logger.warning(f"Invalid position values: k={coords.k}, x={coords.x}, y={coords.y}")
             else:
                 logger.warning(f"Missing coordinate values: k={coords.k if coords else None}, x={coords.x if coords else None}, y={coords.y if coords else None}")
+                logger.info("Please ensure coordinates are visible in the game window and OCR region is correctly positioned")
             
-            logger.warning(f"Failed to get valid position (attempt {attempt + 1}/{max_retries})")
-            time.sleep(retry_delay)
+            if attempt < max_retries - 1:  # Don't wait after last attempt
+                logger.warning(f"Failed to get valid position (attempt {attempt + 1}/{max_retries}) - retrying in {retry_delay} seconds")
+                time.sleep(retry_delay)
             
         logger.error("Failed to get valid position after all retries")
+        logger.error("Please check:")
+        logger.error("1. OCR region is correctly positioned over the coordinates")
+        logger.error("2. Game window is active and coordinates are visible")
+        logger.error("3. No other windows are covering the coordinate display")
         return None
     
     def _perform_drag(self, start: Tuple[int, int], end: Tuple[int, int]) -> bool:
@@ -649,7 +659,12 @@ class GameWorldDirection:
         """
         try:
             # Wait for OCR to stabilize
-            time.sleep(1.0)
+            time.sleep(1.5)  # Increased initial wait
+            
+            # Force multiple OCR updates to ensure stability
+            for _ in range(3):
+                self.text_ocr._process_region()
+                time.sleep(0.5)
             
             # Get start position with retries
             start_pos = self._get_current_position()
@@ -662,13 +677,24 @@ class GameWorldDirection:
             # Store game start position
             definition.game_start = start_pos
             
+            # Get window dimensions for validation
+            window_rect = self.window_manager.get_window_position()
+            if not window_rect:
+                logger.error("Failed to get window dimensions")
+                return False
+            
             # Perform drag
             if not self._perform_drag(definition.screen_start, definition.screen_end):
                 logger.error("Failed to perform drag")
                 return False
             
-            # Wait for movement and OCR to stabilize
-            time.sleep(1.5)
+            # Wait longer for movement and OCR to stabilize
+            time.sleep(2.0)  # Increased wait after drag
+            
+            # Force multiple OCR updates to ensure stability
+            for _ in range(3):
+                self.text_ocr._process_region()
+                time.sleep(0.5)
             
             # Get end position with retries
             end_pos = self._get_current_position()
@@ -694,10 +720,23 @@ class GameWorldDirection:
                 screen_distance = abs(definition.screen_end[1] - definition.screen_start[1])
                 # Store pixels per game unit
                 if abs(game_distance) > 0:  # Only store if we actually moved
-                    # Use absolute values for ratio calculation
-                    measurements.append((0, screen_distance / abs(game_distance)))
+                    # Calculate ratio
+                    ratio = screen_distance / abs(game_distance)
+                    
+                    # Check if this ratio is significantly different from previous measurements
+                    if measurements:
+                        prev_ratios = [m[1] for m in measurements if m[1] > 0]
+                        avg_ratio = np.mean(prev_ratios)
+                        # Increase tolerance to 20%
+                        if abs(ratio - avg_ratio) > avg_ratio * 0.2:  # 20% tolerance
+                            logger.warning(f"Inconsistent Y ratio detected: {ratio:.2f} vs average {avg_ratio:.2f}")
+                            # Don't fail immediately, just log warning
+                            logger.warning("Continuing with calibration despite ratio difference")
+                    
+                    # Store measurement
+                    measurements.append((0, ratio))
                     logger.info(f"North movement: {game_distance} game units ({abs(game_distance)} absolute), {screen_distance} pixels")
-                    logger.info(f"North ratio: {screen_distance / abs(game_distance):.2f} pixels per game unit")
+                    logger.info(f"North ratio: {ratio:.2f} pixels per game unit")
                 else:
                     logger.warning("No Y movement detected for North direction")
             else:  # East
@@ -712,10 +751,23 @@ class GameWorldDirection:
                 screen_distance = abs(definition.screen_end[0] - definition.screen_start[0])
                 # Store pixels per game unit
                 if abs(game_distance) > 0:  # Only store if we actually moved
-                    # Use absolute values for ratio calculation
-                    measurements.append((screen_distance / abs(game_distance), 0))
+                    # Calculate ratio
+                    ratio = screen_distance / abs(game_distance)
+                    
+                    # Check if this ratio is significantly different from previous measurements
+                    if measurements:
+                        prev_ratios = [m[0] for m in measurements if m[0] > 0]
+                        avg_ratio = np.mean(prev_ratios)
+                        # Increase tolerance to 20%
+                        if abs(ratio - avg_ratio) > avg_ratio * 0.2:  # 20% tolerance
+                            logger.warning(f"Inconsistent X ratio detected: {ratio:.2f} vs average {avg_ratio:.2f}")
+                            # Don't fail immediately, just log warning
+                            logger.warning("Continuing with calibration despite ratio difference")
+                    
+                    # Store measurement
+                    measurements.append((ratio, 0))
                     logger.info(f"East movement: {game_distance} game units ({abs(game_distance)} absolute), {screen_distance} pixels")
-                    logger.info(f"East ratio: {screen_distance / abs(game_distance):.2f} pixels per game unit")
+                    logger.info(f"East ratio: {ratio:.2f} pixels per game unit")
                 else:
                     logger.warning("No X movement detected for East direction")
             
@@ -724,8 +776,13 @@ class GameWorldDirection:
                 logger.error("Failed to return to start")
                 return False
             
-            # Wait for movement to complete
-            time.sleep(1.5)
+            # Wait longer for return movement to complete
+            time.sleep(2.0)  # Increased wait after return drag
+            
+            # Force multiple OCR updates to ensure stability
+            for _ in range(3):
+                self.text_ocr._process_region()
+                time.sleep(0.5)
             
             return True
             

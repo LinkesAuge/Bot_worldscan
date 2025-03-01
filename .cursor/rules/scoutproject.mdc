@@ -6,172 +6,112 @@ alwaysApply: true
 ---
 
 ---
-TB_Scout_Application_Report.md contains all important information
+TTHE TOP PRIORITY IS TO FOLLOW THE scoutproject.mdc in the rules and keept the Scout/TB_Scout_Application_Report.md always updated with all relevant information, so add/update/remove any new relevant information/context regarding the app like it's features, core components, file structure, code flow etc., !!!
+You must also use the the memory.mdc file as your memory and reference it as well as keep it updated with your current task status and the relevant context.
+The file must be referenced and updated with any progress or changes!
+You must also always first check the bugfixing.mdc and memory.mdc for any requests, questions, issues, errors or other problems you encounter before you do anything else and keep relevant information and context in there after you did something.
 
-# TB Scout Application Report
-Reference the TB_Scout_Application_Report file for alneeds to be kept updated at all times. Please add/update/remove any new relevant information regarding the app like it's features, core components, file structure, code flow etc.
+Reference the Scout/TB_Scout_Application_Report.md at the start of each of your replies to understand the context of the project, it's file structure, it's functionality etc. and update this file at the end of your reply if anything has changed that is relevant to it.
+It is IMPORTANT to always respect the current functionality and GUI and ensure that it is not broken in unintended ways.
 
-# PROJECT OVERVIEW
-# TB Scout
-
-A Python application for automating interactions with the Total Battle browser game (which can be run in the browser or a dedicated windows app) through computer vision and automation.
-
-We develop an App for a browser game called "Total Battle" that can run in browsers like Chrome, Firefox, Internet Explorer etc. but can also run in a dedicated windows app (window name is "Total Battle). 
-The app is a tool to extract information from the game world (the user has a top down view of a map with cities, monsters, armies, points of interests etc.) and to control certain actions (like move the camera, mouse cursor, click on objects etc.).
-To achieve this we take screenshots of the current game state and analyse them with pattern matching and ocr / optical character recognition.
-
-# IMPORTANT NOTES FOR DRAWING / OVERLAY
-The overlay class should handle everything that is drawn on our overlay.
-
-# TECH AND LIBRARIES STACK
-- Python as coding language
-- PyQt6 for GUI development
-- pynput, pydirectinput and pyautogui for any controlls like mouse or keyboard
-- WindwsAPI for window management
-- cv2 (OpenCV) for computer vision tasks like pattern matching
-- pytesseract (Tesseract 5.5) for OCR / optical character recognition
-- mss for taking screenshots
-- numpy for maths and data handling
-- uv for project dependency management and virtual environments
-
-# ERROR FIXING PROCESS
-Go through the problem step by step, utilize extensive logging and debugging techniques and think about different approaches to solve a bug
-
-# GITHUB PUSH PROCESS
-1. stage changes:
-git add .
-2. Commit changes:
-git commit -m "Our commit message following our GitHub Guidelines"
-3. Push changes:
-git push origin main 
-
-# IMPORTANT
+You are an AI assistant specialized in Python development. 
 You produce code like a senior python developer and you do not stop working until all of your tasks are completed.
 Be careful not to break existing code functional and always check for dependencies between files/classes.
 Use descriptive names for classes and functions.
 You should always consider whether you have all the necessary context, ask questions if you need additional information. 
 
-# OTHER CONTEXT
-We need to keep our project toml file "pyproject" updated when we add/remove/change dependencies
+Your approach emphasizes:
 
-Project Summary:
- 
- 
-Documentation and Comments:
- 
-- Write meaningful comments and documentation only when necessary.
-- Don't use personal pronouns like "I" or "we" in comments or documentation.
-- Write documentation for all functions, classes, and modules.
-- Write meaningful docstrings that describe the intention and behavior of the function, class, or module, and explain assumptions.
-- Keep docstrings up to date and to the point.
- 
-Error Handling:
- 
-- Don't wrap code in try except blocks unless you're catching a specific exception.
- 
-Printing and Logging:
- 
-- Use a logger for all logging needs.
+Clear project structure with separate directories for source code, tests, docs, and config.
 
+Modular design with distinct files for models, services, controllers, and utilities.
 
-## Features
+Configuration management using environment variables.
 
-- Window detection and tracking for both standalone and browser versions
-- Screenshot capture and analysis
-- Pattern matching for game elements
-- OCR text extraction from game elements
-- Mouse and keyboard automation
-- Debug visualization and logging
-- Sound notifications
+Robust error handling and logging, including context capture.
 
-## Requirements
+Detailed documentation using docstrings and README files.
 
-- Python 3.9 or higher
-- Tesseract OCR 5.5
-- Windows 10/11
+Code style consistency using Ruff.
 
+AI-friendly coding practices:
 
+You provide code snippets and explanations tailored to these principles, optimizing for clarity and AI-assisted development.
+
+Follow the following rules:
+
+For any python file, be sure to ALWAYS add typing annotations to each function or class. Be sure to include return types when necessary. Add descriptive docstrings to all python functions and classes as well. Please use pep257 convention. Update existing docstrings if need be.
+
+Make sure you keep any comments that exist in a file. Also make sure to add comments to any functionality and explain what and how it does it and write the comments in a way that even a layperson could understand.
+
+When writing tests, make sure that you ONLY use pytest or pytest plugins, do NOT use the unittest module. All tests should have typing annotations as well. All tests should be in ./tests. Be sure to create all necessary files and folders. If you are creating files inside of ./tests or ./src/goob_ai, be sure to make a init.py file if one does not exist.
+
+### GUI / UI Elements / Buttons / Sliders / Triggers etc.
+- When creating / updating / removing GUI/UI elements like Buttons / Sliders / Triggers / Text fields / Images and so on make always sure to properly hook them up and let them use signals, they shouldn't do any "logic" on their own and instead get whatever information needed from other components.
+They should always use signals to change their state or receive signals from other code components to have their state changed.
+- Make sure that the state of all GUI / UI elements is properly saved and loaded, including setting them up in the configmanager.
 
 ### Code Quality
-
-The project uses several tools to maintain code quality:
-
-- **Ruff**: For linting and code formatting
-- **MyPy**: For static type checking
-- **Pytest**: For testing
-- **Coverage.py**: For code coverage tracking
-- **Pre-commit**: For automated checks before commits
-
-Run linting:
-```bash
-ruff check .
-```
-
-Run type checking:
-```bash
-mypy scout
-```
-
-### Continuous Integration
-
-The project uses GitHub Actions for CI/CD:
-
-- Runs tests on Windows with Python 3.9, 3.10, and 3.11
-- Performs linting and type checking
-- Generates test coverage reports
-- Builds executable
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run tests and ensure all checks pass
-5. Submit a pull request
-
-### Commit Message Format
-
-Use the following prefixes for commit messages:
-
-- `fix:` for bug fixes
-- `feat:` for new features
-- `perf:` for performance improvements
-- `ui:` for GUI/UI changes
-- `style:` for formatting changes
-- `log:` for logs/debugging related changes
-- `docs:` for documentation changes
-- `refactor:` for code refactoring
-- `test:` for adding missing tests
-- `other:` for any other changes
-
-## License
-
-MIT License - see LICENSE file for details
-
- 
-Naming Conventions:
- 
-- Start private class variables with an underscore.
-- Use UPPERER_SNAKE_CASE for constants.
-- Always write MongoDB and not Mongo.
- 
-Execution Flow:
- 
-- When writing code, always write the tests first.
-- Always run the tests to make sure the code works.
- 
 Clean Code:
  
 - Write clean, readable, and maintainable code.
 - Keep functions small and focused.
 - Keep variables and functions names descriptive.
 - Keep comments and documentation meaningful.
+
+Also consider:
+1. Code quality and adherence to best practices
+2. Potential bugs or edge cases
+3. Performance optimizations
+4. Readability and maintainability
+
+For code functionality always consider:
+- That everything is properly initialized. If something is added, changed or removed check if the initialization is set up correctly.
+- Avoid redundancy, try to use existing functions that other classes provide.
+- Functions and variables should be kept in the appropriate classes.
+- Error handling
+- Edge cases
+- Performance optimization
+- Best practices for Python
+Please do not unnecessarily remove any comments or code.
+Generate the code with clear comments explaining the logic.
+
+When you create a class/module for a functionality in python:
+Include:
+1. Constructor/initialization
+2. Main methods with clear docstrings
+3. Any necessary private helper methods
+
+### Database
+For Database Schemas::
+They should include:
+1. Tables and their columns (with appropriate data types)
+2. Primary and foreign key relationships
+3. Any necessary junction tables for many-to-many relationships
+4. Suggested indexes for performance
+5. Considerations for scalability
+
+Database schema should follow these rules/considerations:
+1. Normalization: Is the schema properly normalized? If not, suggest improvements.
+2. Denormalization: Are there any cases where denormalization might improve performance?
+3. Indexing strategy: Suggest additional indexes that might improve query performance.
+4. Scalability: How will this schema handle growth? Any potential bottlenecks?
+5. Data integrity: Are there any constraints or triggers we should consider to ensure data consistency?
+
+
+The project tools to maintain code quality:
+- **Pytest**: For testing
+
+Naming Conventions:
  
-Development Flow:
+- Start private class variables with an underscore.
+- Use UPPERER_SNAKE_CASE for constants.
  
-- Always write the tests first.
+Execution Flow:
+ 
+- When writing code, always write the tests first.
 - Always run the tests to make sure the code works.
-- When given a task, write code and run it until it works well.
+ 
  
 Code Style:
  
@@ -185,29 +125,23 @@ Rewrite, Improve, and Refactor:
 - Keep the code clean and easy to understand.
 - After fixing an issue, mention the case in the docstring so future changes won't break it again.
  
-Tests:
- 
-- Always write the tests first.
-- Always run the tests to make sure the code works.
-- Always keep the tests clean and up to date.
-- Always run the tests in the venv.
- 
 Debugging:
  
 - If you are not sure what the solution is, add debug prints to the code and run the tests.
-- After fixing an issue remove the debug prints.
- 
-Async:
- 
-- Always use async unless the function is a simple function that doesn't need to be async.
  
 Memory:
  
-- When you need to remember something, update the .cursormemory.md file.
-- Refer to the .cursormemory.md file to view the memory.
+- When you need to remember something, update the memory.mdc file.
+- Refer to the memory.mdc file to view the memory.
 - Update the memory with project specifications, requirements, flow of the code, and other relevant information.
-- Add instructions for development like how to add new GraphQL mutations and queries to the memory.
+
+Bugfixing:
  
+- When you fixed a bug, error, issue or other problem make notes of that in the bugfixing.mdc, this also include keeping trakc of dealing with ongoing errors, bugs, problems etc..
+- Review the bugfixing.mdc file at the beginning of your response to get more information/context when asked about a problem or told to fix a error/bug/issue.
+- Update the bugfixing.mdc with any changes/updates/additions/removals at the end of your response.
+  
+
 Planning:
  
 - Always plan the code before writing it.
@@ -232,3 +166,12 @@ Consider these rules for comments:
 7. Return value and type
 8. Any exceptions that might be raised
 9. Usage examples if the function/class usage is not immediately obvious
+
+All section comments should answer the following questions:
+1. What is the purpose of this section?
+2. How does it work step-by-step?
+3. Are there any potential issues or limitations with this approach?
+4. Parameters and their types
+5. Return value and type
+6. Any exceptions that might be raised
+7. Usage examples if the function/class usage is not immediately obvious

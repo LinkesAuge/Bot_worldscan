@@ -24,6 +24,7 @@ import mss
 from pathlib import Path
 from scout.config_manager import ConfigManager
 import time
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -90,14 +91,32 @@ class TextOCR(QObject):
         Set the region to process.
         
         Args:
-            region: Dictionary with left, top, width, height in physical coordinates
+            region: Dictionary with left, top, width, height in logical coordinates
+                   and dpi_scale for converting to physical coordinates
         """
-        self.region = region
-        logger.info(f"OCR region set to: {region}")
-        
-        # If active, force an immediate capture
-        if self._active:
-            self._process_region()
+        # Convert logical coordinates to physical coordinates for screen capture
+        dpi_scale = region.get('dpi_scale', 1.0)
+        window_pos = self.window_manager.get_window_position()
+        if window_pos:
+            window_x, window_y, _, _ = window_pos
+            
+            # Convert to physical coordinates
+            physical_region = {
+                'left': int(window_x + (region['left'] * dpi_scale)),
+                'top': int(window_y + (region['top'] * dpi_scale)),
+                'width': int(region['width'] * dpi_scale),
+                'height': int(region['height'] * dpi_scale),
+                'dpi_scale': dpi_scale
+            }
+            
+            self.region = physical_region
+            logger.info(f"OCR region set to: logical={region}, physical={physical_region}")
+            
+            # If active, force an immediate capture
+            if self._active:
+                self._process_region()
+        else:
+            logger.error("Could not get window position to set OCR region")
             
     def set_frequency(self, frequency: float) -> None:
         """
@@ -206,158 +225,154 @@ class TextOCR(QObject):
         
     def _save_debug_image(self, name: str, image: np.ndarray, metadata: Optional[Dict[str, Any]] = None) -> None:
         """
-        Save a debug image if debug mode is enabled.
+        Save a debug image. In normal mode, only saves OCR processing images temporarily.
+        In debug mode, saves all images with timestamps.
         
         Args:
             name: Name of the image
             image: Image data
-            metadata: Optional metadata
+            metadata: Optional metadata about the image
         """
         try:
-            # Get debug settings
-            debug_settings = self.config_manager.get_debug_settings()
-            
             # Always emit debug image signal for visualization
             self.debug_image.emit(name, image, metadata or {})
             
-            # Only save to disk if debug mode is enabled
-            if debug_settings["enabled"]:
-                # Create output directory if it doesn't exist
-                output_dir = Path('scout/ocr_output')
-                output_dir.mkdir(parents=True, exist_ok=True)
-                
-                # Save image with timestamp
+            # Get debug settings
+            config = ConfigManager()
+            debug_settings = config.get_debug_settings()
+            debug_enabled = debug_settings.get("enabled", False)
+            
+            # Create output directories
+            debug_dir = Path('scout/ocr_output/debug')
+            temp_dir = Path('scout/ocr_output/temp')
+            debug_dir.mkdir(parents=True, exist_ok=True)
+            temp_dir.mkdir(parents=True, exist_ok=True)
+            
+            # In debug mode, save with timestamp in debug directory
+            if debug_enabled:
                 timestamp = time.strftime("%Y%m%d_%H%M%S")
                 filename = f"{name}_{timestamp}.png"
-                cv2.imwrite(str(output_dir / filename), image)
+                cv2.imwrite(str(debug_dir / filename), image)
                 logger.debug(f"Saved debug image: {filename}")
+            
+            # For OCR processing images, always save in temp directory
+            if name.startswith(('ocr_', 'thresh', 'morphed')):
+                filename = f"{name}_latest.png"
+                cv2.imwrite(str(temp_dir / filename), image)
+                logger.debug(f"Saved OCR processing image: {filename}")
                 
         except Exception as e:
             logger.error(f"Error saving debug image: {e}")
 
-    def _save_result_image(self, name: str, image: np.ndarray) -> None:
+    def _save_result_image(self, name: str, image: np.ndarray, is_match: bool = False) -> None:
         """
-        Save the final result image (always saved regardless of debug mode).
+        Save the final result image. In normal mode, only saves the latest result.
+        In case of a match, saves with timestamp.
         
         Args:
             name: Name of the image
             image: Image data
+            is_match: Whether this result represents a match
         """
         try:
-            # Create output directory if it doesn't exist
-            output_dir = Path('scout/ocr_output')
-            output_dir.mkdir(parents=True, exist_ok=True)
+            # Create output directories
+            results_dir = Path('scout/ocr_output/results')
+            results_dir.mkdir(parents=True, exist_ok=True)
             
-            # Save image, overwriting previous result
-            filename = f"{name}_latest.png"
-            cv2.imwrite(str(output_dir / filename), image)
-            logger.debug(f"Saved result image: {filename}")
+            if is_match:
+                # For matches, save with timestamp
+                timestamp = time.strftime("%Y%m%d_%H%M%S")
+                filename = f"{name}_{timestamp}.png"
+            else:
+                # For normal results, always overwrite the latest
+                filename = f"{name}_latest.png"
             
+            filepath = results_dir / filename
+            cv2.imwrite(str(filepath), image)
+            
+            if is_match:
+                logger.info(f"Saved match result: {filename}")
+            else:
+                logger.debug("Updated latest result image")
+            
+            # Clean up temporary OCR processing files
+            self._cleanup_temp_files()
+                
         except Exception as e:
             logger.error(f"Error saving result image: {e}")
+
+    def _cleanup_temp_files(self) -> None:
+        """Clean up temporary OCR processing files after successful processing."""
+        try:
+            temp_dir = Path('scout/ocr_output/temp')
+            if temp_dir.exists():
+                # Only remove files older than 5 minutes to avoid conflicts during calibration
+                current_time = time.time()
+                for file in temp_dir.glob('*'):
+                    if file.is_file():
+                        file_age = current_time - file.stat().st_mtime
+                        if file_age > 300:  # 300 seconds = 5 minutes
+                            try:
+                                file.unlink()
+                                logger.debug(f"Cleaned up temp file: {file.name}")
+                            except Exception as e:
+                                logger.warning(f"Failed to delete temp file {file.name}: {e}")
+        except Exception as e:
+            logger.error(f"Error cleaning up temp files: {e}")
 
     def extract_text(self, image: np.ndarray) -> str:
         """
         Extract text from an image using OCR with enhanced preprocessing.
-        
-        This method applies multiple preprocessing techniques and OCR configurations
-        to maximize the chances of correctly extracting coordinate text from the game UI.
-        It prioritizes the preferred method set via set_preferred_method().
-        
-        Args:
-            image: The image to extract text from (numpy array)
-            
-        Returns:
-            The extracted text as a string
         """
         try:
-            # Check if cancellation was requested
-            if self._cancellation_requested:
-                logger.info("Text extraction cancelled")
-                return ""
-                
-            # Check if Tesseract is properly configured
-            try:
-                tesseract_version = pytesseract.get_tesseract_version()
-                logger.info(f"Using Tesseract OCR version: {tesseract_version}")
-            except Exception as e:
-                logger.error(f"Tesseract OCR not properly configured: {e}")
-                logger.error("Please ensure Tesseract OCR is installed and the path is set correctly")
-                logger.error("You can set the path using: pytesseract.pytesseract.tesseract_cmd = r'path_to_tesseract.exe'")
-                
-                # Try to set a default path as a fallback
-                try:
-                    import os
-                    default_paths = [
-                        r'C:\Program Files\Tesseract-OCR\tesseract.exe',
-                        r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe',
-                        r'C:\Tesseract-OCR\tesseract.exe'
-                    ]
-                    
-                    for path in default_paths:
-                        if os.path.exists(path):
-                            logger.info(f"Found Tesseract at: {path}")
-                            pytesseract.pytesseract.tesseract_cmd = path
-                            break
-                except Exception as path_e:
-                    logger.error(f"Error setting default Tesseract path: {path_e}")
+            # Create temp directory for OCR processing
+            temp_dir = Path('scout/ocr_output/temp')
+            temp_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Always save the original image for OCR processing
+            cv2.imwrite(str(temp_dir / 'ocr_original_latest.png'), image)
             
             # Convert to grayscale if needed
             if len(image.shape) == 3:
                 gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
             else:
                 gray = image
-                
-            # Get debug settings
-            config = ConfigManager()
-            debug_settings = config.get_debug_settings()
-            debug_enabled = debug_settings["enabled"]
-                
-            # Create output directory if it doesn't exist
-            output_dir = Path('scout/ocr_output')
-            output_dir.mkdir(parents=True, exist_ok=True)
             
-            # Save the original image for debugging only if debug mode is enabled
-            if debug_enabled:
-                cv2.imwrite(str(output_dir / 'ocr_original.png'), image)
-                
-            # Apply multiple preprocessing approaches for better results
-            
-            # Approach 1: Enhanced contrast with adaptive thresholding
+            # Apply preprocessing methods
             enhanced = cv2.convertScaleAbs(gray, alpha=2.5, beta=0)
             blurred = cv2.GaussianBlur(enhanced, (3, 3), 0)
+            
+            # Create all preprocessed versions and save them
+            # Approach 1: Enhanced contrast with adaptive thresholding
             thresh1 = cv2.adaptiveThreshold(
                 blurred, 255,
                 cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
                 cv2.THRESH_BINARY,
                 11, 2
             )
+            cv2.imwrite(str(temp_dir / 'ocr_thresh1_latest.png'), thresh1)
             
-            # Approach 2: Inverse thresholding (often better for light text on dark background)
+            # Approach 2: Inverse thresholding
             _, thresh2 = cv2.threshold(enhanced, 150, 255, cv2.THRESH_BINARY_INV)
+            cv2.imwrite(str(temp_dir / 'ocr_thresh2_latest.png'), thresh2)
             
-            # Approach 3: Otsu's thresholding (automatically determines optimal threshold)
+            # Approach 3: Otsu's thresholding
             _, thresh3 = cv2.threshold(enhanced, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            cv2.imwrite(str(temp_dir / 'ocr_thresh3_latest.png'), thresh3)
             
-            # Approach 4: Morphological operations to enhance text
+            # Approach 4: Morphological operations
             kernel = np.ones((2, 2), np.uint8)
             dilated = cv2.dilate(thresh1, kernel, iterations=1)
             eroded = cv2.erode(dilated, kernel, iterations=1)
+            cv2.imwrite(str(temp_dir / 'ocr_morphed_latest.png'), eroded)
             
-            # Approach 5: Enhanced contrast with sharpening for better text definition
+            # Approach 5: Enhanced contrast with sharpening
             kernel_sharpen = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
             sharpened = cv2.filter2D(enhanced, -1, kernel_sharpen)
             _, thresh4 = cv2.threshold(sharpened, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            cv2.imwrite(str(temp_dir / 'ocr_sharpened_latest.png'), thresh4)
             
-            # Save the preprocessed images for debugging if debug mode is enabled
-            if debug_enabled:
-                cv2.imwrite(str(output_dir / 'ocr_thresh1.png'), thresh1)
-                cv2.imwrite(str(output_dir / 'ocr_thresh2.png'), thresh2)
-                cv2.imwrite(str(output_dir / 'ocr_thresh3.png'), thresh3)
-                cv2.imwrite(str(output_dir / 'ocr_morphed.png'), eroded)
-                cv2.imwrite(str(output_dir / 'ocr_sharpened.png'), thresh4)
-            
-            # Store preprocessed images in a dictionary for easy access
+            # Store preprocessed images in a dictionary for OCR
             preprocessed_images = {
                 'thresh1': thresh1,
                 'thresh2': thresh2,
@@ -366,7 +381,21 @@ class TextOCR(QObject):
                 'sharpened': thresh4
             }
             
-            # Try multiple OCR approaches with different configurations
+            # Get debug settings
+            config = ConfigManager()
+            debug_settings = config.get_debug_settings()
+            debug_enabled = debug_settings.get("enabled", False)
+            
+            # If in debug mode, save copies with timestamps
+            if debug_enabled:
+                debug_dir = Path('scout/ocr_output/debug')
+                debug_dir.mkdir(parents=True, exist_ok=True)
+                timestamp = time.strftime("%Y%m%d_%H%M%S")
+                
+                for name, img in preprocessed_images.items():
+                    cv2.imwrite(str(debug_dir / f'ocr_{name}_{timestamp}.png'), img)
+            
+            # Process with OCR
             results = {}
             
             # Add config to disable temp files where possible
@@ -405,23 +434,19 @@ class TextOCR(QObject):
                 
             except Exception as ocr_e:
                 logger.error(f"Error during OCR processing: {ocr_e}", exc_info=True)
-                # Add a dummy result to avoid empty results
                 results["error"] = "OCR Error"
             
             # Log all extracted texts for debugging
             for method, text in results.items():
                 logger.debug(f"OCR Result ({method}): '{text}'")
             
-            # Choose the best result based on the preferred method or scoring
+            # Choose the best result
             best_text = ""
             
             if self.preferred_method == 'auto':
-                # Use the scoring system to select the best result
                 best_text = self._select_best_text(results)
                 logger.info(f"Auto-selected OCR text: '{best_text}'")
             else:
-                # Use the preferred method
-                # Try different configurations of the preferred method
                 preferred_results = [
                     results.get(f"{self.preferred_method}_standard", ""),
                     results.get(f"{self.preferred_method}_psm7", ""),
@@ -429,39 +454,37 @@ class TextOCR(QObject):
                     results.get(f"{self.preferred_method}_specific", "")
                 ]
                 
-                # Filter out empty results
                 preferred_results = [r for r in preferred_results if r]
                 
                 if preferred_results:
-                    # Use the scoring system to select the best result from the preferred method
                     best_text = self._select_best_text(preferred_results)
                     logger.info(f"Selected OCR text from {self.preferred_method}: '{best_text}'")
                 else:
-                    # Fall back to auto selection if no results from preferred method
                     best_text = self._select_best_text(results)
                     logger.info(f"Fallback to auto-selected OCR text: '{best_text}'")
             
-            # Always save the final OCR output with timestamp
-            timestamp = int(time.time())
-            final_output = {
-                'timestamp': timestamp,
-                'text': best_text,
-                'method': self.preferred_method,
-                'results_by_method': results
-            }
-            
-            # Save final OCR output as JSON
-            import json
-            with open(str(output_dir / f'ocr_result_{timestamp}.json'), 'w') as f:
-                json.dump(final_output, f, indent=4)
-            
-            # Save the image that produced the best result
+            # Save the result
             if best_text:
-                cv2.imwrite(str(output_dir / f'ocr_image_{timestamp}.png'), image)
+                # Save result with timestamp in debug mode
+                if debug_enabled:
+                    timestamp = time.strftime("%Y%m%d_%H%M%S")
+                    cv2.imwrite(str(debug_dir / f'ocr_result_{timestamp}.png'), image)
+                    
+                    # Save OCR output as JSON
+                    final_output = {
+                        'timestamp': timestamp,
+                        'text': best_text,
+                        'method': self.preferred_method,
+                        'results_by_method': results
+                    }
+                    with open(str(debug_dir / f'ocr_result_{timestamp}.json'), 'w') as f:
+                        json.dump(final_output, f, indent=4)
+                
+                # Always save latest result
+                cv2.imwrite(str(temp_dir / 'ocr_result_latest.png'), image)
             
-            # Update debug window if available and debug mode is enabled
+            # Update debug window if available
             if debug_enabled and hasattr(self, 'debug_window') and self.debug_window:
-                # Use the preferred method's image for visualization
                 debug_image = preprocessed_images.get(self.preferred_method, thresh1)
                 self.debug_window.update_image(
                     "OCR Extract",
@@ -469,12 +492,13 @@ class TextOCR(QObject):
                     metadata={"raw_text": best_text, "method": self.preferred_method},
                     save=True
                 )
-                
+            
             return best_text
+            
         except Exception as e:
             logger.error(f"Error extracting text from image: {e}", exc_info=True)
             return ""
-            
+
     def _select_best_text(self, texts: List[str]) -> str:
         """
         Select the best text from multiple OCR results.
@@ -552,107 +576,184 @@ class TextOCR(QObject):
             
         return best_text
         
-    def _process_region(self) -> None:
-        """
-        Process the selected region for OCR.
+    def _apply_threshold1(self, image: np.ndarray) -> np.ndarray:
+        """Apply adaptive thresholding with enhanced contrast."""
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+        enhanced = cv2.convertScaleAbs(gray, alpha=2.5, beta=0)
+        blurred = cv2.GaussianBlur(enhanced, (3, 3), 0)
+        return cv2.adaptiveThreshold(
+            blurred, 255,
+            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY,
+            11, 2
+        )
+
+    def _apply_threshold2(self, image: np.ndarray) -> np.ndarray:
+        """Apply inverse thresholding with enhanced contrast."""
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+        enhanced = cv2.convertScaleAbs(gray, alpha=2.5, beta=0)
+        _, thresh = cv2.threshold(enhanced, 150, 255, cv2.THRESH_BINARY_INV)
+        return thresh
+
+    def _apply_threshold3(self, image: np.ndarray) -> np.ndarray:
+        """Apply Otsu's thresholding with enhanced contrast."""
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+        enhanced = cv2.convertScaleAbs(gray, alpha=2.5, beta=0)
+        _, thresh = cv2.threshold(enhanced, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        return thresh
+
+    def _apply_morphological(self, image: np.ndarray) -> np.ndarray:
+        """Apply morphological operations for text enhancement."""
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+        enhanced = cv2.convertScaleAbs(gray, alpha=2.5, beta=0)
+        blurred = cv2.GaussianBlur(enhanced, (3, 3), 0)
+        thresh = cv2.adaptiveThreshold(
+            blurred, 255,
+            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY,
+            11, 2
+        )
+        kernel = np.ones((2, 2), np.uint8)
+        dilated = cv2.dilate(thresh, kernel, iterations=1)
+        eroded = cv2.erode(dilated, kernel, iterations=1)
+        return eroded
+
+    def _score_text(self, text: str) -> int:
+        """Score OCR text based on expected format and content."""
+        if not text:
+            return -1
+            
+        score = 0
         
-        This method:
-        1. Takes a screenshot of the selected region
-        2. Saves the screenshot for debugging if debug mode is enabled
-        3. Processes the image to extract text
-        4. Extracts coordinates from the text
-        5. Updates the game state and emits signals
-        """
+        # Check for expected format
+        if re.search(r'[kK]\s*:?\s*\d{1,3}', text):
+            score += 5
+        if re.search(r'[xX]\s*:?\s*\d{1,3}', text):
+            score += 5
+        if re.search(r'[yY]\s*:?\s*\d{1,3}', text):
+            score += 5
+            
+        # Penalty for unexpected characters
+        unexpected = len(re.findall(r'[^kKxXyY\d\s:.,]', text))
+        score -= unexpected
+        
+        # Bonus for clean format
+        if re.match(r'^[kK]\s*:?\s*\d{1,3}\s*[xX]\s*:?\s*\d{1,3}\s*[yY]\s*:?\s*\d{1,3}$', text):
+            score += 10
+            
+        return score
+
+    def _process_region(self) -> None:
+        """Process the current region and extract coordinates."""
+        if not self._active or self._cancellation_requested:
+            return
+            
+        if not self.region:
+            logger.warning("No region set for OCR")
+            return
+            
         try:
-            # Check if cancellation was requested
-            if self._cancellation_requested:
-                logger.info("OCR processing cancelled")
-                return
-                
-            if not self.region:
-                logger.warning("No region selected for OCR")
-                # Even if no region is selected, still emit the last known coordinates
-                if self.game_state and self.game_state.get_coordinates():
-                    self.coordinates_updated.emit(self.game_state.get_coordinates())
-                return
-                
             logger.info(f"Processing OCR region: {self.region}")
             
-            # Check for cancellation again before taking screenshot
-            if self._cancellation_requested:
-                logger.info("OCR processing cancelled before screenshot")
-                return
-                
-            # Take a screenshot of the selected region
+            # Capture region
             with mss.mss() as sct:
                 screenshot = np.array(sct.grab(self.region))
                 
-            # Get debug settings
-            config = ConfigManager()
-            debug_settings = config.get_debug_settings()
-            debug_enabled = debug_settings["enabled"]
-                
-            # Only save debug screenshots if debug mode is enabled
-            if debug_enabled:
-                # Ensure the debug directory exists
-                debug_dir = Path('scout/debug_screenshots')
-                debug_dir.mkdir(exist_ok=True, parents=True)
-                
-                # Save the original screenshot for debugging
-                cv2.imwrite(str(debug_dir / 'OCR Region (Original).png'), screenshot)
-                
-                # Also save as coord_region.png for consistency with the old system
-                cv2.imwrite(str(debug_dir / 'coord_region.png'), screenshot)
+            # Convert from BGRA to BGR
+            image = cv2.cvtColor(screenshot, cv2.COLOR_BGRA2BGR)
             
-            # Check for cancellation again before OCR processing
-            if self._cancellation_requested:
-                logger.info("OCR processing cancelled before text extraction")
-                return
+            # Create temp directory for OCR processing
+            temp_dir = Path('scout/ocr_output/temp')
+            temp_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Always save the original image for OCR processing
+            cv2.imwrite(str(temp_dir / 'ocr_original_latest.png'), image)
+            
+            # Process with preferred method
+            if self.preferred_method == 'auto':
+                # Try all methods
+                methods = {
+                    'thresh1': self._apply_threshold1,
+                    'thresh2': self._apply_threshold2,
+                    'thresh3': self._apply_threshold3,
+                    'morphed': self._apply_morphological
+                }
                 
-            # Use our enhanced extract_text method instead of duplicating the OCR logic
-            text = self.extract_text(screenshot)
-            
-            # Check for cancellation again after OCR processing
-            if self._cancellation_requested:
-                logger.info("OCR processing cancelled after text extraction")
-                return
+                results = {}
+                scores = {}
                 
-            # Log the extracted text
-            logger.info(f"OCR extracted text: '{text}'")
-            
-            # Update debug window with the processed image only if debug mode is enabled
-            if debug_enabled:
-                # We'll use the image from extract_text which is already processed
-                processed_image = cv2.imread(str(debug_dir / 'ocr_thresh1.png'))
-                if processed_image is not None and hasattr(self, 'debug_window') and self.debug_window:
-                    self.debug_window.update_image(
-                        "OCR Region",
-                        processed_image,
-                        metadata={"raw_text": text},
-                        save=True
-                    )
-                
-                    # Also save a copy with a more descriptive name
-                    cv2.imwrite(str(debug_dir / 'OCR Region (Processed).png'), processed_image)
-            
-            # Extract and validate coordinates
-            coords = self._extract_coordinates(text)
-            
-            # Log the result of coordinate extraction
-            if coords:
-                logger.info(f"Successfully extracted coordinates: {coords}")
+                for method_name, method_func in methods.items():
+                    # Process image
+                    processed = method_func(image.copy())
+                    # Save processed image
+                    cv2.imwrite(str(temp_dir / f'ocr_{method_name}_latest.png'), processed)
+                    # Extract text
+                    text = pytesseract.image_to_string(processed).strip()
+                    results[method_name] = text
+                    scores[method_name] = self._score_text(text)
+                    
+                # Select best result
+                best_method = max(scores.items(), key=lambda x: x[1])[0] if scores else None
+                if best_method:
+                    text = results[best_method]
+                else:
+                    logger.warning("No valid OCR results")
+                    return
             else:
-                logger.warning("Failed to extract valid coordinates from OCR text")
-                # Even if extraction fails, still emit the last known coordinates
-                if self.game_state and self.game_state.get_coordinates():
-                    self.coordinates_updated.emit(self.game_state.get_coordinates())
+                # Map method names to functions
+                method_map = {
+                    'thresh1': self._apply_threshold1,
+                    'thresh2': self._apply_threshold2,
+                    'thresh3': self._apply_threshold3,
+                    'morphed': self._apply_morphological
+                }
+                
+                # Get the appropriate method function
+                method_func = method_map.get(self.preferred_method)
+                if not method_func:
+                    logger.error(f"Invalid OCR method: {self.preferred_method}")
+                    return
+                    
+                # Process image with selected method
+                processed = method_func(image.copy())
+                cv2.imwrite(str(temp_dir / f'ocr_{self.preferred_method}_latest.png'), processed)
+                text = pytesseract.image_to_string(processed).strip()
             
+            # Extract coordinates
+            if text:
+                coords = self._extract_coordinates(text)
+                if coords:
+                    # Update game state
+                    self.game_state.update_coordinates(coords)
+                    self.coordinates_updated.emit(coords)
+                    logger.info(f"Successfully extracted coordinates: {coords}")
+                else:
+                    logger.warning("Failed to extract valid coordinates")
+            else:
+                logger.warning("No text extracted from image")
+                
         except Exception as e:
-            logger.error(f"Error processing OCR region: {e}", exc_info=True)
-            # Even if an error occurs, still emit the last known coordinates
-            if self.game_state and self.game_state.get_coordinates():
-                self.coordinates_updated.emit(self.game_state.get_coordinates())
+            logger.error(f"Error processing region: {e}", exc_info=True)
+
+    def _is_valid_match(self, coords: GameCoordinates) -> bool:
+        """
+        Determine if the coordinates represent a valid match.
+        
+        Args:
+            coords: The extracted coordinates
             
+        Returns:
+            bool: True if this is a valid match that should be saved
+        """
+        # Implement your match criteria here
+        # For example, check if coordinates are within certain ranges
+        # or match specific patterns you're looking for
+        if coords and coords.is_valid():
+            # Add your specific match criteria here
+            # For now, we'll consider any valid coordinates as a match
+            return True
+        return False
+
     def _extract_coordinates(self, text: str) -> Optional[GameCoordinates]:
         """
         Extract coordinates from OCR text, handling noise and invalid characters.

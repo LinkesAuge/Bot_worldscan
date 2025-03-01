@@ -855,30 +855,43 @@ class GameWorldCoordinator:
         Update the current position after a drag operation.
         
         Args:
-            start_x: Start X coordinate for drag
-            start_y: Start Y coordinate for drag
-            end_x: End X coordinate for drag
-            end_y: End Y coordinate for drag
+            start_x: Start X coordinate (screen)
+            start_y: Start Y coordinate (screen)
+            end_x: End X coordinate (screen)
+            end_y: End Y coordinate (screen)
         """
         try:
-            # Calculate new position
-            new_position = self.estimate_position_after_drag(start_x, start_y, end_x, end_y)
+            # Calculate drag distance in pixels
+            dx = end_x - start_x
+            dy = end_y - start_y
+            logger.debug(f"Drag distance in pixels: dx={dx}, dy={dy}")
             
-            # Update current position
-            self.current_position = new_position
+            # Convert to game units
+            dx_game = dx / self.pixels_per_game_unit_x if self.pixels_per_game_unit_x > 0 else 0
+            dy_game = dy / self.pixels_per_game_unit_y if self.pixels_per_game_unit_y > 0 else 0
+            logger.debug(f"Drag distance in game units: dx={dx_game:.2f}, dy={dy_game:.2f}")
             
-            # Update game state
-            if self.game_state:
-                self.game_state.coordinates.update(
-                    new_position.k,
-                    new_position.x,
-                    new_position.y
-                )
+            # Get current position
+            current_pos = self.game_state.coordinates
+            if not current_pos:
+                logger.error("No current position available")
+                return
                 
-            logger.info(f"Updated position after drag: {self.current_position}")
+            # Calculate new position
+            new_x = (current_pos.x + dx_game) % 1000 if current_pos.x is not None else None
+            new_y = (current_pos.y + dy_game) % 1000 if current_pos.y is not None else None
+            
+            logger.info(f"Estimated position after drag: ({new_x:.2f}, {new_y:.2f})")
+            
+            # Update game state with new position
+            self.game_state.update_coordinates(
+                k=current_pos.k,
+                x=int(new_x) if new_x is not None else None,
+                y=int(new_y) if new_y is not None else None
+            )
             
         except Exception as e:
-            logger.error(f"Error updating position after drag: {e}")
+            logger.error(f"Error updating position after drag: {e}", exc_info=True)
     
     def is_position_on_screen(self, game_x: float, game_y: float) -> bool:
         """
