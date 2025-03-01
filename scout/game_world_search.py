@@ -40,8 +40,12 @@ class SearchResult:
     """Result of a template search operation."""
     template_name: str
     screen_position: Tuple[int, int]
-    game_position: GameWorldPosition
+    game_position: Optional[GameWorldPosition]
     confidence: float
+    positions_checked: int = 0
+    search_time: float = 0.0
+    success: bool = False
+    screenshot_path: Optional[str] = None
 
 class GameWorldSearch:
     """
@@ -280,8 +284,18 @@ class GameWorldSearch:
             SearchResult if a template is found, None otherwise
         """
         try:
+            # Take screenshot for template matching
+            screenshot = self.window_manager.capture_screenshot()
+            if screenshot is None:
+                logger.error("Failed to capture screenshot for template matching")
+                return None
+                
+            # Convert screenshot to numpy array if needed
+            if not isinstance(screenshot, np.ndarray):
+                screenshot = np.array(screenshot)
+            
             # Perform template matching
-            matches = self.template_matcher.find_matches(templates)
+            matches = self.template_matcher.find_matches(templates, screenshot)
             if not matches:
                 return None
                 
@@ -294,11 +308,24 @@ class GameWorldSearch:
                 best_match.center[1]
             )
             
+            # Save screenshot if enabled
+            screenshot_path = None
+            if self.save_screenshots:
+                try:
+                    timestamp = time.strftime("%Y%m%d-%H%M%S")
+                    filename = f"search_{best_match.template_name}_{timestamp}.png"
+                    screenshot_path = str(self.screenshot_dir / filename)
+                    cv2.imwrite(screenshot_path, screenshot)
+                except Exception as e:
+                    logger.error(f"Error saving search screenshot: {e}")
+            
             return SearchResult(
                 template_name=best_match.template_name,
                 screen_position=best_match.center,
                 game_position=game_pos,
-                confidence=best_match.confidence
+                confidence=best_match.confidence,
+                success=True,
+                screenshot_path=screenshot_path
             )
             
         except Exception as e:

@@ -1,7 +1,11 @@
 """
-Game World Search Preview
+Game World Search Preview Widget
 
-This module provides the widget for previewing search results with screenshots.
+This module provides a widget for displaying search result previews.
+It shows:
+- Screenshot of the found template
+- Match region highlighting
+- Zoom controls
 """
 
 from typing import Dict, List, Optional, Tuple, Any
@@ -22,26 +26,124 @@ from scout.game_world_search import SearchResult
 logger = logging.getLogger(__name__)
 
 class ImageLabel(QLabel):
-    """
-    Label for displaying images with overlays.
+    """Custom label for displaying images with zoom."""
     
-    This label can display an image with optional overlays for
-    highlighting search results.
-    """
-    
-    def __init__(self):
-        """Initialize the image label."""
-        super().__init__()
+    def __init__(self, parent: Optional[QWidget] = None):
+        """
+        Initialize the image label.
         
-        self.original_pixmap = None
-        self.scaled_pixmap = None
-        self.overlay_enabled = True
-        self.overlay_data = []
-        
-        # Set size policy
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.setMinimumSize(400, 300)
+        Args:
+            parent: Parent widget
+        """
+        super().__init__(parent)
+        self.setMinimumSize(1, 1)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._pixmap = None
+        self._zoom = 1.0
+        
+    def setPixmap(self, pixmap: QPixmap):
+        """
+        Set the pixmap to display.
+        
+        Args:
+            pixmap: The pixmap to display
+        """
+        self._pixmap = pixmap
+        self._update_pixmap()
+        
+    def _update_pixmap(self):
+        """Update the displayed pixmap with current zoom."""
+        if not self._pixmap:
+            return
+            
+        # Calculate size
+        size = self._pixmap.size()
+        scaled_size = QSize(
+            int(size.width() * self._zoom),
+            int(size.height() * self._zoom)
+        )
+        
+        # Scale pixmap
+        scaled_pixmap = self._pixmap.scaled(
+            scaled_size,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation
+        )
+        
+        super().setPixmap(scaled_pixmap)
+        
+    def set_zoom(self, zoom: float):
+        """
+        Set the zoom level.
+        
+        Args:
+            zoom: Zoom level (1.0 = 100%)
+        """
+        self._zoom = max(0.1, min(5.0, zoom))
+        self._update_pixmap()
+
+class SearchPreviewWidget(QWidget):
+    """
+    Widget for displaying search result previews.
+    
+    This widget shows:
+    - Screenshot of the found template
+    - Match region highlighting
+    - Zoom controls
+    """
+    
+    def __init__(self, parent: Optional[QWidget] = None):
+        """
+        Initialize the search preview widget.
+        
+        Args:
+            parent: Parent widget
+        """
+        super().__init__(parent)
+        
+        # Create UI
+        self._create_ui()
+        
+    def _create_ui(self):
+        """Create the widget UI."""
+        layout = QVBoxLayout()
+        self.setLayout(layout)
+        
+        # Scroll area for image
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        
+        # Image label
+        self.image_label = ImageLabel()
+        scroll_area.setWidget(self.image_label)
+        
+        # Zoom controls
+        zoom_layout = QHBoxLayout()
+        
+        self.zoom_out_btn = QPushButton("-")
+        self.zoom_out_btn.clicked.connect(lambda: self._adjust_zoom(-0.1))
+        zoom_layout.addWidget(self.zoom_out_btn)
+        
+        self.zoom_label = QLabel("100%")
+        zoom_layout.addWidget(self.zoom_label)
+        
+        self.zoom_in_btn = QPushButton("+")
+        self.zoom_in_btn.clicked.connect(lambda: self._adjust_zoom(0.1))
+        zoom_layout.addWidget(self.zoom_in_btn)
+        
+        self.reset_zoom_btn = QPushButton("Reset")
+        self.reset_zoom_btn.clicked.connect(self._reset_zoom)
+        zoom_layout.addWidget(self.reset_zoom_btn)
+        
+        # Add stretch on both sides of zoom controls
+        zoom_layout.insertStretch(0)
+        zoom_layout.addStretch()
+        
+        # Add widgets to layout
+        layout.addWidget(scroll_area)
+        layout.addLayout(zoom_layout)
         
     def set_image(self, image_path: str):
         """
@@ -52,220 +154,46 @@ class ImageLabel(QLabel):
         """
         try:
             # Load image
-            self.original_pixmap = QPixmap(image_path)
-            
-            if self.original_pixmap.isNull():
+            pixmap = QPixmap(image_path)
+            if pixmap.isNull():
                 logger.error(f"Failed to load image: {image_path}")
-                self.setText("Failed to load image")
                 return
                 
-            # Scale and display
-            self._update_display()
-            
-            logger.info(f"Loaded image: {image_path}")
-            
-        except Exception as e:
-            logger.error(f"Error loading image: {e}", exc_info=True)
-            self.setText(f"Error: {str(e)}")
-            
-    def set_image_from_cv(self, cv_image):
-        """
-        Set the image from an OpenCV image.
-        
-        Args:
-            cv_image: OpenCV image (numpy array)
-        """
-        try:
-            # Convert OpenCV image to QPixmap
-            height, width, channels = cv_image.shape
-            bytes_per_line = channels * width
-            
-            # Convert BGR to RGB
-            cv_rgb = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
-            
-            # Create QImage and QPixmap
-            q_image = QImage(cv_rgb.data, width, height, bytes_per_line, QImage.Format.Format_RGB888)
-            self.original_pixmap = QPixmap.fromImage(q_image)
-            
-            # Scale and display
-            self._update_display()
-            
-            logger.info("Loaded image from OpenCV")
+            # Set image
+            self.image_label.setPixmap(pixmap)
+            self._reset_zoom()
             
         except Exception as e:
-            logger.error(f"Error loading image from OpenCV: {e}", exc_info=True)
-            self.setText(f"Error: {str(e)}")
+            logger.error(f"Error setting image: {e}")
             
-    def set_overlay_data(self, data: List[Dict[str, Any]]):
+    def _adjust_zoom(self, delta: float):
         """
-        Set overlay data for highlighting regions.
+        Adjust the zoom level.
         
         Args:
-            data: List of overlay data dictionaries with keys:
-                 - 'type': Type of overlay ('rect', 'point', 'text')
-                 - 'x', 'y': Position
-                 - 'width', 'height': Size (for 'rect')
-                 - 'color': Color as (r, g, b) tuple
-                 - 'text': Text to display (for 'text')
+            delta: Amount to adjust zoom by
         """
-        self.overlay_data = data
-        self._update_display()
+        current_zoom = float(self.zoom_label.text().strip('%')) / 100
+        new_zoom = current_zoom + delta
+        self._set_zoom(new_zoom)
         
-    def set_overlay_enabled(self, enabled: bool):
+    def _set_zoom(self, zoom: float):
         """
-        Enable or disable overlays.
+        Set the zoom level.
         
         Args:
-            enabled: Whether overlays should be displayed
+            zoom: Zoom level (1.0 = 100%)
         """
-        self.overlay_enabled = enabled
-        self._update_display()
+        # Update image
+        self.image_label.set_zoom(zoom)
         
-    def _update_display(self):
-        """Update the displayed image with overlays."""
-        if not self.original_pixmap:
-            return
-            
-        # Scale pixmap to fit label
-        self.scaled_pixmap = self.original_pixmap.scaled(
-            self.size(),
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation
-        )
+        # Update label
+        self.zoom_label.setText(f"{int(zoom * 100)}%")
         
-        # If overlays are disabled or no overlay data, just display the scaled pixmap
-        if not self.overlay_enabled or not self.overlay_data:
-            self.setPixmap(self.scaled_pixmap)
-            return
-            
-        # Create a copy of the scaled pixmap to draw on
-        pixmap_with_overlay = self.scaled_pixmap.copy()
-        painter = QPainter(pixmap_with_overlay)
-        
-        # Calculate scale factor between original and scaled pixmap
-        scale_x = self.scaled_pixmap.width() / self.original_pixmap.width()
-        scale_y = self.scaled_pixmap.height() / self.original_pixmap.height()
-        
-        # Draw overlays
-        for item in self.overlay_data:
-            overlay_type = item.get('type', 'rect')
-            x = int(item.get('x', 0) * scale_x)
-            y = int(item.get('y', 0) * scale_y)
-            color = item.get('color', (0, 255, 0))
-            
-            # Set pen
-            pen = QPen(QColor(*color))
-            pen.setWidth(2)
-            painter.setPen(pen)
-            
-            if overlay_type == 'rect':
-                width = int(item.get('width', 10) * scale_x)
-                height = int(item.get('height', 10) * scale_y)
-                painter.drawRect(x, y, width, height)
-                
-            elif overlay_type == 'point':
-                size = item.get('size', 5)
-                painter.drawEllipse(x - size, y - size, size * 2, size * 2)
-                
-            elif overlay_type == 'text':
-                text = item.get('text', '')
-                painter.drawText(x, y, text)
-                
-        painter.end()
-        
-        # Display the pixmap with overlays
-        self.setPixmap(pixmap_with_overlay)
-        
-    def resizeEvent(self, event):
-        """Handle resize events to update the scaled image."""
-        super().resizeEvent(event)
-        self._update_display()
+    def _reset_zoom(self):
+        """Reset zoom to 100%."""
+        self._set_zoom(1.0)
 
-
-class SearchPreviewWidget(QWidget):
-    """
-    Widget for previewing search results.
-    
-    This widget provides:
-    - Display of result screenshots
-    - Overlay of match locations
-    - Controls for overlay display
-    """
-    
-    def __init__(self):
-        """Initialize the search preview widget."""
-        super().__init__()
-        
-        self._create_ui()
-        
-    def _create_ui(self):
-        """Create the widget UI."""
-        layout = QVBoxLayout()
-        self.setLayout(layout)
-        
-        # Create image display
-        self.image_label = ImageLabel()
-        
-        # Create scroll area for image
-        scroll_area = QScrollArea()
-        scroll_area.setWidget(self.image_label)
-        scroll_area.setWidgetResizable(True)
-        layout.addWidget(scroll_area)
-        
-        # Create controls
-        controls_layout = QHBoxLayout()
-        
-        # Overlay toggle
-        self.overlay_check = QCheckBox("Show Overlays")
-        self.overlay_check.setChecked(True)
-        self.overlay_check.stateChanged.connect(self._on_overlay_toggled)
-        controls_layout.addWidget(self.overlay_check)
-        
-        # Zoom controls
-        zoom_group = QGroupBox("Zoom")
-        zoom_layout = QHBoxLayout()
-        
-        self.zoom_in_btn = QPushButton("+")
-        self.zoom_in_btn.clicked.connect(self._zoom_in)
-        zoom_layout.addWidget(self.zoom_in_btn)
-        
-        self.zoom_out_btn = QPushButton("-")
-        self.zoom_out_btn.clicked.connect(self._zoom_out)
-        zoom_layout.addWidget(self.zoom_out_btn)
-        
-        self.zoom_fit_btn = QPushButton("Fit")
-        self.zoom_fit_btn.clicked.connect(self._zoom_fit)
-        zoom_layout.addWidget(self.zoom_fit_btn)
-        
-        zoom_group.setLayout(zoom_layout)
-        controls_layout.addWidget(zoom_group)
-        
-        layout.addLayout(controls_layout)
-        
-        # Set initial state
-        self.current_zoom = 1.0
-        self.current_image_path = None
-        
-    def set_image(self, image_path: str):
-        """
-        Set the image to display.
-        
-        Args:
-            image_path: Path to the image file
-        """
-        self.current_image_path = image_path
-        self.image_label.set_image(image_path)
-        
-    def set_image_from_cv(self, cv_image):
-        """
-        Set the image from an OpenCV image.
-        
-        Args:
-            cv_image: OpenCV image (numpy array)
-        """
-        self.current_image_path = None
-        self.image_label.set_image_from_cv(cv_image)
-        
     def set_result(self, result: SearchResult):
         """
         Set the search result to display.
@@ -322,35 +250,4 @@ class SearchPreviewWidget(QWidget):
             })
             
         # Set overlay data
-        self.image_label.set_overlay_data(overlay_data)
-        
-    def _on_overlay_toggled(self, state):
-        """
-        Handle overlay toggle.
-        
-        Args:
-            state: Checkbox state
-        """
-        self.image_label.set_overlay_enabled(state == Qt.CheckState.Checked)
-        
-    def _zoom_in(self):
-        """Zoom in on the image."""
-        self.current_zoom *= 1.2
-        self._apply_zoom()
-        
-    def _zoom_out(self):
-        """Zoom out on the image."""
-        self.current_zoom /= 1.2
-        self._apply_zoom()
-        
-    def _zoom_fit(self):
-        """Reset zoom to fit the image to the view."""
-        self.current_zoom = 1.0
-        self._apply_zoom()
-        
-    def _apply_zoom(self):
-        """Apply the current zoom level."""
-        # For now, just reload the image
-        # In a more advanced implementation, we would scale the image
-        if self.current_image_path:
-            self.set_image(self.current_image_path) 
+        self.image_label.set_overlay_data(overlay_data) 

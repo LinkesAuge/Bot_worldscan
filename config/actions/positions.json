@@ -22,5 +22,17 @@
         "x": 3621,
         "y": 1122,
         "description": ""
+    },
+    "Position_1": {
+        "name": "Position_1",
+        "x": 758,
+        "y": 2021,
+        "description": null
+    },
+    "Position_2": {
+        "name": "Position_2",
+        "x": 250,
+        "y": 946,
+        "description": null
     }
 }

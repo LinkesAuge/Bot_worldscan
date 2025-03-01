@@ -526,8 +526,8 @@ class Overlay(QWidget):
                 
             logger.debug(f"Captured image with shape: {image.shape}")
             
-            # First get all matches in GroupedMatch format
-            matches = self.template_matcher.find_matches(image)
+            # Get matches using template matcher
+            matches = self.template_matcher.find_matches(list(self.template_matcher.templates.keys()), image)
             logger.debug(f"Found {len(matches)} match groups")
             
             # Convert grouped matches to tuple format with averaged positions

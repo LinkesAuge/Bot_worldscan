@@ -1,155 +1,133 @@
 """
-Game World Search Results
+Game World Search Results Widget
 
-This module provides the widget for displaying and managing search results.
+This module provides a widget for displaying and managing search results.
+It shows:
+- List of found templates
+- Result details (confidence, position, etc.)
+- Screenshot preview
 """
 
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Optional
 import logging
 from pathlib import Path
-import json
-import time
-from datetime import datetime
 
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QListWidget, QListWidgetItem, QMenu, QMessageBox,
-    QFileDialog, QGroupBox, QTextEdit
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+    QPushButton, QListWidget, QListWidgetItem,
+    QGroupBox, QFormLayout, QMessageBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QAction, QContextMenuEvent
+from PyQt6.QtGui import QPixmap
 
 from scout.game_world_search import SearchResult
 
 logger = logging.getLogger(__name__)
 
-class SearchResultItem(QListWidgetItem):
-    """List item representing a search result."""
-    
-    def __init__(self, result: SearchResult):
-        """
-        Initialize a search result item.
-        
-        Args:
-            result: The search result to represent
-        """
-        super().__init__()
-        self.result = result
-        self._update_text()
-        
-    def _update_text(self):
-        """Update the item's display text."""
-        if not self.result.success:
-            self.setText("No match found")
-            return
-            
-        # Format text with template name, position, and confidence
-        text = f"{self.result.template_name} at "
-        
-        if self.result.game_position:
-            text += f"({self.result.game_position.x}, {self.result.game_position.y})"
-        elif self.result.screen_position:
-            text += f"screen ({self.result.screen_position[0]}, {self.result.screen_position[1]})"
-        else:
-            text += "unknown position"
-            
-        text += f" - {self.result.confidence:.2f}"
-        
-        self.setText(text)
-
-
 class SearchResultsWidget(QWidget):
     """
     Widget for displaying and managing search results.
     
-    This widget provides:
-    - List of search results
-    - Details of selected result
-    - Export/import functionality
+    This widget shows:
+    - List of found templates
+    - Result details (confidence, position, etc.)
+    - Screenshot preview
     """
     
     # Signals
-    result_selected = pyqtSignal(object)  # Emits SearchResult
+    result_selected = pyqtSignal(SearchResult)  # Emitted when a result is selected
     
-    def __init__(self):
-        """Initialize the search results widget."""
-        super().__init__()
+    def __init__(self, parent: Optional[QWidget] = None):
+        """
+        Initialize the search results widget.
         
-        self.results: List[SearchResult] = []
+        Args:
+            parent: Parent widget
+        """
+        super().__init__(parent)
         
+        # Create UI
         self._create_ui()
+        
+        # Initialize state
+        self.results = []
         
     def _create_ui(self):
         """Create the widget UI."""
         layout = QVBoxLayout()
         self.setLayout(layout)
         
-        # Create results list
-        list_group = QGroupBox("Search Results")
-        list_layout = QVBoxLayout()
+        # Results list
+        results_group = QGroupBox("Search Results")
+        results_layout = QVBoxLayout()
+        results_group.setLayout(results_layout)
         
         self.results_list = QListWidget()
         self.results_list.currentItemChanged.connect(self._on_result_selected)
-        self.results_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.results_list.customContextMenuRequested.connect(self._show_context_menu)
-        list_layout.addWidget(self.results_list)
+        results_layout.addWidget(self.results_list)
         
-        # Add buttons
-        button_layout = QHBoxLayout()
-        
-        self.clear_btn = QPushButton("Clear Results")
-        self.clear_btn.clicked.connect(self.clear_results)
-        button_layout.addWidget(self.clear_btn)
-        
-        self.export_btn = QPushButton("Export Results")
-        self.export_btn.clicked.connect(self._export_results)
-        button_layout.addWidget(self.export_btn)
-        
-        self.import_btn = QPushButton("Import Results")
-        self.import_btn.clicked.connect(self._import_results)
-        button_layout.addWidget(self.import_btn)
-        
-        list_layout.addLayout(button_layout)
-        list_group.setLayout(list_layout)
-        layout.addWidget(list_group)
-        
-        # Create details view
+        # Result details
         details_group = QGroupBox("Result Details")
-        details_layout = QVBoxLayout()
-        
-        self.details_text = QTextEdit()
-        self.details_text.setReadOnly(True)
-        details_layout.addWidget(self.details_text)
-        
+        details_layout = QFormLayout()
         details_group.setLayout(details_layout)
+        
+        self.template_label = QLabel()
+        details_layout.addRow("Template:", self.template_label)
+        
+        self.confidence_label = QLabel()
+        details_layout.addRow("Confidence:", self.confidence_label)
+        
+        self.screen_pos_label = QLabel()
+        details_layout.addRow("Screen Position:", self.screen_pos_label)
+        
+        self.game_pos_label = QLabel()
+        details_layout.addRow("Game Position:", self.game_pos_label)
+        
+        self.positions_label = QLabel()
+        details_layout.addRow("Positions Checked:", self.positions_label)
+        
+        self.time_label = QLabel()
+        details_layout.addRow("Search Time:", self.time_label)
+        
+        # Add groups to layout
+        layout.addWidget(results_group)
         layout.addWidget(details_group)
+        
+        # Add stretch at bottom
+        layout.addStretch()
         
     def add_result(self, result: SearchResult):
         """
-        Add a search result to the list.
+        Add a search result.
         
         Args:
-            result: The search result to add
+            result: Search result to add
         """
-        # Add to results list
-        self.results.append(result)
-        
-        # Add to UI
-        item = SearchResultItem(result)
-        self.results_list.addItem(item)
-        self.results_list.setCurrentItem(item)
-        
-        logger.info(f"Added search result: {result}")
-        
+        try:
+            # Create list item
+            item = QListWidgetItem(
+                f"{result.template_name} ({result.confidence:.2f})"
+            )
+            item.setData(Qt.ItemDataRole.UserRole, result)
+            
+            # Add to list
+            self.results_list.addItem(item)
+            self.results.append(result)
+            
+            # Select if first result
+            if self.results_list.count() == 1:
+                self.results_list.setCurrentItem(item)
+                
+        except Exception as e:
+            logger.error(f"Error adding result: {e}")
+            
     def clear_results(self):
-        """Clear all search results."""
-        self.results = []
+        """Clear all results."""
         self.results_list.clear()
-        self.details_text.clear()
+        self.results.clear()
+        self._clear_details()
         
-        logger.info("Cleared search results")
-        
-    def _on_result_selected(self, current: SearchResultItem, previous: SearchResultItem):
+    def _on_result_selected(self, current: QListWidgetItem, previous: QListWidgetItem):
         """
         Handle result selection.
         
@@ -158,244 +136,38 @@ class SearchResultsWidget(QWidget):
             previous: Previously selected item
         """
         if not current:
-            self.details_text.clear()
+            self._clear_details()
             return
             
-        # Update details view
-        self._update_details(current.result)
-        
-        # Emit signal
-        self.result_selected.emit(current.result)
-        
-    def _update_details(self, result: SearchResult):
-        """
-        Update the details view with the selected result.
-        
-        Args:
-            result: The search result to display
-        """
-        if not result:
-            self.details_text.clear()
-            return
+        try:
+            # Get result from item
+            result = current.data(Qt.ItemDataRole.UserRole)
             
-        # Format details text
-        details = []
-        
-        if result.success:
-            details.append(f"<h3>Template: {result.template_name}</h3>")
+            # Update details
+            self.template_label.setText(result.template_name)
+            self.confidence_label.setText(f"{result.confidence:.2f}")
+            self.screen_pos_label.setText(f"({result.screen_position[0]}, {result.screen_position[1]})")
             
             if result.game_position:
-                details.append(f"<p><b>Game Position:</b> ({result.game_position.x}, {result.game_position.y})</p>")
-                if hasattr(result.game_position, 'k') and result.game_position.k:
-                    details.append(f"<p><b>World:</b> K{result.game_position.k}</p>")
-                    
-            if result.screen_position:
-                details.append(f"<p><b>Screen Position:</b> ({result.screen_position[0]}, {result.screen_position[1]})</p>")
+                self.game_pos_label.setText(str(result.game_position))
+            else:
+                self.game_pos_label.setText("Unknown")
                 
-            details.append(f"<p><b>Confidence:</b> {result.confidence:.4f}</p>")
-        else:
-            details.append("<h3>No Match Found</h3>")
+            self.positions_label.setText(str(result.positions_checked))
+            self.time_label.setText(f"{result.search_time:.1f}s")
             
-        details.append(f"<p><b>Search Time:</b> {result.search_time:.2f} seconds</p>")
-        details.append(f"<p><b>Positions Checked:</b> {result.positions_checked}</p>")
-        
-        if result.screenshot_path:
-            details.append(f"<p><b>Screenshot:</b> {result.screenshot_path}</p>")
-            
-        # Set details text
-        self.details_text.setHtml("".join(details))
-        
-    def _show_context_menu(self, position):
-        """
-        Show context menu for results list.
-        
-        Args:
-            position: Position where the menu should be shown
-        """
-        item = self.results_list.itemAt(position)
-        if not item:
-            return
-            
-        menu = QMenu()
-        
-        # Add actions
-        view_action = QAction("View Details", self)
-        view_action.triggered.connect(lambda: self._on_result_selected(item, None))
-        menu.addAction(view_action)
-        
-        if item.result.screenshot_path:
-            open_screenshot_action = QAction("Open Screenshot", self)
-            open_screenshot_action.triggered.connect(lambda: self._open_screenshot(item.result))
-            menu.addAction(open_screenshot_action)
-            
-        remove_action = QAction("Remove", self)
-        remove_action.triggered.connect(lambda: self._remove_result(item))
-        menu.addAction(remove_action)
-        
-        # Show menu
-        menu.exec(self.results_list.mapToGlobal(position))
-        
-    def _remove_result(self, item: SearchResultItem):
-        """
-        Remove a result from the list.
-        
-        Args:
-            item: The item to remove
-        """
-        # Remove from results list
-        row = self.results_list.row(item)
-        self.results.pop(row)
-        
-        # Remove from UI
-        self.results_list.takeItem(row)
-        
-        logger.info(f"Removed search result: {item.result}")
-        
-    def _open_screenshot(self, result: SearchResult):
-        """
-        Open the screenshot for a result.
-        
-        Args:
-            result: The result whose screenshot to open
-        """
-        if not result.screenshot_path:
-            return
-            
-        try:
-            # Use system default application to open the image
-            import os
-            import subprocess
-            import platform
-            
-            path = result.screenshot_path
-            
-            if platform.system() == 'Windows':
-                os.startfile(path)
-            elif platform.system() == 'Darwin':  # macOS
-                subprocess.call(('open', path))
-            else:  # Linux
-                subprocess.call(('xdg-open', path))
-                
-            logger.info(f"Opened screenshot: {path}")
+            # Emit signal
+            self.result_selected.emit(result)
             
         except Exception as e:
-            logger.error(f"Error opening screenshot: {e}", exc_info=True)
-            QMessageBox.warning(
-                self,
-                "Error",
-                f"Failed to open screenshot: {str(e)}"
-            )
+            logger.error(f"Error displaying result: {e}")
+            self._clear_details()
             
-    def _export_results(self):
-        """Export search results to a file."""
-        if not self.results:
-            QMessageBox.information(
-                self,
-                "No Results",
-                "There are no results to export."
-            )
-            return
-            
-        # Get file path
-        file_path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Export Search Results",
-            f"search_results_{int(time.time())}.json",
-            "JSON Files (*.json)"
-        )
-        
-        if not file_path:
-            return
-            
-        try:
-            # Convert results to dictionaries
-            results_data = [result.to_dict() for result in self.results]
-            
-            # Add metadata
-            export_data = {
-                'timestamp': datetime.now().isoformat(),
-                'count': len(results_data),
-                'results': results_data
-            }
-            
-            # Write to file
-            with open(file_path, 'w') as f:
-                json.dump(export_data, f, indent=4)
-                
-            logger.info(f"Exported {len(self.results)} search results to {file_path}")
-            
-            QMessageBox.information(
-                self,
-                "Export Successful",
-                f"Exported {len(self.results)} search results to {file_path}"
-            )
-            
-        except Exception as e:
-            logger.error(f"Error exporting results: {e}", exc_info=True)
-            QMessageBox.warning(
-                self,
-                "Export Error",
-                f"Failed to export results: {str(e)}"
-            )
-            
-    def _import_results(self):
-        """Import search results from a file."""
-        # Get file path
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Import Search Results",
-            "",
-            "JSON Files (*.json)"
-        )
-        
-        if not file_path:
-            return
-            
-        try:
-            # Read from file
-            with open(file_path, 'r') as f:
-                import_data = json.load(f)
-                
-            # Check format
-            if 'results' not in import_data:
-                raise ValueError("Invalid file format: missing 'results' key")
-                
-            # Convert dictionaries to SearchResult objects
-            imported_results = []
-            for result_data in import_data['results']:
-                result = SearchResult.from_dict(result_data)
-                imported_results.append(result)
-                
-            # Ask user if they want to replace or append
-            if self.results:
-                reply = QMessageBox.question(
-                    self,
-                    "Import Results",
-                    "Do you want to replace existing results or append new ones?",
-                    QMessageBox.StandardButton.Replace | QMessageBox.StandardButton.Append | QMessageBox.StandardButton.Cancel
-                )
-                
-                if reply == QMessageBox.StandardButton.Cancel:
-                    return
-                elif reply == QMessageBox.StandardButton.Replace:
-                    self.clear_results()
-            
-            # Add imported results
-            for result in imported_results:
-                self.add_result(result)
-                
-            logger.info(f"Imported {len(imported_results)} search results from {file_path}")
-            
-            QMessageBox.information(
-                self,
-                "Import Successful",
-                f"Imported {len(imported_results)} search results from {file_path}"
-            )
-            
-        except Exception as e:
-            logger.error(f"Error importing results: {e}", exc_info=True)
-            QMessageBox.warning(
-                self,
-                "Import Error",
-                f"Failed to import results: {str(e)}"
-            ) 
+    def _clear_details(self):
+        """Clear result details."""
+        self.template_label.clear()
+        self.confidence_label.clear()
+        self.screen_pos_label.clear()
+        self.game_pos_label.clear()
+        self.positions_label.clear()
+        self.time_label.clear() 

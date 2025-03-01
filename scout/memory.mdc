@@ -10,6 +10,157 @@ alwaysApply: false
 ---
 # Memory
 
+## Implemented Grid-Based Game World Search UI
+**Date**: 2024-03-01
+**Component**: GameWorldSearchTab, SearchResultsWidget, SearchPreviewWidget
+**Issue**: Search functionality needed a more intuitive and visual interface for grid-based searching
+**Changes Made**:
+1. Created new GameWorldSearchTab with:
+   - Direction-based movement controls
+   - Grid size configuration
+   - Template selection
+   - Search progress visualization
+   - Results management
+2. Created SearchResultsWidget for:
+   - List of found templates
+   - Result details (confidence, position, etc.)
+   - Screenshot preview integration
+3. Created SearchPreviewWidget for:
+   - Screenshot display with zoom controls
+   - Match region highlighting
+   - Smooth image scaling
+4. Integrated direction-based movement:
+   - Uses North/East definitions for grid navigation
+   - Automatic inverse for South/West movements
+   - Visual feedback during search
+**Impact**:
+- More intuitive search interface with visual grid
+- Better control over search area and pattern
+- Improved results management and preview
+- Consistent movement using defined directions
+**Testing**:
+- Verified grid visualization updates
+- Tested template selection and search
+- Confirmed results display and preview
+- Validated direction-based movement
+
+## Implemented Direction-Based Movement and Calibration System
+**Date**: 2024-03-01
+**Component**: GameWorldDirection, DirectionWidget, SearchGridWidget
+**Issue**: Search functionality needed a consistent way to move in cardinal directions and perform calibration
+**Changes Made**:
+1. Created GameWorldDirection class:
+   - Manages North/East direction definitions (with South/West as inverses)
+   - Handles direction testing with multiple runs
+   - Performs calibration based on direction movements
+   - Saves/loads direction definitions and calibration data
+2. Created DirectionWidget for UI:
+   - Direction definition interface (North/East)
+   - Direction testing controls
+   - Calibration controls with run count
+   - Visual feedback for direction and calibration status
+3. Created SearchGridWidget for visualization:
+   - Grid pattern layout display
+   - Current search position tracking
+   - Search progress visualization
+   - Already searched areas highlighting
+4. Integrated direction-based calibration:
+   - Uses North movement for Y-axis calibration
+   - Uses East movement for X-axis calibration
+   - Averages multiple runs for accuracy
+   - Persists calibration data between sessions
+**Impact**:
+- More reliable movement in cardinal directions
+- Consistent calibration process using defined movements
+- Better visualization of search patterns and progress
+- Improved user experience with clear feedback
+**Testing**:
+- Verified direction definition and persistence
+- Tested direction movements with multiple runs
+- Validated calibration calculations
+- Confirmed search visualization accuracy
+
+## Unified Template Matching Implementation
+**Date**: 2024-03-01
+**Component**: TemplateMatcher, Overlay, GameWorldSearch
+**Issue**: Template matching was inconsistent between overlay and game world search, causing errors with unhashable numpy arrays
+**Changes Made**:
+1. Updated TemplateMatcher.find_matches method:
+   - Added support for both template names list and screenshot input
+   - Improved type hints with Union type
+   - Fixed handling of numpy arrays
+   - Added center property to TemplateMatch class
+2. Updated Overlay._update_template_matching:
+   - Now uses template names list instead of raw screenshot
+   - Uses consistent template matching approach
+   - Fixed match grouping logic
+3. Unified template matching workflow:
+   - Both overlay and game world search now use the same code path
+   - Consistent handling of screenshots and templates
+   - Same grouping and confidence handling
+**Impact**:
+- Template matching now works consistently in both overlay and search
+- Fixed "unhashable type" error with numpy arrays
+- More reliable template detection across all features
+- Better code maintainability with unified implementation
+**Testing**:
+- Verified template matching works in overlay
+- Confirmed game world search still functions correctly
+- Tested template grouping and persistence
+- Validated confidence thresholds
+
+## Fixed Game World Search Template Matching
+**Date**: 2024-03-01
+**Component**: GameWorldSearch, TemplateMatcher
+**Issue**: Search was failing due to template matching errors and SearchResult initialization issues
+**Changes Made**:
+1. Updated SearchResult class:
+   - Added missing fields (positions_checked, search_time, success, screenshot_path)
+   - Made game_position field optional
+   - Fixed initialization parameters
+2. Fixed template matching process:
+   - Added proper screenshot handling
+   - Ensured numpy array conversion
+   - Improved error handling
+3. Enhanced template matching workflow:
+   - Added grayscale conversion
+   - Fixed bounds calculation
+   - Improved confidence threshold handling
+**Impact**:
+- Search functionality now works correctly
+- Template matching is more reliable
+- Better error handling and feedback
+- Proper screenshot handling and saving
+**Testing**:
+- Verified template matching works
+- Tested search with different templates
+- Confirmed screenshot saving
+- Validated error handling
+
+## Fixed Game World Search Stop Functionality
+**Date**: 2024-03-01
+**Component**: GameWorldSearchTab
+**Issue**: Search process could not be stopped using Escape/Q keys or stop button
+**Changes Made**:
+1. Added `stop_requested` flag to track stop requests
+2. Implemented proper key event handling for Escape/Q keys
+3. Rewritten search thread to:
+   - Check stop flag at each position
+   - Track progress properly
+   - Update UI with current status
+4. Fixed `_stop_search` method to use new flag
+5. Added proper cleanup when search is stopped
+**Impact**:
+- Search can now be stopped immediately with Escape/Q keys
+- Stop button works correctly
+- Better feedback during search process
+- Cleaner termination of search operations
+**Testing**:
+- Verified search stops with Escape key
+- Confirmed search stops with Q key
+- Tested stop button functionality
+- Validated UI updates during search and stop
+
 ## Fixed Game World Search Implementation
 **Date**: 2024-03-01
 **Component**: GameWorldSearchTab

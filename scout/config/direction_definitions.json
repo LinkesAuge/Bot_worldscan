@@ -1,0 +1,33 @@
+{
+    "north": {
+        "name": "North",
+        "screen_start": [
+            800,
+            177
+        ],
+        "screen_end": [
+            800,
+            2029
+        ],
+        "game_start": null,
+        "game_end": null
+    },
+    "east": {
+        "name": "East",
+        "screen_start": [
+            3756,
+            1175
+        ],
+        "screen_end": [
+            74,
+            1155
+        ],
+        "game_start": null,
+        "game_end": null
+    },
+    "calibration": {
+        "runs": 3,
+        "pixels_per_game_unit_x": 0.0,
+        "pixels_per_game_unit_y": 0.0
+    }
+}

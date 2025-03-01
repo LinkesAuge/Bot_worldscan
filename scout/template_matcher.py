@@ -6,7 +6,7 @@ It uses OpenCV's template matching to find and track specific visual elements
 in the game window.
 """
 
-from typing import List, Dict, Optional, Tuple, Any
+from typing import List, Dict, Optional, Tuple, Any, Union
 import cv2
 import numpy as np
 import logging
@@ -24,6 +24,12 @@ class TemplateMatch:
     template_name: str
     bounds: Tuple[int, int, int, int]  # x, y, width, height
     confidence: float
+    
+    @property
+    def center(self) -> Tuple[int, int]:
+        """Get the center point of the match."""
+        x, y, w, h = self.bounds
+        return (x + w // 2, y + h // 2)
 
 @dataclass
 class GroupedMatch:
@@ -171,95 +177,75 @@ class TemplateMatcher:
         except Exception as e:
             logger.error(f"Error reloading templates: {e}", exc_info=True)
             
-    def find_matches(self, image: np.ndarray, template_names: Optional[List[str]] = None,
-                    group_matches: bool = True) -> List[GroupedMatch]:
+    def find_matches(self, templates_or_image: Union[List[str], np.ndarray], screenshot: Optional[np.ndarray] = None) -> List[GroupedMatch]:
         """
-        Find template matches in an image.
+        Find matches for specified templates in a screenshot.
         
         Args:
-            image: Image to search in (BGR format)
-            template_names: List of template names to search for (None for all)
-            group_matches: Whether to group similar matches
+            templates_or_image: Either a list of template names to search for, or a screenshot to search in
+            screenshot: Optional screenshot to search in. If None and templates_or_image is a list, a new screenshot will be taken.
             
         Returns:
             List of GroupedMatch objects
         """
         try:
-            # Use all templates if none specified
-            if template_names is None:
+            # Handle input parameters
+            if isinstance(templates_or_image, np.ndarray):
+                # Called with a screenshot as first parameter (legacy mode)
+                screenshot = templates_or_image
                 template_names = list(self.templates.keys())
-                
-            all_matches: List[TemplateMatch] = []
+            else:
+                # Called with template names list
+                template_names = templates_or_image
+                if screenshot is None:
+                    screenshot = self.window_manager.capture_screenshot()
+                    if screenshot is None:
+                        logger.error("Failed to capture screenshot for template matching")
+                        return []
+
+            # Convert screenshot to numpy array if needed
+            if not isinstance(screenshot, np.ndarray):
+                screenshot = np.array(screenshot)
             
-            # Search for each template
-            for name in template_names:
-                if name not in self.templates:
-                    logger.warning(f"Template not found: {name}")
+            # Convert to grayscale for matching
+            screenshot_gray = cv2.cvtColor(screenshot, cv2.COLOR_BGR2GRAY)
+            
+            matches = []
+            
+            # Find matches for each template
+            for template_name in template_names:
+                if template_name not in self.templates:
+                    logger.warning(f"Template '{template_name}' not found")
                     continue
                     
-                template = self.templates[name]
-                matches = self._find_template(image, template, name)
-                all_matches.extend(matches)
+                template = self.templates[template_name]
+                template_gray = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
                 
-            # Group matches if requested
-            if group_matches:
-                return self._group_matches(all_matches)
-            else:
-                # Convert single matches to GroupedMatch format
-                return [
-                    GroupedMatch(
-                        template_name=match.template_name,
-                        bounds=match.bounds,
-                        confidence=match.confidence,
-                        matches=[match]
+                # Perform template matching
+                result = cv2.matchTemplate(screenshot_gray, template_gray, cv2.TM_CCOEFF_NORMED)
+                
+                # Find matches above threshold
+                locations = np.where(result >= self.confidence)
+                for pt in zip(*locations[::-1]):  # Switch columns and rows
+                    x, y = pt
+                    confidence = result[y, x]
+                    
+                    # Create match object
+                    match = TemplateMatch(
+                        template_name=template_name,
+                        bounds=(int(x), int(y), template.shape[1], template.shape[0]),
+                        confidence=float(confidence)
                     )
-                    for match in all_matches
-                ]
-                
+                    matches.append(match)
+            
+            # Group similar matches
+            return self._group_matches(matches)
+            
         except Exception as e:
             logger.error(f"Error finding matches: {e}")
             return []
             
-    def _find_template(self, image: np.ndarray, template: np.ndarray,
-                      template_name: str) -> List[TemplateMatch]:
-        """
-        Find all instances of a template in an image.
-        
-        Args:
-            image: Image to search in
-            template: Template to search for
-            template_name: Name of the template
-            
-        Returns:
-            List of TemplateMatch objects
-        """
-        try:
-            # Get template size
-            template_width = template.shape[1]
-            template_height = template.shape[0]
-            
-            # Perform template matching
-            result = cv2.matchTemplate(image, template, cv2.TM_CCOEFF_NORMED)
-            
-            # Find matches above confidence threshold
-            locations = np.where(result >= self.confidence)
-            matches: List[TemplateMatch] = []
-            
-            for y, x in zip(*locations):
-                matches.append(TemplateMatch(
-                    template_name=template_name,
-                    bounds=(int(x), int(y), template_width, template_height),
-                    confidence=float(result[y, x])
-                ))
-                
-            return matches
-            
-        except Exception as e:
-            logger.error(f"Error finding template {template_name}: {e}")
-            return []
-            
-    def _group_matches(self, matches: List[TemplateMatch],
-                      distance_threshold: int = 10) -> List[GroupedMatch]:
+    def _group_matches(self, matches: List[TemplateMatch], distance_threshold: int = 10) -> List[GroupedMatch]:
         """
         Group similar matches together.
         
