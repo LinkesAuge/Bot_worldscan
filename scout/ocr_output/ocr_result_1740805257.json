@@ -1,0 +1,11 @@
+{
+    "timestamp": 1740805257,
+    "text": "K: 0 XO 8 Y:0",
+    "method": "thresh3",
+    "results_by_method": {
+        "thresh3_standard": "",
+        "thresh3_psm7": "K: 0 XO 8 Y:0",
+        "thresh3_whitelist": "K:0 X08Y:0",
+        "thresh3_specific": "K:0 X08Y:0"
+    }
+}

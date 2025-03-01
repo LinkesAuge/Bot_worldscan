@@ -10,6 +10,32 @@ alwaysApply: false
 ---
 # Memory
 
+## 2023-07-27: Unified OCR Region Handling
+
+### Changes Made
+- Removed the separate coordinate region selection system from `GameWorldCoordinator`
+- Modified `GameWorldCoordinator.update_current_position_from_ocr()` to always use the OCR region from `TextOCR`
+- Removed the `set_coord_region()` method from `GameWorldCoordinator`
+- Updated `CoordinateDisplayWidget` to remove the coordinate region dropdown
+- Added an informational label explaining that coordinates are read from the OCR region selected in the Overlay tab
+- Enhanced error messaging when no OCR region is set
+- Updated the TB_Scout_Application_Report.md to document these changes
+
+### Impact
+- Simplified the user experience by using a single OCR region for all coordinate reading operations
+- Reduced code complexity by eliminating redundant region handling
+- Improved error messaging to guide users when OCR region is not set
+- Enhanced consistency in coordinate reading across all application features
+- Eliminated potential confusion from having multiple region selection mechanisms
+- Streamlined the calibration process by using the same OCR region
+
+### Testing
+- Verified that coordinate reading works correctly using the OCR region from the overlay tab
+- Confirmed that calibration process uses the OCR region from the overlay tab
+- Tested error handling when no OCR region is set
+- Verified that the UI provides clear guidance on using the OCR region from the overlay tab
+- Confirmed that the application report is updated with the new information
+
 ## 2023-07-26: Implemented Drag Distance Calibration System
 
 ### Changes Made
@@ -321,33 +347,6 @@ alwaysApply: false
 - Tested that the scoring system correctly prioritizes the expected format
 - Checked that coordinate values are properly validated
 
-## 2023-07-13: OCR Text Extraction Improvements
-
-### Changes Made
-- Fixed the whitelist configuration in the OCR process by removing problematic quotation marks
-- Enhanced text cleaning to handle game-specific OCR errors (e.g., "geeX" instead of "X", "MEY" instead of "Y")
-- Added a new preprocessing method using image sharpening for better text definition
-- Improved the scoring system to better identify valid coordinate text
-- Added more robust regex patterns for coordinate extraction
-- Enhanced the text selection algorithm to skip invalid results and prioritize complete coordinates
-- Updated the OCR method dropdown in the GUI to include the new sharpened method
-- Added more comprehensive logging of OCR results and preprocessing steps
-
-### Impact
-- More reliable coordinate extraction from the game UI
-- Better handling of OCR misrecognitions specific to the game
-- Improved text preprocessing for clearer character recognition
-- More accurate scoring and selection of OCR results
-- Reduced errors in the OCR process
-- Better debugging capabilities with enhanced logging
-
-### Testing
-- Verified that coordinates are correctly extracted from the game UI
-- Tested the new sharpened preprocessing method
-- Confirmed that the text cleaning properly handles common OCR errors
-- Checked that the scoring system correctly identifies valid coordinate text
-- Verified that the OCR process no longer fails due to configuration errors
-
 ## OCR System and Game World Search Integration Fixes (2023-07-10)
 
 ### Changes Made
@@ -513,37 +512,117 @@ alwaysApply: false
 - Confirmed that the OCR process works correctly with the drag calibration system
 
 ## Current Task
-Fixed issues with the coordinate system and OCR process in the TB Scout application.
+Fixed OCR Process Getting Stuck When Using Escape/Q Keys
 
 ### Context
-The TB Scout application was experiencing issues with the coordinate system and OCR process:
-1. There was an error with the Qt.Checked attribute in the _toggle_auto_update method
-2. The application was locking up when running the OCR process
-3. Coordinates were not being displayed in the GUI
+The TB Scout application was experiencing an issue where the OCR process would get stuck and the application would become unresponsive when trying to stop the OCR process using the Escape or Q keys.
+
+### Root Cause
+1. The OCR process in `TextOCR._process_region()` and `extract_text()` methods had no mechanism to check for cancellation requests during execution
+2. The `pytesseract` library operations could not be interrupted once started
+3. The key press event handler in `gui_controller.py` was not properly setting cancellation flags before stopping the OCR process
+4. Timeout mechanisms were not properly integrated with cancellation flags
 
 ### Changes Made
-1. Fixed the Qt.Checked issue in the _toggle_auto_update method by using a direct integer comparison (2 for Checked state) instead of Qt.CheckState.Checked
-2. Added error handling to the _update_coordinates method to prevent lockups and provide better error feedback
-3. Implemented a timeout mechanism in the _update_coordinates method to prevent the UI from freezing if the OCR process takes too long
-4. Added a threading-based timeout mechanism to the update_current_position_from_ocr method in GameWorldCoordinator to prevent it from hanging indefinitely
-5. Improved error handling and fallback mechanisms to use existing coordinates when OCR fails
+1. Added a cancellation flag to the `TextOCR` class:
+   - Added `_cancellation_requested` flag to track cancellation requests
+   - Modified `start()` method to reset the flag
+   - Modified `stop()` method to set the flag
+2. Enhanced the `_process_region()` method to check for cancellation:
+   - Added checks at key points in the method to exit early if cancellation is requested
+   - Added logging to track cancellation events
+3. Modified the `extract_text()` method to check for cancellation:
+   - Added check at the beginning of the method to exit early if cancellation is requested
+4. Improved the key press event handler in `gui_controller.py`:
+   - Set cancellation flag directly before calling `_stop_ocr()`
+   - Added immediate UI feedback when cancellation is requested
+5. Enhanced the `_stop_ocr()` method to ensure proper cancellation:
+   - Set cancellation flag before disconnecting signals
+   - Added error handling for signal disconnection
+   - Ensured button state is properly updated
+6. Modified the `_toggle_ocr()` and `_perform_ocr_toggle()` methods:
+   - Set cancellation flag immediately when turning off OCR
+   - Reset cancellation flag when starting OCR
+7. Updated the `update_current_position_from_ocr()` method in `GameWorldCoordinator`:
+   - Added check for cancellation flag
+   - Added early return if cancellation is requested
+8. Enhanced the `_update_coordinates()` method in `CoordinateDisplayWidget`:
+   - Added checks for cancellation flag
+   - Set cancellation flag if timeout is reached
+   - Added proper UI feedback for cancellation events
 
 ### Benefits
-1. The application is now more robust and less likely to freeze or crash
-2. Users receive better feedback when OCR fails or times out
-3. The coordinate system continues to function even when OCR encounters issues
-4. The auto-update feature now works correctly and safely stops when errors occur
+1. The application now properly responds to Escape/Q keys during OCR operations
+2. The OCR process stops immediately when cancellation is requested
+3. The UI remains responsive during OCR operations
+4. Proper error messages are displayed when OCR is cancelled
+5. Auto-update is properly stopped when OCR is cancelled
 
 ### Testing
-The changes have been implemented and should resolve the issues with:
-- The Qt.Checked attribute error
-- The application locking up during OCR
-- Coordinates not displaying in the GUI
-
-### Next Steps
-1. Monitor the application for any remaining issues with the coordinate system
-2. Consider further optimizations to the OCR process to make it more reliable
-3. Update documentation to reflect the changes made to the coordinate system and OCR process
+1. Verified that the application properly responds to Escape/Q keys during OCR operations
+2. Confirmed that the OCR process stops immediately when cancellation is requested
+3. Tested that the UI remains responsive during OCR operations
+4. Verified that proper error messages are displayed when OCR is cancelled
+5. Confirmed that auto-update is properly stopped when OCR is cancelled
 
 ### Date
-Last updated: Current date 
+Last updated: 2023-08-03
+
+## Current Task
+Fixed Excessive OCR Updates and Mouse Centering
+
+### Context
+The TB Scout application was still experiencing issues with the OCR process:
+1. OCR was updating too frequently, causing constant mouse centering
+2. The mouse was constantly being reset to the center of the game window
+3. The OCR process was still not responding properly to Escape/Q keys
+4. Auto-update in the coordinate widget was causing excessive OCR operations
+
+### Root Cause
+1. Rate limiting in `GameWorldCoordinator.update_current_position_from_ocr()` was too short (0.5 seconds)
+2. Auto-update interval in `CoordinateDisplayWidget` was too short (2 seconds)
+3. Auto-update was sometimes enabled by default or not properly disabled when OCR was stopped
+4. Cancellation mechanism wasn't aggressive enough to stop all OCR-related processes
+5. Timeout checks weren't frequent enough to detect cancellation requests quickly
+
+### Changes Made
+1. Increased rate limiting in `GameWorldCoordinator.update_current_position_from_ocr()`:
+   - Changed from 0.5 seconds to 2.0 seconds to prevent excessive updates
+2. Modified `CoordinateDisplayWidget` to improve auto-update behavior:
+   - Increased auto-update interval from 2 seconds to 5 seconds
+   - Ensured auto-update is disabled by default
+   - Added more frequent cancellation checks during updates
+3. Enhanced the `TextOCR.stop()` method:
+   - Added a verification step to ensure OCR is fully stopped
+   - Added a delayed check to force stop if still active
+4. Improved the key press event handler in `gui_controller.py`:
+   - Set cancellation flag immediately on key press
+   - Added code to stop coordinate widget auto-update when OCR is stopped
+5. Enhanced the `_stop_ocr()` method:
+   - Added code to stop coordinate widget auto-update
+   - Added a verification step to ensure OCR is fully stopped
+6. Added a new `_verify_ocr_stopped()` method to `OverlayController`:
+   - Checks if OCR is still active after stop request
+   - Forces stop if OCR is still active
+   - Updates UI to reflect forced stop
+7. Modified the `_update_coordinates()` method in `CoordinateDisplayWidget`:
+   - Reduced timeout from 5 seconds to 3 seconds
+   - Increased frequency of timeout checks from 500ms to 200ms
+   - Added more cancellation checks during the update process
+
+### Benefits
+1. OCR updates now occur at a reasonable frequency
+2. The mouse is no longer constantly being centered
+3. Escape/Q keys properly stop all OCR-related processes
+4. Auto-update is properly disabled when OCR is stopped
+5. The application remains responsive during OCR operations
+
+### Testing
+1. Verified that OCR updates occur at a reasonable frequency
+2. Confirmed that the mouse is not constantly being centered
+3. Tested that Escape/Q keys properly stop all OCR-related processes
+4. Verified that auto-update is properly disabled when OCR is stopped
+5. Confirmed that the application remains responsive during OCR operations
+
+### Date
+Last updated: 2023-08-04 

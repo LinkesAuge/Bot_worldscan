@@ -39,10 +39,13 @@ class CoordinateDisplayWidget(QWidget):
         super().__init__(parent)
         self.game_world_coordinator = game_world_coordinator
         self.auto_update_timer = None
-        self.auto_update_interval = 2000  # 2 seconds
+        self.auto_update_interval = 5000  # 5 seconds
         
         self._create_ui()
         self._connect_signals()
+        
+        # Ensure auto-update is disabled by default
+        self.auto_update_cb.setChecked(False)
         
     def _create_ui(self):
         """Create the user interface."""
@@ -66,13 +69,11 @@ class CoordinateDisplayWidget(QWidget):
         update_layout.addWidget(self.auto_update_cb)
         coord_layout.addLayout(update_layout)
         
-        # Coordinate region selection
-        region_layout = QHBoxLayout()
-        region_layout.addWidget(QLabel("Coordinate Region:"))
-        self.region_combo = QComboBox()
-        self.region_combo.addItems(["Bottom Left", "Bottom Center", "Top Right", "Custom"])
-        region_layout.addWidget(self.region_combo)
-        coord_layout.addLayout(region_layout)
+        # OCR region info label
+        ocr_info_label = QLabel("Note: Coordinates are read from the OCR region selected in the Overlay tab")
+        ocr_info_label.setStyleSheet("QLabel { color: gray; font-style: italic; }")
+        ocr_info_label.setWordWrap(True)
+        coord_layout.addWidget(ocr_info_label)
         
         # Set the layout for the coordinate group
         coord_group.setLayout(coord_layout)
@@ -127,9 +128,6 @@ class CoordinateDisplayWidget(QWidget):
         # Auto update checkbox
         self.auto_update_cb.stateChanged.connect(self._toggle_auto_update)
         
-        # Region combo box
-        self.region_combo.currentIndexChanged.connect(self._set_coordinate_region)
-        
         # Calibration buttons
         self.start_calibration_btn.clicked.connect(self._start_calibration)
         self.complete_calibration_btn.clicked.connect(self._complete_calibration)
@@ -138,15 +136,39 @@ class CoordinateDisplayWidget(QWidget):
     def _update_coordinates(self):
         """Update the coordinate display from OCR."""
         try:
+            # Check if OCR has been cancelled
+            if hasattr(self.game_world_coordinator.text_ocr, '_cancellation_requested') and self.game_world_coordinator.text_ocr._cancellation_requested:
+                logger.info("Coordinate update cancelled due to OCR cancellation request")
+                self.coord_label.setText("OCR operation cancelled")
+                self.coord_label.setStyleSheet("color: orange;")
+                # Stop auto-update if OCR has been cancelled
+                self._stop_auto_update()
+                self.auto_update_cb.setChecked(False)
+                return False
+                
             # Set a timeout for the OCR process
-            max_wait_time = 5  # seconds
+            max_wait_time = 3  # Reduced from 5 to 3 seconds
             start_time = time.time()
             
             # Create a timer to check if the operation is taking too long
             timeout_timer = QTimer()
             timeout_reached = [False]  # Using a list to allow modification in the inner function
+            cancellation_check_interval = 200  # Check every 200ms
             
             def check_timeout():
+                # Check for cancellation first
+                if hasattr(self.game_world_coordinator.text_ocr, '_cancellation_requested') and self.game_world_coordinator.text_ocr._cancellation_requested:
+                    logger.info("Coordinate update cancelled during timeout check")
+                    timeout_timer.stop()
+                    timeout_reached[0] = True
+                    self.coord_label.setText("OCR operation cancelled")
+                    self.coord_label.setStyleSheet("color: orange;")
+                    # Stop auto-update
+                    self._stop_auto_update()
+                    self.auto_update_cb.setChecked(False)
+                    return
+                
+                # Then check for timeout
                 if time.time() - start_time > max_wait_time:
                     timeout_reached[0] = True
                     timeout_timer.stop()
@@ -156,10 +178,15 @@ class CoordinateDisplayWidget(QWidget):
                     # Stop auto-update if there's a timeout to prevent continuous timeouts
                     self._stop_auto_update()
                     self.auto_update_cb.setChecked(False)
+                    
+                    # Set cancellation flag if timeout is reached
+                    if hasattr(self.game_world_coordinator.text_ocr, '_cancellation_requested'):
+                        self.game_world_coordinator.text_ocr._cancellation_requested = True
+                        logger.info("Setting cancellation flag due to timeout")
             
-            # Start the timeout timer
+            # Start the timeout timer - check more frequently (200ms instead of 500ms)
             timeout_timer.timeout.connect(check_timeout)
-            timeout_timer.start(500)  # Check every 500ms
+            timeout_timer.start(cancellation_check_interval)
             
             # Perform the OCR operation
             success = self.game_world_coordinator.update_current_position_from_ocr()
@@ -169,7 +196,17 @@ class CoordinateDisplayWidget(QWidget):
             
             # If timeout was reached, return early
             if timeout_reached[0]:
-                return
+                return False
+                
+            # Check if OCR was cancelled during the operation
+            if hasattr(self.game_world_coordinator.text_ocr, '_cancellation_requested') and self.game_world_coordinator.text_ocr._cancellation_requested:
+                logger.info("Coordinate update cancelled during OCR operation")
+                self.coord_label.setText("OCR operation cancelled")
+                self.coord_label.setStyleSheet("color: orange;")
+                # Stop auto-update if OCR has been cancelled
+                self._stop_auto_update()
+                self.auto_update_cb.setChecked(False)
+                return False
             
             # Get the current position regardless of OCR success
             pos = self.game_world_coordinator.current_position
@@ -220,18 +257,6 @@ class CoordinateDisplayWidget(QWidget):
         if self.auto_update_timer:
             self.auto_update_timer.stop()
             self.auto_update_timer = None
-            
-    def _set_coordinate_region(self, index):
-        """Set the region where coordinates are displayed."""
-        if index == 0:  # Bottom Left
-            self.game_world_coordinator.set_coord_region("bottom_left")
-        elif index == 1:  # Bottom Center
-            self.game_world_coordinator.set_coord_region("bottom_center")
-        elif index == 2:  # Top Right
-            self.game_world_coordinator.set_coord_region("top_right")
-        elif index == 3:  # Custom
-            # TODO: Implement custom region selection
-            pass
             
     def _start_calibration(self):
         """Start the calibration process."""
@@ -306,18 +331,6 @@ class CoordinateDisplayWidget(QWidget):
     def get_current_position(self):
         """Get the current game world position."""
         return self.game_world_coordinator.current_position
-        
-    def set_coord_region(self, region):
-        """Set the region where coordinates are displayed."""
-        index = 0  # Default to bottom left
-        if region == "bottom_center":
-            index = 1
-        elif region == "top_right":
-            index = 2
-        elif region == "custom":
-            index = 3
-            
-        self.region_combo.setCurrentIndex(index)
         
     def update_calibration_status(self):
         """Update the calibration status display."""

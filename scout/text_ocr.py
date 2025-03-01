@@ -22,6 +22,7 @@ from scout.game_state import GameState, GameCoordinates
 import mss
 from pathlib import Path
 from scout.config_manager import ConfigManager
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,7 @@ class TextOCR(QObject):
         self.game_state = game_state
         self._active = False
         self.region: Optional[Dict[str, int]] = None
+        self._cancellation_requested = False  # Flag to indicate cancellation request
         
         # Load settings from config
         config = ConfigManager()
@@ -133,6 +135,7 @@ class TextOCR(QObject):
             return
             
         self._active = True
+        self._cancellation_requested = False  # Reset cancellation flag
         interval = int(1000 / self.update_frequency)  # Convert to milliseconds
         self.update_timer.start(interval)
         logger.info(f"OCR started with {self.update_frequency} updates/sec (max: {self.max_frequency})")
@@ -142,9 +145,38 @@ class TextOCR(QObject):
         if not self._active:
             return
             
+        # Set cancellation flag first
+        self._cancellation_requested = True
+        logger.info("OCR cancellation requested")
+        
+        # Stop the timer
         self._active = False
-        self.update_timer.stop()
+        if self.update_timer.isActive():
+            self.update_timer.stop()
+            
+        # Force a small delay to allow any ongoing operations to detect the cancellation flag
+        QTimer.singleShot(100, self._ensure_stopped)
+        
         logger.info("OCR stopped")
+        
+    def _ensure_stopped(self) -> None:
+        """
+        Ensure OCR is fully stopped.
+        
+        This method is called after a short delay to verify that OCR has been stopped
+        and to log any issues if it hasn't.
+        """
+        if self._active:
+            logger.warning("OCR still active after stop request - forcing inactive state")
+            self._active = False
+            
+        # Double-check timer is stopped
+        if self.update_timer.isActive():
+            logger.warning("OCR timer still active after stop request - forcing stop")
+            self.update_timer.stop()
+            
+        # Log confirmation
+        logger.info("OCR process fully stopped")
         
     def set_preferred_method(self, method: str) -> None:
         """
@@ -186,6 +218,11 @@ class TextOCR(QObject):
             The extracted text as a string
         """
         try:
+            # Check if cancellation was requested
+            if self._cancellation_requested:
+                logger.info("Text extraction cancelled")
+                return ""
+                
             # Check if Tesseract is properly configured
             try:
                 tesseract_version = pytesseract.get_tesseract_version()
@@ -218,10 +255,22 @@ class TextOCR(QObject):
             else:
                 gray = image
                 
-            # Save the original image for debugging
+            # Get debug settings
+            config = ConfigManager()
+            debug_settings = config.get_debug_settings()
+            debug_enabled = debug_settings["enabled"]
+                
+            # Ensure the debug directory exists
             debug_dir = Path('scout/debug_screenshots')
             debug_dir.mkdir(exist_ok=True, parents=True)
-            cv2.imwrite(str(debug_dir / 'ocr_original.png'), image)
+            
+            # Create an ocr_output directory for final OCR results
+            ocr_output_dir = Path('scout/ocr_output')
+            ocr_output_dir.mkdir(exist_ok=True, parents=True)
+                
+            # Save the original image for debugging only if debug mode is enabled
+            if debug_enabled:
+                cv2.imwrite(str(debug_dir / 'ocr_original.png'), image)
                 
             # Apply multiple preprocessing approaches for better results
             
@@ -251,12 +300,13 @@ class TextOCR(QObject):
             sharpened = cv2.filter2D(enhanced, -1, kernel_sharpen)
             _, thresh4 = cv2.threshold(sharpened, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
             
-            # Save the preprocessed images for debugging
-            cv2.imwrite(str(debug_dir / 'ocr_thresh1.png'), thresh1)
-            cv2.imwrite(str(debug_dir / 'ocr_thresh2.png'), thresh2)
-            cv2.imwrite(str(debug_dir / 'ocr_thresh3.png'), thresh3)
-            cv2.imwrite(str(debug_dir / 'ocr_morphed.png'), eroded)
-            cv2.imwrite(str(debug_dir / 'ocr_sharpened.png'), thresh4)
+            # Save the preprocessed images for debugging if debug mode is enabled
+            if debug_enabled:
+                cv2.imwrite(str(debug_dir / 'ocr_thresh1.png'), thresh1)
+                cv2.imwrite(str(debug_dir / 'ocr_thresh2.png'), thresh2)
+                cv2.imwrite(str(debug_dir / 'ocr_thresh3.png'), thresh3)
+                cv2.imwrite(str(debug_dir / 'ocr_morphed.png'), eroded)
+                cv2.imwrite(str(debug_dir / 'ocr_sharpened.png'), thresh4)
             
             # Store preprocessed images in a dictionary for easy access
             preprocessed_images = {
@@ -348,8 +398,26 @@ class TextOCR(QObject):
                     best_text = self._select_best_text(results)
                     logger.info(f"Fallback to auto-selected OCR text: '{best_text}'")
             
-            # Update debug window if available
-            if hasattr(self, 'debug_window') and self.debug_window:
+            # Always save the final OCR output with timestamp
+            timestamp = int(time.time())
+            final_output = {
+                'timestamp': timestamp,
+                'text': best_text,
+                'method': self.preferred_method,
+                'results_by_method': results_by_method
+            }
+            
+            # Save final OCR output as JSON
+            import json
+            with open(str(ocr_output_dir / f'ocr_result_{timestamp}.json'), 'w') as f:
+                json.dump(final_output, f, indent=4)
+            
+            # Save the image that produced the best result
+            if best_text:
+                cv2.imwrite(str(ocr_output_dir / f'ocr_image_{timestamp}.png'), image)
+            
+            # Update debug window if available and debug mode is enabled
+            if debug_enabled and hasattr(self, 'debug_window') and self.debug_window:
                 # Use the preferred method's image for visualization
                 debug_image = preprocessed_images.get(self.preferred_method, thresh1)
                 self.debug_window.update_image(
@@ -447,12 +515,17 @@ class TextOCR(QObject):
         
         This method:
         1. Takes a screenshot of the selected region
-        2. Saves the screenshot for debugging
+        2. Saves the screenshot for debugging if debug mode is enabled
         3. Processes the image to extract text
         4. Extracts coordinates from the text
         5. Updates the game state and emits signals
         """
         try:
+            # Check if cancellation was requested
+            if self._cancellation_requested:
+                logger.info("OCR processing cancelled")
+                return
+                
             if not self.region:
                 logger.warning("No region selected for OCR")
                 # Even if no region is selected, still emit the last known coordinates
@@ -461,40 +534,63 @@ class TextOCR(QObject):
                 return
                 
             logger.info(f"Processing OCR region: {self.region}")
+            
+            # Check for cancellation again before taking screenshot
+            if self._cancellation_requested:
+                logger.info("OCR processing cancelled before screenshot")
+                return
                 
             # Take a screenshot of the selected region
             with mss.mss() as sct:
                 screenshot = np.array(sct.grab(self.region))
                 
-            # Ensure the debug directory exists
-            debug_dir = Path('scout/debug_screenshots')
-            debug_dir.mkdir(exist_ok=True, parents=True)
+            # Get debug settings
+            config = ConfigManager()
+            debug_settings = config.get_debug_settings()
+            debug_enabled = debug_settings["enabled"]
+                
+            # Only save debug screenshots if debug mode is enabled
+            if debug_enabled:
+                # Ensure the debug directory exists
+                debug_dir = Path('scout/debug_screenshots')
+                debug_dir.mkdir(exist_ok=True, parents=True)
+                
+                # Save the original screenshot for debugging
+                cv2.imwrite(str(debug_dir / 'OCR Region (Original).png'), screenshot)
+                
+                # Also save as coord_region.png for consistency with the old system
+                cv2.imwrite(str(debug_dir / 'coord_region.png'), screenshot)
             
-            # Save the original screenshot for debugging
-            cv2.imwrite(str(debug_dir / 'OCR Region (Original).png'), screenshot)
-            
-            # Also save as coord_region.png for consistency with the old system
-            cv2.imwrite(str(debug_dir / 'coord_region.png'), screenshot)
-            
+            # Check for cancellation again before OCR processing
+            if self._cancellation_requested:
+                logger.info("OCR processing cancelled before text extraction")
+                return
+                
             # Use our enhanced extract_text method instead of duplicating the OCR logic
             text = self.extract_text(screenshot)
             
+            # Check for cancellation again after OCR processing
+            if self._cancellation_requested:
+                logger.info("OCR processing cancelled after text extraction")
+                return
+                
             # Log the extracted text
             logger.info(f"OCR extracted text: '{text}'")
             
-            # Update debug window with the processed image
-            # We'll use the image from extract_text which is already processed
-            processed_image = cv2.imread(str(debug_dir / 'ocr_thresh1.png'))
-            if processed_image is not None and hasattr(self, 'debug_window') and self.debug_window:
-                self.debug_window.update_image(
-                    "OCR Region",
-                    processed_image,
-                    metadata={"raw_text": text},
-                    save=True
-                )
-            
-                # Also save a copy with a more descriptive name
-                cv2.imwrite(str(debug_dir / 'OCR Region (Processed).png'), processed_image)
+            # Update debug window with the processed image only if debug mode is enabled
+            if debug_enabled:
+                # We'll use the image from extract_text which is already processed
+                processed_image = cv2.imread(str(debug_dir / 'ocr_thresh1.png'))
+                if processed_image is not None and hasattr(self, 'debug_window') and self.debug_window:
+                    self.debug_window.update_image(
+                        "OCR Region",
+                        processed_image,
+                        metadata={"raw_text": text},
+                        save=True
+                    )
+                
+                    # Also save a copy with a more descriptive name
+                    cv2.imwrite(str(debug_dir / 'OCR Region (Processed).png'), processed_image)
             
             # Extract and validate coordinates
             coords = self._extract_coordinates(text)

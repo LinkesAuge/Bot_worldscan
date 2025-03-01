@@ -22,6 +22,7 @@ from scout.automation.search_patterns import (
     spiral_pattern, grid_pattern, 
     expanding_circles_pattern, quadtree_pattern
 )
+from scout.config_manager import ConfigManager
 
 logger = logging.getLogger(__name__)
 
@@ -368,12 +369,19 @@ class GameWorldSearch:
                 logger.error("Failed to capture screenshot for template matching")
                 return result
                 
-            # Always save screenshot for debugging purposes
+            # Get debug settings
+            config = ConfigManager()
+            debug_settings = config.get_debug_settings()
+            debug_enabled = debug_settings["enabled"]
+            
+            # Save debug screenshot if debug mode is enabled
             timestamp = int(time.time())
             debug_dir = Path('scout/debug_screenshots')
             debug_dir.mkdir(exist_ok=True, parents=True)
             debug_screenshot_path = str(debug_dir / f"search_debug_{timestamp}.png")
-            cv2.imwrite(debug_screenshot_path, screenshot)
+            
+            if debug_enabled:
+                cv2.imwrite(debug_screenshot_path, screenshot)
             
             # Save screenshot to search results directory if enabled
             screenshot_path = None

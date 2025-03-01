@@ -1165,6 +1165,11 @@ class OverlayController(QMainWindow):
             # Update button text and style immediately
             self._update_ocr_button_state(is_active)
             
+            # If turning off, set cancellation flag immediately
+            if not is_active and hasattr(self, 'text_ocr'):
+                self.text_ocr._cancellation_requested = True
+                logger.info("OCR cancellation requested")
+            
             # Use a timer to perform the actual OCR operations asynchronously
             # This prevents the UI from freezing while OCR is being started/stopped
             QTimer.singleShot(10, lambda: self._perform_ocr_toggle(is_active))
@@ -1176,6 +1181,9 @@ class OverlayController(QMainWindow):
             self._update_ocr_button_state(False)
             # Try to stop OCR if it might be running
             try:
+                # Set cancellation flag before stopping
+                if hasattr(self, 'text_ocr'):
+                    self.text_ocr._cancellation_requested = True
                 self._stop_ocr()
             except Exception as inner_e:
                 logger.error(f"Error stopping OCR after toggle error: {inner_e}", exc_info=True)
@@ -1219,8 +1227,14 @@ class OverlayController(QMainWindow):
         """
         try:
             if is_active:
+                # Reset cancellation flag before starting
+                if hasattr(self, 'text_ocr'):
+                    self.text_ocr._cancellation_requested = False
                 self._start_ocr()
             else:
+                # Set cancellation flag before stopping
+                if hasattr(self, 'text_ocr'):
+                    self.text_ocr._cancellation_requested = True
                 self._stop_ocr()
         except Exception as e:
             logger.error(f"Error during OCR toggle operation: {e}", exc_info=True)
@@ -1229,6 +1243,9 @@ class OverlayController(QMainWindow):
             self._update_ocr_button_state(False)
             # Try to stop OCR if it might be running
             try:
+                # Set cancellation flag before stopping
+                if hasattr(self, 'text_ocr'):
+                    self.text_ocr._cancellation_requested = True
                 self._stop_ocr()
             except Exception as inner_e:
                 logger.error(f"Error stopping OCR after toggle operation error: {inner_e}", exc_info=True)
@@ -1274,8 +1291,15 @@ class OverlayController(QMainWindow):
         logger.info("Stopping Text OCR")
         self.ocr_status.setText("Text OCR: Inactive")
         
+        # Set cancellation flag before disconnecting signals
+        if hasattr(self, 'text_ocr'):
+            self.text_ocr._cancellation_requested = True
+        
         # Disconnect coordinates signal
-        self.text_ocr.coordinates_updated.disconnect(self._update_coordinates_display)
+        try:
+            self.text_ocr.coordinates_updated.disconnect(self._update_coordinates_display)
+        except Exception as e:
+            logger.warning(f"Could not disconnect coordinates signal: {e}")
         
         # Update config
         ocr_settings = self.config_manager.get_ocr_settings()
@@ -1284,6 +1308,19 @@ class OverlayController(QMainWindow):
         
         # Stop OCR processing
         self.text_ocr.stop()
+        
+        # Ensure the OCR button is in the correct state
+        self.ocr_btn.setChecked(False)
+        self._update_ocr_button_state(False)
+        
+        # Also stop any auto-update in the coordinate widget
+        if hasattr(self, 'game_world_search_tab') and hasattr(self.game_world_search_tab, 'coord_widget'):
+            logger.info("Stopping coordinate auto-update when stopping OCR")
+            self.game_world_search_tab.coord_widget._stop_auto_update()
+            self.game_world_search_tab.coord_widget.auto_update_cb.setChecked(False)
+            
+        # Force a small delay and then check if OCR is really stopped
+        QTimer.singleShot(200, self._verify_ocr_stopped)
     
     def _update_coordinates_display(self, coords: object) -> None:
         """Update the coordinate display in the GUI."""
@@ -1636,15 +1673,34 @@ class OverlayController(QMainWindow):
             logger.info(f"Stop key pressed: {'Escape' if event.key() == Qt.Key.Key_Escape else 'Q'}")
             processes_stopped = False
             
+            # Immediately set cancellation flag for OCR if it exists
+            if hasattr(self, 'text_ocr'):
+                self.text_ocr._cancellation_requested = True
+                logger.info("OCR cancellation flag set immediately on key press")
+            
             # Stop OCR if active (check button state instead of text_ocr.active)
             if hasattr(self, 'ocr_btn') and self.ocr_btn.isChecked():
                 logger.info("Stopping OCR process due to stop key")
                 # Update button state first
                 self.ocr_btn.setChecked(False)
                 self._update_ocr_button_state(False)
+                
+                # Set cancellation flag directly before calling stop
+                if hasattr(self, 'text_ocr'):
+                    self.text_ocr._cancellation_requested = True
+                    
                 # Call stop directly instead of toggle
                 try:
                     self._stop_ocr()
+                    # Force update the status immediately
+                    self.ocr_status.setText("Text OCR: Inactive (Cancelled)")
+                    self.ocr_status.setStyleSheet("color: red;")
+                    
+                    # Also stop any auto-update in the coordinate widget
+                    if hasattr(self, 'game_world_search_tab') and hasattr(self.game_world_search_tab, 'coord_widget'):
+                        logger.info("Stopping coordinate auto-update due to stop key")
+                        self.game_world_search_tab.coord_widget._stop_auto_update()
+                        self.game_world_search_tab.coord_widget.auto_update_cb.setChecked(False)
                 except Exception as e:
                     logger.error(f"Error stopping OCR: {e}", exc_info=True)
                 processes_stopped = True
@@ -1722,3 +1778,31 @@ class OverlayController(QMainWindow):
                 logger.debug(f"Synchronizing OCR button state with OCR state: {is_active}")
                 self.ocr_btn.setChecked(is_active)
                 self._update_ocr_button_state(is_active) 
+
+    def _verify_ocr_stopped(self) -> None:
+        """
+        Verify that OCR has been fully stopped.
+        
+        This method is called after a short delay to ensure that OCR has been
+        completely stopped and to take additional actions if it hasn't.
+        """
+        if hasattr(self, 'text_ocr'):
+            # Check if OCR is still active
+            if self.text_ocr._active or self.text_ocr.update_timer.isActive():
+                logger.warning("OCR still active after stop request - forcing stop")
+                
+                # Force stop again
+                self.text_ocr._active = False
+                self.text_ocr._cancellation_requested = True
+                if self.text_ocr.update_timer.isActive():
+                    self.text_ocr.update_timer.stop()
+                
+                # Update UI to reflect forced stop
+                self.ocr_status.setText("Text OCR: Inactive (Force Stopped)")
+                self.ocr_status.setStyleSheet("color: red;")
+                self.ocr_btn.setChecked(False)
+                self._update_ocr_button_state(False)
+                
+                logger.info("OCR force stopped successfully")
+            else:
+                logger.info("OCR verified as fully stopped") 

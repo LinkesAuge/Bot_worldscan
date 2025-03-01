@@ -214,13 +214,11 @@ Widget for displaying and updating game world coordinates and managing calibrati
 - `_toggle_auto_update()`: Toggles automatic coordinate updates
 - `_start_auto_update()`: Starts automatic coordinate updates
 - `_stop_auto_update()`: Stops automatic coordinate updates
-- `_set_coordinate_region()`: Sets the region where coordinates are displayed
 - `_start_calibration()`: Starts the drag distance calibration process
 - `_complete_calibration()`: Completes the calibration process with the second point
 - `_cancel_calibration()`: Cancels the current calibration process
 - `update_calibration_status()`: Updates the calibration status display
 - `get_current_position()`: Gets the current game world position
-- `set_coord_region()`: Sets the region where coordinates are displayed
 
 ## File Structure Diagram
 
@@ -521,6 +519,43 @@ The coordinate system and OCR process have been improved to enhance stability an
 5. **Auto-Update Safety**: Modified the auto-update feature to safely stop when errors occur, preventing cascading failures.
 
 These improvements make the application more robust and responsive, particularly when dealing with challenging game states where OCR might struggle to read coordinates accurately.
+
+### OCR Process Cancellation Improvements
+
+The OCR process cancellation mechanism has been significantly improved to enhance responsiveness and prevent the application from getting stuck:
+
+1. **Comprehensive Cancellation System**: Implemented a cancellation flag system throughout the OCR process to allow immediate stopping at any point.
+2. **Multiple Cancellation Check Points**: Added cancellation checks at key points in the OCR process to ensure timely response to stop requests.
+3. **Improved Key Press Handling**: Enhanced the Escape/Q key handling to immediately set cancellation flags before stopping the OCR process.
+4. **Integrated Timeout and Cancellation**: Connected timeout mechanisms with the cancellation system to ensure proper cleanup when operations take too long.
+5. **Enhanced UI Feedback**: Added clear visual feedback when OCR operations are cancelled, including status messages and color-coded indicators.
+
+These improvements ensure that the application remains responsive even during intensive OCR operations, and that users can reliably stop the OCR process at any time using the Escape or Q keys without the application becoming unresponsive.
+
+### OCR Performance and Responsiveness Enhancements
+
+The OCR process has been further optimized to improve performance, reduce resource usage, and enhance responsiveness:
+
+1. **Improved Rate Limiting**: Increased the minimum time between OCR updates from 0.5 to 2.0 seconds to prevent excessive processing.
+2. **Optimized Auto-Update**: Increased the coordinate auto-update interval from 2 to 5 seconds and ensured it's disabled by default.
+3. **Enhanced Cancellation Verification**: Added multiple verification steps to ensure OCR is fully stopped when requested.
+4. **More Frequent Timeout Checks**: Increased the frequency of timeout checks from every 500ms to every 200ms for faster response to cancellation.
+5. **Reduced Mouse Centering**: Optimized the mouse centering process to occur less frequently, improving user experience.
+6. **Coordinated Component Shutdown**: Ensured that all OCR-related processes (including auto-update) are properly stopped when OCR is cancelled.
+
+These enhancements significantly improve the application's responsiveness and stability during OCR operations, reduce resource usage, and provide a better user experience by minimizing disruptions to mouse position and ensuring the application remains responsive at all times.
+
+### OCR Region Unification
+
+The coordinate reading system has been simplified and improved by unifying the OCR region handling:
+
+1. **Single OCR Region**: Removed the separate coordinate region selection system and now exclusively use the OCR region selected in the overlay tab for all coordinate reading operations.
+2. **Simplified User Interface**: Removed the coordinate region dropdown from the Game World Coordinates widget, replacing it with a clear note explaining that coordinates are read from the OCR region selected in the Overlay tab.
+3. **Improved Calibration Process**: Updated the calibration process to use the OCR region from the overlay tab, ensuring consistent coordinate reading during calibration.
+4. **Enhanced Error Messaging**: Added clearer error messages when no OCR region is set, guiding users to select an OCR region in the overlay tab.
+5. **Reduced Configuration Complexity**: Eliminated redundant configuration options, making the application more intuitive and reducing potential for confusion.
+
+This unification simplifies the user experience, reduces code complexity, and ensures consistent coordinate reading across all application features. Users now only need to select the OCR region once in the overlay tab, and that region will be used for all coordinate-related operations including calibration.
 
 ## Conclusion
 

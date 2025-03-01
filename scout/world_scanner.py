@@ -104,42 +104,48 @@ class WorldScanner(QObject):
             
             # Add visual debug for coordinate regions
             with mss.mss() as sct:
-                # Take screenshot of entire minimap area plus coordinates
-                context_region = {
-                    'left': self.minimap_left,
-                    'top': self.minimap_top,
-                    'width': self.minimap_width,
-                    'height': self.minimap_height + int(30 * self.dpi_scale)  # Add scaled space for coordinates below
-                }
-                context_shot = np.array(sct.grab(context_region))
+                # Get debug settings
+                config = ConfigManager()
+                debug_settings = config.get_debug_settings()
+                debug_enabled = debug_settings["enabled"]
                 
-                # Draw rectangles around coordinate regions
-                for coord_type, region in coordinate_regions.items():
-                    # Calculate relative positions to context region
-                    x1 = region['left'] - context_region['left']
-                    y1 = region['top'] - context_region['top']
-                    x2 = x1 + region['width']
-                    y2 = y1 + region['height']
+                if debug_enabled:
+                    # Take screenshot of entire minimap area plus coordinates
+                    context_region = {
+                        'left': self.minimap_left,
+                        'top': self.minimap_top,
+                        'width': self.minimap_width,
+                        'height': self.minimap_height + int(30 * self.dpi_scale)  # Add scaled space for coordinates below
+                    }
+                    context_shot = np.array(sct.grab(context_region))
                     
-                    # Only draw if within bounds
-                    if (0 <= x1 < context_shot.shape[1] and 
-                        0 <= y1 < context_shot.shape[0] and 
-                        0 <= x2 < context_shot.shape[1] and 
-                        0 <= y2 < context_shot.shape[0]):
-                        cv2.rectangle(context_shot, (x1, y1), (x2, y2), (0, 255, 0), 1)
-                        cv2.putText(context_shot, coord_type, (x1, y1-5), 
-                                  cv2.FONT_HERSHEY_SIMPLEX, 0.5 * self.dpi_scale, (0, 255, 0), 1)
-                
-                # Update debug window with context image
-                self.debug_window.update_image(
-                    "Coordinate Regions",
-                    context_shot,
-                    metadata={
-                        "dpi_scale": self.dpi_scale,
-                        "minimap_size": f"{self.minimap_width}x{self.minimap_height}"
-                    },
-                    save=True
-                )
+                    # Draw rectangles around coordinate regions
+                    for coord_type, region in coordinate_regions.items():
+                        # Calculate relative positions to context region
+                        x1 = region['left'] - context_region['left']
+                        y1 = region['top'] - context_region['top']
+                        x2 = x1 + region['width']
+                        y2 = y1 + region['height']
+                        
+                        # Only draw if within bounds
+                        if (0 <= x1 < context_shot.shape[1] and 
+                            0 <= y1 < context_shot.shape[0] and 
+                            0 <= x2 < context_shot.shape[1] and 
+                            0 <= y2 < context_shot.shape[0]):
+                            cv2.rectangle(context_shot, (x1, y1), (x2, y2), (0, 255, 0), 1)
+                            cv2.putText(context_shot, coord_type, (x1, y1-5), 
+                                      cv2.FONT_HERSHEY_SIMPLEX, 0.5 * self.dpi_scale, (0, 255, 0), 1)
+                    
+                    # Update debug window with context image
+                    self.debug_window.update_image(
+                        "Coordinate Regions",
+                        context_shot,
+                        metadata={
+                            "dpi_scale": self.dpi_scale,
+                            "minimap_size": f"{self.minimap_width}x{self.minimap_height}"
+                        },
+                        save=True
+                    )
                 
                 # Process each coordinate region
                 coordinates = {}
@@ -475,8 +481,15 @@ class ScanWorker(QObject):
     def update_debug_images(self) -> None:
         """Capture and update debug images."""
         try:
-            # Get scanner settings
+            # Get debug settings
             config = ConfigManager()
+            debug_settings = config.get_debug_settings()
+            debug_enabled = debug_settings["enabled"]
+            
+            if not debug_enabled:
+                return
+                
+            # Get scanner settings
             scanner_settings = config.get_scanner_settings()
             
             # Get minimap dimensions

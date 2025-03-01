@@ -168,11 +168,13 @@ class DebugWindow(QWidget):
             # Update tab
             self.image_tabs[name].update_image(image, metadata)
             
-            # Save image if requested
+            # Save image if requested and debug mode is enabled
             if save:
-                save_path = self.debug_dir / f"{name}.png"
-                cv2.imwrite(str(save_path), image)
-                logger.debug(f"Saved debug image to {save_path}")
+                debug_settings = self.config_manager.get_debug_settings()
+                if debug_settings["enabled"]:
+                    save_path = self.debug_dir / f"{name}.png"
+                    cv2.imwrite(str(save_path), image)
+                    logger.debug(f"Saved debug image to {save_path}")
             
         except Exception as e:
             logger.error(f"Error updating debug image '{name}': {e}")

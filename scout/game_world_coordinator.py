@@ -23,6 +23,7 @@ import json
 from scout.window_manager import WindowManager
 from scout.text_ocr import TextOCR
 from scout.game_world_position import GameWorldPosition
+from scout.config_manager import ConfigManager
 
 logger = logging.getLogger(__name__)
 
@@ -50,9 +51,6 @@ class GameWorldCoordinator:
         
         # Current position in the game world
         self.current_position = GameWorldPosition(0, 0, 0)
-        
-        # Region where coordinates are displayed
-        self.coord_region = None
         
         # Calibration data
         self.calibration_in_progress = False
@@ -287,34 +285,41 @@ class GameWorldCoordinator:
         Update the current position from OCR.
         
         This method:
-        1. Ensures the game window is active
-        2. Centers the mouse in the game window
-        3. Takes a screenshot of the coordinate region
-        4. Processes the screenshot with OCR
-        5. Extracts coordinates from the OCR text
-        6. Updates the current position with the parsed coordinates
-        
-        If OCR fails but we have valid coordinates in the game state,
-        those coordinates will still be used.
+        1. Takes a screenshot of the coordinate region
+        2. Processes the image to extract text
+        3. Extracts coordinates from the text
+        4. Updates the current position
         
         Returns:
-            True if coordinates were successfully read or retrieved from game state,
-            False if no valid coordinates are available
+            True if coordinates were successfully updated, False otherwise
         """
         try:
-            # Add a rate limiter to prevent excessive OCR operations
+            # Check if we're rate limited
             current_time = time.time()
-            if hasattr(self, '_last_ocr_time') and current_time - self._last_ocr_time < 0.5:  # 500ms minimum between calls
-                logger.debug("OCR operation rate limited - too many calls in quick succession")
+            # Increase rate limiting from 0.5s to 2.0s to prevent excessive updates
+            if hasattr(self, '_last_ocr_update') and current_time - self._last_ocr_update < 2.0:
+                logger.debug(f"OCR update rate limited (last update: {current_time - self._last_ocr_update:.2f}s ago)")
                 # If we have valid coordinates, consider this a success
                 if self.current_position.x is not None or self.current_position.y is not None or self.current_position.k is not None:
                     return True
                 return False
+                
+            # Update the last OCR update time
+            self._last_ocr_update = current_time
             
-            # Update the last OCR time
-            self._last_ocr_time = current_time
-            
-            logger.info("Starting OCR update process to get current position")
+            # Check if TextOCR has been cancelled
+            if hasattr(self.text_ocr, '_cancellation_requested') and self.text_ocr._cancellation_requested:
+                logger.info("OCR update cancelled due to cancellation request")
+                return False
+                
+            # Get the game window position
+            window_pos = self.window_manager.get_window_position()
+            if not window_pos:
+                logger.warning("Could not get game window position")
+                # If we have valid coordinates in the game state, consider this a success
+                if self.game_state and self.game_state.get_coordinates() and self.game_state.get_coordinates().is_valid():
+                    return True
+                return False
             
             # First check if we already have valid coordinates in the game state
             if self.game_state and self.game_state.get_coordinates():
@@ -354,42 +359,34 @@ class GameWorldCoordinator:
                 
             logger.info(f"Game window position: {window_pos}")
             
-            # Instead of duplicating the OCR logic, use the TextOCR's region and processing method
-            # This ensures we're using the same OCR processing path as the "old" OCR system
-            
-            # If TextOCR doesn't have a region set, set it to our coordinate region
+            # Check if TextOCR has a region set
             if not self.text_ocr.region:
-                x, y, width, height = self.coord_region
-                window_pos = self.window_manager.get_window_position()
-                if window_pos:
-                    # Get window frame offset
-                    x_offset, y_offset = self.window_manager.get_window_frame_offset()
-                    
-                    # Convert to screen coordinates, adjusting for window frame
-                    screen_x = window_pos[0] + x + x_offset
-                    screen_y = window_pos[1] + y + y_offset
-                    self.text_ocr.set_region({
-                        'left': screen_x,
-                        'top': screen_y,
-                        'width': width,
-                        'height': height
-                    })
-                    logger.info(f"Set TextOCR region to match coordinate region: {self.text_ocr.region}")
+                logger.warning("No OCR region set. Please select an OCR region in the overlay tab.")
+                # If we have valid coordinates in the game state, consider this a success
+                if self.game_state and self.game_state.get_coordinates() and self.game_state.get_coordinates().is_valid():
+                    return True
+                return False
             
-            # Take a screenshot of the coordinate region for debugging
-            window_pos = self.window_manager.get_window_position()
-            if window_pos and self.text_ocr.region:
-                # Ensure the debug directory exists
-                debug_dir = Path('scout/debug_screenshots')
-                debug_dir.mkdir(exist_ok=True, parents=True)
+            # Take a screenshot of the OCR region for debugging
+            if self.text_ocr.region:
+                # Get debug settings
+                config = ConfigManager()
+                debug_settings = config.get_debug_settings()
+                debug_enabled = debug_settings["enabled"]
                 
-                # Capture the region
-                with mss.mss() as sct:
-                    screenshot = np.array(sct.grab(self.text_ocr.region))
+                # Only save debug screenshots if debug mode is enabled
+                if debug_enabled:
+                    # Ensure the debug directory exists
+                    debug_dir = Path('scout/debug_screenshots')
+                    debug_dir.mkdir(exist_ok=True, parents=True)
                     
-                # Save the screenshot for debugging
-                cv2.imwrite(str(debug_dir / 'coord_region_from_game_world.png'), screenshot)
-                logger.info("Saved coordinate region screenshot for debugging")
+                    # Capture the region
+                    with mss.mss() as sct:
+                        screenshot = np.array(sct.grab(self.text_ocr.region))
+                        
+                    # Save the screenshot for debugging
+                    cv2.imwrite(str(debug_dir / 'ocr_region_from_game_world.png'), screenshot)
+                    logger.info("Saved OCR region screenshot for debugging")
             
             # Trigger the TextOCR processing with a timeout
             logger.info("Triggering TextOCR processing...")
@@ -744,55 +741,6 @@ class GameWorldCoordinator:
             logger.error(f"Error parsing coordinates: {e}", exc_info=True)
             return None
     
-    def set_coord_region(self, region_name: str) -> None:
-        """
-        Set the region where coordinates are displayed.
-        
-        Args:
-            region_name: Name of the region ("bottom_left", "bottom_center", "top_right", or "custom")
-        """
-        # Get window dimensions
-        window_pos = self.window_manager.get_window_position()
-        if not window_pos:
-            logger.warning("Could not get window position, using default values")
-            self.coord_region = (50, 50, 300, 50)  # Default
-            return
-            
-        screen_width = window_pos[2]
-        screen_height = window_pos[3]
-        
-        # Set region based on name
-        if region_name == "bottom_left":
-            self.coord_region = (
-                50,                      # x - left side of the screen
-                screen_height - 100,     # y - near the bottom
-                300,                     # width - wide enough to capture coordinates
-                50                       # height - tall enough for the text
-            )
-        elif region_name == "bottom_center":
-            self.coord_region = (
-                screen_width // 2 - 150,  # x - centered horizontally
-                screen_height - 100,      # y - near the bottom
-                300,                      # width - wide enough to capture coordinates
-                50                        # height - tall enough for the text
-            )
-        elif region_name == "top_right":
-            self.coord_region = (
-                screen_width - 350,      # x - right side of the screen
-                50,                      # y - near the top
-                300,                     # width - wide enough to capture coordinates
-                50                       # height - tall enough for the text
-            )
-        elif region_name == "custom":
-            # Keep existing region if it's already set
-            if not self.coord_region:
-                self.coord_region = (50, 50, 300, 50)  # Default
-        else:
-            logger.warning(f"Unknown region name: {region_name}, using default")
-            self.coord_region = (50, screen_height - 100, 300, 50)  # Default to bottom left
-            
-        logger.info(f"Set coordinate region to: {region_name} {self.coord_region}")
-    
     def screen_to_game_coords(self, screen_x: int, screen_y: int) -> GameWorldPosition:
         """
         Convert screen coordinates to game world coordinates.
@@ -996,35 +944,6 @@ class GameWorldCoordinator:
             bottom_right_game.x,
             bottom_right_game.y
         )
-    
-    def try_all_coordinate_regions(self) -> bool:
-        """
-        Try all predefined coordinate regions to find coordinates.
-        
-        Returns:
-            True if coordinates were found in any region, False otherwise
-        """
-        # Store original region
-        original_region = self.coord_region
-        
-        # Try each region
-        regions = ["bottom_left", "bottom_center", "top_right"]
-        
-        for region in regions:
-            logger.info(f"Trying coordinate region: {region}")
-            self.set_coord_region(region)
-            
-            # Try to update position
-            success = self.update_current_position_from_ocr()
-            
-            if success:
-                logger.info(f"Found coordinates in region: {region}")
-                return True
-                
-        # Restore original region if no coordinates were found
-        self.coord_region = original_region
-        logger.warning("Could not find coordinates in any region")
-        return False
     
     def get_calibration_point(self, index: int) -> Optional[Tuple[GameWorldPosition, GameWorldPosition]]:
         """
