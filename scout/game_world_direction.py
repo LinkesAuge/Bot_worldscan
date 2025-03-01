@@ -140,6 +140,9 @@ class GameWorldDirection:
         self.game_state = text_ocr.game_state
         self.game_coordinator = GameWorldCoordinator(window_manager, text_ocr, self.game_state, game_actions)
         
+        # Set this instance as the direction system for the coordinator
+        self.game_coordinator.direction_system = self
+        
         # Set OCR preferences
         self.text_ocr.preferred_method = 'thresh3'  # Use thresh3 method for best results
         
@@ -658,11 +661,11 @@ class GameWorldDirection:
             bool: True if calibration was successful
         """
         try:
-            # Wait for OCR to stabilize
-            time.sleep(1.5)  # Increased initial wait
+            # Initial stabilization period
+            time.sleep(2.0)  # Increased initial wait
             
             # Force multiple OCR updates to ensure stability
-            for _ in range(3):
+            for _ in range(5):  # Increased number of updates
                 self.text_ocr._process_region()
                 time.sleep(0.5)
             
@@ -688,11 +691,11 @@ class GameWorldDirection:
                 logger.error("Failed to perform drag")
                 return False
             
-            # Wait longer for movement and OCR to stabilize
-            time.sleep(2.0)  # Increased wait after drag
+            # Extended wait for movement and OCR to stabilize
+            time.sleep(2.5)  # Increased wait after drag
             
             # Force multiple OCR updates to ensure stability
-            for _ in range(3):
+            for _ in range(5):  # Increased number of updates
                 self.text_ocr._process_region()
                 time.sleep(0.5)
             
@@ -723,20 +726,26 @@ class GameWorldDirection:
                     # Calculate ratio
                     ratio = screen_distance / abs(game_distance)
                     
-                    # Check if this ratio is significantly different from previous measurements
-                    if measurements:
-                        prev_ratios = [m[1] for m in measurements if m[1] > 0]
-                        avg_ratio = np.mean(prev_ratios)
-                        # Increase tolerance to 20%
-                        if abs(ratio - avg_ratio) > avg_ratio * 0.2:  # 20% tolerance
-                            logger.warning(f"Inconsistent Y ratio detected: {ratio:.2f} vs average {avg_ratio:.2f}")
-                            # Don't fail immediately, just log warning
-                            logger.warning("Continuing with calibration despite ratio difference")
-                    
-                    # Store measurement
-                    measurements.append((0, ratio))
-                    logger.info(f"North movement: {game_distance} game units ({abs(game_distance)} absolute), {screen_distance} pixels")
-                    logger.info(f"North ratio: {ratio:.2f} pixels per game unit")
+                    # Special handling for first measurement
+                    if not measurements:
+                        # Store first measurement but mark it for potential discard
+                        measurements.append((0, ratio))
+                        logger.info(f"First North measurement: {ratio:.2f} pixels per game unit")
+                    else:
+                        # Check if first measurement was an outlier
+                        first_ratio = measurements[0][1]
+                        if len(measurements) > 1:
+                            other_ratios = [m[1] for m in measurements[1:] if m[1] > 0]
+                            if other_ratios:
+                                avg_other = np.mean(other_ratios)
+                                if abs(first_ratio - avg_other) > avg_other * 0.1:  # 10% tolerance
+                                    logger.info("Discarding first North measurement as outlier")
+                                    measurements[0] = (0, avg_other)  # Replace first measurement
+                        
+                        # Add new measurement
+                        measurements.append((0, ratio))
+                        logger.info(f"North movement: {game_distance} game units ({abs(game_distance)} absolute), {screen_distance} pixels")
+                        logger.info(f"North ratio: {ratio:.2f} pixels per game unit")
                 else:
                     logger.warning("No Y movement detected for North direction")
             else:  # East
@@ -754,20 +763,26 @@ class GameWorldDirection:
                     # Calculate ratio
                     ratio = screen_distance / abs(game_distance)
                     
-                    # Check if this ratio is significantly different from previous measurements
-                    if measurements:
-                        prev_ratios = [m[0] for m in measurements if m[0] > 0]
-                        avg_ratio = np.mean(prev_ratios)
-                        # Increase tolerance to 20%
-                        if abs(ratio - avg_ratio) > avg_ratio * 0.2:  # 20% tolerance
-                            logger.warning(f"Inconsistent X ratio detected: {ratio:.2f} vs average {avg_ratio:.2f}")
-                            # Don't fail immediately, just log warning
-                            logger.warning("Continuing with calibration despite ratio difference")
-                    
-                    # Store measurement
-                    measurements.append((ratio, 0))
-                    logger.info(f"East movement: {game_distance} game units ({abs(game_distance)} absolute), {screen_distance} pixels")
-                    logger.info(f"East ratio: {ratio:.2f} pixels per game unit")
+                    # Special handling for first measurement
+                    if not measurements:
+                        # Store first measurement but mark it for potential discard
+                        measurements.append((ratio, 0))
+                        logger.info(f"First East measurement: {ratio:.2f} pixels per game unit")
+                    else:
+                        # Check if first measurement was an outlier
+                        first_ratio = measurements[0][0]
+                        if len(measurements) > 1:
+                            other_ratios = [m[0] for m in measurements[1:] if m[0] > 0]
+                            if other_ratios:
+                                avg_other = np.mean(other_ratios)
+                                if abs(first_ratio - avg_other) > avg_other * 0.1:  # 10% tolerance
+                                    logger.info("Discarding first East measurement as outlier")
+                                    measurements[0] = (avg_other, 0)  # Replace first measurement
+                        
+                        # Add new measurement
+                        measurements.append((ratio, 0))
+                        logger.info(f"East movement: {game_distance} game units ({abs(game_distance)} absolute), {screen_distance} pixels")
+                        logger.info(f"East ratio: {ratio:.2f} pixels per game unit")
                 else:
                     logger.warning("No X movement detected for East direction")
             
@@ -776,11 +791,11 @@ class GameWorldDirection:
                 logger.error("Failed to return to start")
                 return False
             
-            # Wait longer for return movement to complete
-            time.sleep(2.0)  # Increased wait after return drag
+            # Extended wait for return movement to complete
+            time.sleep(2.5)  # Increased wait after return drag
             
             # Force multiple OCR updates to ensure stability
-            for _ in range(3):
+            for _ in range(5):  # Increased number of updates
                 self.text_ocr._process_region()
                 time.sleep(0.5)
             

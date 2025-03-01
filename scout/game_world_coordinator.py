@@ -68,6 +68,9 @@ class GameWorldCoordinator:
         self.game_state = game_state
         self.game_actions = game_actions
         
+        # Direction system reference (set by GameWorldDirection)
+        self.direction_system = None
+        
         # Current position in the game world
         self.current_position = GameWorldPosition(0, 0, 0)
         

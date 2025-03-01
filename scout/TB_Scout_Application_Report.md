@@ -76,70 +76,110 @@ The application provides a powerful set of tools for game automation, including:
 - Tracks search history and statistics
 - Provides visual feedback during searches
 
+## Enhanced Search Functionality
+
+The search functionality has been significantly improved with the following enhancements:
+
+### 1. Calibrated Drag Points
+- Search movement now uses calibrated drag points from direction definitions
+- Ensures consistent movement across all search operations
+- Properly handles both positive and negative movements
+- Uses inverse points for opposite directions
+
+### 2. Position Calculation
+- Added `get_game_position` method to calculate game world positions from grid coordinates
+- Handles coordinate wrapping properly
+- Uses start position and calibrated drag distances
+- Maintains accurate position tracking during search
+
+### 3. Movement Optimization
+- Improved drag vector calculation with proper scaling
+- Implemented bounds checking for drag coordinates
+- Centers drags around window center
+- Uses relative window coordinates for consistent movement
+
+### 4. Search Patterns
+- Spiral pattern: Outward spiral search with configurable step sizes
+- Grid pattern: Systematic grid-based search with overlap
+- Expanding circles: Radial search with increasing radius
+- All patterns account for view dimensions and overlap
+
+### 5. Performance Improvements
+- Rate limiting to prevent excessive OCR updates
+- Optimized screenshot capture and processing
+- Reduced temporary file creation
+- Better memory management during searches
+
+### 6. Error Handling
+- Comprehensive validation of coordinates
+- Proper bounds checking for all movements
+- Detailed logging of search operations
+- Clear error messages for troubleshooting
+
 ## Enhanced Calibration System
 
 The calibration system has been improved to provide more accurate and consistent results:
 
-1. **Coordinate System**
-   - Uses game world coordinates (K, X, Y)
-   - Handles coordinate wrapping in 0-999 range
-   - Maintains consistent calculations across all components
+### 1. Stabilization Improvements
+- Increased initial wait time from 1.0s to 1.5s
+- Multiple OCR updates (3x with 0.5s delay) at critical points
+- Increased movement wait time to 2.0s
+- Better handling of game world stabilization
 
-2. **Direction-Based Calibration**
-   - North/South axis for Y-coordinate calibration
-   - East/West axis for X-coordinate calibration
-   - Automatic wrapping for distances > 500 units
-   - Validation against window dimensions
+### 2. Measurement Consistency
+- Fixed inconsistent Y measurements issue
+- Eliminated first measurement outliers
+- Consistent ratio calculations across all measurements
+- Better validation of screen distances
 
-3. **Calibration Process**
-   - Multiple calibration runs for accuracy
-   - Automated drag operations
-   - Position verification at each step
-   - Detailed movement logging
+### 3. Display Improvements
+- Consistent display of calibration results across all widgets
+- Unified wrapped distance calculation logic
+- Detailed movement information in GUI
+- Clear visualization of calibration progress
 
-4. **Display Components**
-   - DirectionWidget for defining cardinal directions
-   - CoordinateDisplayWidget for position tracking
-   - Consistent display of calibration results
-   - Real-time validation feedback
+### 4. OCR Integration
+- Better OCR region validation
+- Dynamic update of physical coordinates
+- Improved screenshot capture and processing
+- Enhanced error handling and logging
 
-5. **Calibration Results**
-   - Screen distances in pixels
-   - Game unit movements with wrapping
-   - Pixels per game unit ratios
-   - Detailed movement information
+### 5. Validation and Error Handling
+- Screen distance validation against window dimensions
+- Coordinate wrapping validation
+- Movement verification at each step
+- Comprehensive error logging
 
-6. **Validation and Error Handling**
-   - Screen distance validation
-   - Coordinate wrapping validation
-   - Movement verification
-   - Comprehensive error logging
+### 6. User Interface
+- Clear calibration instructions
+- Real-time progress feedback
+- Detailed results display
+- Consistent information across all views
 
-7. **User Interface Improvements**
-   - Clear calibration instructions
-   - Progress feedback during calibration
-   - Detailed results display
-   - Consistent information across all views
+## Recent Updates (March 1, 2024)
 
-8. **Technical Implementation**
-   - Wrapped distance calculation:
-     ```python
-     # Calculate wrapped distance considering direction
-     diff = end_pos - start_pos
-     wrapped_diff = diff % 1000
-     if wrapped_diff > 500:
-         wrapped_diff = -(1000 - wrapped_diff)
-     ```
-   - Screen distance validation:
-     ```python
-     max_screen_distance = max(window_width, window_height)
-     if screen_distance > max_screen_distance:
-         return False  # Invalid distance
-     ```
-   - Ratio calculation:
-     ```python
-     pixels_per_game_unit = screen_distance / abs(game_distance)
-     ```
+### Search Functionality
+1. Implemented calibrated drag points for search movement
+2. Added proper position calculation and tracking
+3. Improved movement optimization and bounds checking
+4. Enhanced search patterns with better overlap handling
+5. Added comprehensive error handling and logging
+
+### Calibration System
+1. Fixed inconsistent Y measurements issue
+2. Improved stabilization and wait times
+3. Enhanced measurement consistency
+4. Updated display components for better feedback
+5. Added more robust validation and error handling
+
+### OCR System
+1. Improved region validation and bounds checking
+2. Enhanced coordinate synchronization
+3. Better screenshot capture and processing
+4. More robust error handling and logging
+5. Reduced temporary file creation
+
+These improvements have significantly enhanced the reliability and accuracy of the application's core functionality while maintaining a responsive and user-friendly interface.
 
 ## File Structure
 

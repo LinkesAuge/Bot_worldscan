@@ -242,42 +242,79 @@ class GameWorldSearch:
             
     def _move_to_position(self, target_x: float, target_y: float) -> bool:
         """
-        Move to a target position using drag operations.
+        Move to a target position using calibrated drag operations.
         
         Args:
             target_x: Target X coordinate in game world units
             target_y: Target Y coordinate in game world units
             
         Returns:
-            bool: True if movement was successful, False otherwise
+            bool: True if movement was successful
         """
         try:
-            # Calculate drag vector
-            drag_x, drag_y = self.game_coordinator.calculate_drag_vector(target_x, target_y)
-            
-            # Get window center for drag operation
-            window_pos = self.game_coordinator.window_manager.get_window_position()
-            if not window_pos:
-                logger.error("Failed to get window position")
+            # Get current position
+            current_pos = self.game_coordinator.current_position
+            if not current_pos:
+                logger.error("Failed to get current position")
                 return False
                 
-            center_x = window_pos[0] + window_pos[2] // 2
-            center_y = window_pos[1] + window_pos[3] // 2
-            
-            # Perform drag operation
-            self.game_actions.drag_mouse(
-                center_x, center_y,
-                center_x + drag_x, center_y + drag_y
+            # Get direction system
+            if not self.game_coordinator.direction_system:
+                logger.error("No direction system available")
+                return False
+                
+            # Calculate distances using direction system's method
+            dx, dy = self.game_coordinator.direction_system.calculate_wrapped_distance(
+                current_pos,
+                GameWorldPosition(current_pos.k, target_x, target_y)
             )
             
-            # Wait for view to settle
-            time.sleep(0.5)
+            # Get direction definitions
+            north_def = self.game_coordinator.direction_system.north_definition
+            east_def = self.game_coordinator.direction_system.east_definition
             
-            # Update position from OCR
-            if not self.game_coordinator.update_current_position_from_ocr():
-                logger.warning("Failed to update position after movement")
+            if not north_def or not east_def:
+                logger.error("Missing direction definitions")
                 return False
                 
+            # Get drag distances from direction system
+            east_drag_dist, north_drag_dist = self.game_coordinator.direction_system.get_drag_distances()
+            if not east_drag_dist or not north_drag_dist:
+                logger.error("Invalid drag distances")
+                return False
+            
+            # Calculate number of drags needed
+            east_drags = int(abs(dx) / east_drag_dist) if east_drag_dist > 0 else 0
+            north_drags = int(abs(dy) / north_drag_dist) if north_drag_dist > 0 else 0
+            
+            logger.info(f"Moving to ({target_x}, {target_y}) - Drags needed: E:{east_drags}, N:{north_drags}")
+            
+            # Perform east/west movement
+            if abs(dx) > 0.1:  # Only move if significant distance
+                for _ in range(east_drags):
+                    if dx > 0:
+                        # Move east
+                        if not self._perform_drag(east_def.screen_start, east_def.screen_end):
+                            return False
+                    else:
+                        # Move west (inverse of east)
+                        if not self._perform_drag(east_def.screen_end, east_def.screen_start):
+                            return False
+                    time.sleep(self.drag_delay)
+            
+            # Perform north/south movement
+            if abs(dy) > 0.1:  # Only move if significant distance
+                for _ in range(north_drags):
+                    if dy > 0:
+                        # Move north
+                        if not self._perform_drag(north_def.screen_start, north_def.screen_end):
+                            return False
+                    else:
+                        # Move south (inverse of north)
+                        if not self._perform_drag(north_def.screen_end, north_def.screen_start):
+                            return False
+                    time.sleep(self.drag_delay)
+            
             return True
             
         except Exception as e:
@@ -511,76 +548,139 @@ class GameWorldSearch:
         self.matches.clear()
         self.current_position = (0, 0)
         
-    def start(self):
+    def get_game_position(self, x: int, y: int) -> Optional[GameWorldPosition]:
         """
-        Start the search process.
+        Calculate game world position from grid coordinates.
         
-        This method begins the search using the configured parameters.
-        It searches through the grid systematically, checking for templates
-        at each position.
+        Args:
+            x: Grid X coordinate
+            y: Grid Y coordinate
+            
+        Returns:
+            GameWorldPosition: Position in game world coordinates
         """
         try:
-            if not self.templates or not self.start_pos or not self.drag_distances:
-                logger.error("Search not properly configured")
+            # Get current position
+            current_pos = self.start_pos
+            if not current_pos:
+                logger.error("No start position set")
+                return None
+                
+            # Get drag distances from direction system
+            if not self.game_coordinator.direction_system:
+                logger.error("No direction system available")
+                return None
+                
+            east_drag_dist, south_drag_dist = self.game_coordinator.direction_system.get_drag_distances()
+            if not east_drag_dist or not south_drag_dist:
+                logger.error("Invalid drag distances")
+                return None
+                
+            # Calculate target position
+            target_x = (current_pos.x + (x * east_drag_dist)) % 1000
+            target_y = (current_pos.y + (y * south_drag_dist)) % 1000
+            
+            # Create new position with same kingdom but updated coordinates
+            return GameWorldPosition(
+                k=current_pos.k,
+                x=target_x,
+                y=target_y
+            )
+            
+        except Exception as e:
+            logger.error(f"Error calculating game position: {e}")
+            return None
+
+    def start(self):
+        """Start the search process."""
+        try:
+            if not self.templates:
+                logger.error("No templates selected for search")
                 return
                 
+            if not self.start_pos:
+                logger.error("No start position set")
+                return
+                
+            if not all(self.drag_distances):
+                logger.error("Invalid drag distances")
+                return
+                
+            # Reset search state
+            self.positions_checked = 0
+            self.matches = []
+            self.visited_positions.clear()
+            self.is_searching = True
+            self.stop_requested = False
+            
+            # Log search parameters
             logger.info(f"Starting search with grid size {self.grid_size}")
             logger.info(f"Starting position: {self.start_pos}")
             logger.info(f"Drag distances: {self.drag_distances}")
             
-            self.positions_checked = 0
-            self.matches.clear()
-            self.current_position = (0, 0)
-            
-            # Move to start position if needed
-            if not self.game_coordinator.is_position_on_screen(
-                self.start_pos.x, self.start_pos.y
-            ):
-                if not self._move_to_position(self.start_pos.x, self.start_pos.y):
-                    logger.error("Failed to move to start position")
-                    return
-                    
-            # Search through grid
-            for y in range(self.grid_size[1]):
-                for x in range(self.grid_size[0]):
-                    # Update current position
-                    self.current_position = (x, y)
-                    
-                    # Calculate target game position
-                    target_pos = self.get_game_position(x, y)
-                    if not target_pos:
-                        continue
-                        
-                    # Move to position if not on screen
-                    if not self.game_coordinator.is_position_on_screen(
-                        target_pos.x, target_pos.y
-                    ):
-                        if not self._move_to_position(target_pos.x, target_pos.y):
-                            logger.warning(f"Failed to move to position ({x}, {y})")
-                            continue
-                            
-                    # Check for templates
-                    result = self._check_for_templates(self.templates)
-                    if result:
-                        self.matches.append(result)
-                        
-                    # Update progress
-                    self.positions_checked += 1
-                    
-                    # Check if search should stop
-                    if hasattr(self, 'stop_requested') and self.stop_requested:
+            # Iterate through grid positions
+            for x in range(self.grid_size[0]):
+                for y in range(self.grid_size[1]):
+                    if self.stop_requested:
                         logger.info("Search stopped by user")
                         return
                         
-                    # Wait between moves
-                    time.sleep(self.template_search_delay)
+                    # Calculate target position
+                    target_pos = self.get_game_position(x, y)
+                    if not target_pos:
+                        logger.error(f"Failed to calculate position for grid {x}, {y}")
+                        continue
+                        
+                    # Move to position
+                    if not self._move_to_position(target_pos.x, target_pos.y):
+                        logger.error(f"Failed to move to position {target_pos}")
+                        continue
+                        
+                    # Check for templates
+                    result = self._check_for_templates(self.templates)
+                    if result:
+                        result.game_position = target_pos
+                        self.matches.append(result)
+                        
+                    self.positions_checked += 1
                     
-            logger.info(f"Search complete. Checked {self.positions_checked} positions, "
-                       f"found {len(self.matches)} matches")
-                       
+            self.is_searching = False
+            logger.info(f"Search completed. Checked {self.positions_checked} positions, found {len(self.matches)} matches")
+            
         except Exception as e:
             logger.error(f"Error during search: {e}", exc_info=True)
+            self.is_searching = False
+
+    def _perform_drag(self, start_pos: Tuple[int, int], end_pos: Tuple[int, int]) -> bool:
+        """
+        Perform a drag operation between two points.
+        
+        Args:
+            start_pos: Start position (x, y) in screen coordinates
+            end_pos: End position (x, y) in screen coordinates
             
-        finally:
-            # Ensure search is marked as complete
-            self.is_searching = False 
+        Returns:
+            bool: True if drag was successful
+        """
+        try:
+            # Perform drag
+            if not self.game_actions.drag_mouse(
+                start_pos[0], start_pos[1],
+                end_pos[0], end_pos[1],
+                relative_to_window=True,
+                duration=0.5
+            ):
+                logger.error("Failed to perform drag")
+                return False
+                
+            # Update game coordinator's position
+            self.game_coordinator.update_position_after_drag(
+                start_pos[0], start_pos[1],
+                end_pos[0], end_pos[1]
+            )
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error performing drag: {e}")
+            return False 

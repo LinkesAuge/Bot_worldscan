@@ -878,3 +878,3420 @@ OCR system was failing to properly update coordinates and maintain game state sy
 - Game state stays synchronized with latest coordinates
 - Debug screenshots are properly saved
 - Error handling provides clear feedback 
+
+## [FIXED] Game World Search Functionality
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** GameWorldSearch
+
+### Issue Description
+Search functionality was failing due to:
+1. Missing `get_game_position` method
+2. PyDirectInput fail-safe triggering from excessive mouse movement
+3. Incorrect drag vector calculation
+
+### Root Cause
+1. The `get_game_position` method was referenced but not implemented
+2. Drag vectors were being calculated without proper bounds checking
+3. Mouse movements were attempting to move outside window bounds
+
+### Solution
+1. Added `get_game_position` method:
+   - Calculates game world position from grid coordinates
+   - Uses start position and drag distances
+   - Handles coordinate wrapping properly
+2. Improved drag vector calculation:
+   - Added proper scaling based on window dimensions
+   - Implemented bounds checking for drag coordinates
+   - Centered drags around window center
+3. Enhanced movement logic:
+   - Added relative window coordinates for drags
+   - Implemented proper coordinate wrapping
+   - Added better error handling and logging
+
+### Verification
+- Search functionality now works correctly
+- Mouse movements stay within window bounds
+- Grid positions are properly calculated
+- Drag operations complete successfully 
+
+## [FIXED] Search Movement Using Calibrated Drag Points
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** GameWorldSearch
+
+### Issue Description
+Search movement was not using the calibrated drag points from direction definitions, leading to inconsistent movement and potential errors.
+
+### Root Cause
+The `_move_to_position` method was calculating its own drag points based on window dimensions instead of using the calibrated points from direction definitions.
+
+### Solution
+Modified `_move_to_position` method to:
+1. Use calibrated drag points:
+   - North/South drags use points from north definition
+   - East/West drags use points from east definition
+2. Calculate number of drags needed:
+   - Based on target distance and calibrated drag distances
+   - Handles both positive and negative movements
+3. Perform drags in sequence:
+   - First east/west movement
+   - Then north/south movement
+   - Uses proper inverse points for opposite directions
+
+### Verification
+- Search movement now uses calibrated drag points
+- Movement is consistent with calibration
+- Proper handling of both directions
+- Correct use of inverse points for opposite movements
+
+## 2023-08-05: Fixed OCR Process and Q/Escape Key Handling
+
+### Issue
+1. Coordinates were not being displayed in the GUI despite being extracted by the OCR process
+2. The OCR process could not be canceled with Q/Escape keys
+
+### Root Cause
+1. The coordinate display widget was only updating the display when the OCR process returned success, but wasn't checking if there were valid coordinates in the game world coordinator
+2. The keyPressEvent method was checking `self.text_ocr.active` which wasn't properly tracking the OCR state
+3. The TextOCR class had inconsistent state tracking with both `self.active` and internal timer state
+
+### Solution
+1. Modified the `_update_coordinates` method in `CoordinateDisplayWidget` to:
+   - Get the current position regardless of OCR success
+   - Display partial coordinates with placeholders for missing values
+   - Use different colors to indicate full, partial, or missing coordinates
+2. Fixed the `keyPressEvent` method in `OverlayController` to:
+   - Check the OCR button state instead of `text_ocr.active`
+   - Add proper error handling when stopping the OCR process
+3. Improved the TextOCR class with:
+   - Added a proper `active` property to track OCR state
+   - Ensured consistent state tracking between the property and internal timer
+
+### Prevention
+1. Added more detailed logging to track coordinate display issues
+2. Improved error handling throughout the OCR process
+3. Added proper state tracking in the TextOCR class
+4. Used button state as the source of truth for process state in key event handling
+
+### Testing
+1. Verified that coordinates are displayed in the GUI even when some values are missing
+2. Confirmed that the Q/Escape keys properly stop the OCR process
+3. Tested error handling by simulating OCR failures
+4. Verified that the OCR button state correctly reflects the OCR process state
+
+## 2023-08-06: Fixed OCR Process Performance and Temporary Files Issues
+
+### Issues Fixed
+- Application getting stuck or becoming unresponsive during OCR operations
+- Excessive temporary PNG files being created in the system temp folder
+- OCR process not stopping when using Q/Escape keys
+- Coordinates not being displayed in the GUI despite being extracted
+
+### Root Cause Analysis
+- The pytesseract library was creating numerous temporary files for each OCR operation
+- Multiple OCR methods were being run in quick succession, creating a large number of temporary files
+- The OCR process was being called too frequently without rate limiting
+- The drag calibration system increased the number of OCR operations, exacerbating the issue
+
+### Solutions Implemented
+1. Optimized the OCR process in `TextOCR.extract_text()`:
+   - Only process the preferred OCR method when not in auto mode
+   - Standardized configuration parameters to reduce redundancy
+   - Simplified the OCR method selection process
+2. Added rate limiting to `GameWorldCoordinator.update_current_position_from_ocr()`:
+   - Implemented a minimum 500ms delay between OCR operations
+   - Added early return with existing coordinates when rate limited
+   - Improved logging to track rate-limited operations
+3. Enhanced error handling throughout the OCR process:
+   - Better timeout handling to prevent the application from hanging
+   - Improved fallback to existing coordinates when OCR fails
+   - More robust state tracking for the OCR process
+
+### Prevention Strategies
+1. Implemented rate limiting to prevent excessive OCR operations
+2. Reduced the number of temporary files created during OCR
+3. Improved error handling and timeout mechanisms
+4. Enhanced logging to better track OCR operations and failures
+5. Added more robust state tracking for the OCR process
+
+### Testing
+1. Verified that the application remains responsive during OCR operations
+2. Confirmed that fewer temporary files are created during OCR
+3. Tested that the Q/Escape keys properly stop the OCR process
+4. Verified that coordinates are displayed in the GUI even when some values are missing
+5. Confirmed that the OCR process works correctly with the drag calibration system
+
+## 2023-08-07: Fixed OCR Process Getting Stuck When Using Escape/Q Keys
+
+### Issues Fixed
+- Application getting stuck when trying to escape/q out of the OCR process
+- OCR process not responding to cancellation requests
+- UI becoming unresponsive during OCR operations
+
+### Root Cause Analysis
+- The OCR process in `TextOCR._process_region()` and `extract_text()` methods had no mechanism to check for cancellation requests during execution
+- The `pytesseract` library operations could not be interrupted once started
+- The key press event handler in `gui_controller.py` was not properly setting cancellation flags before stopping the OCR process
+- Timeout mechanisms were not properly integrated with cancellation flags
+
+### Solutions Implemented
+1. Added a cancellation flag to the `TextOCR` class:
+   - Added `_cancellation_requested` flag to track cancellation requests
+   - Modified `start()` method to reset the flag
+   - Modified `stop()` method to set the flag
+2. Enhanced the `_process_region()` method to check for cancellation:
+   - Added checks at key points in the method to exit early if cancellation is requested
+   - Added logging to track cancellation events
+3. Modified the `extract_text()` method to check for cancellation:
+   - Added check at the beginning of the method to exit early if cancellation is requested
+4. Improved the key press event handler in `gui_controller.py`:
+   - Set cancellation flag directly before calling `_stop_ocr()`
+   - Added immediate UI feedback when cancellation is requested
+5. Enhanced the `_stop_ocr()` method to ensure proper cancellation:
+   - Set cancellation flag before disconnecting signals
+   - Added error handling for signal disconnection
+   - Ensured button state is properly updated
+6. Modified the `_toggle_ocr()` and `_perform_ocr_toggle()` methods:
+   - Set cancellation flag immediately when turning off OCR
+   - Reset cancellation flag when starting OCR
+7. Updated the `update_current_position_from_ocr()` method in `GameWorldCoordinator`:
+   - Added check for cancellation flag
+   - Added early return if cancellation is requested
+8. Enhanced the `_update_coordinates()` method in `CoordinateDisplayWidget`:
+   - Added checks for cancellation flag
+   - Set cancellation flag if timeout is reached
+   - Added proper UI feedback for cancellation events
+
+### Prevention Strategies
+1. Implemented a comprehensive cancellation mechanism throughout the OCR process
+2. Added multiple cancellation check points in long-running operations
+3. Ensured proper UI feedback for cancellation events
+4. Integrated timeout mechanisms with cancellation flags
+5. Added detailed logging for cancellation events
+
+### Testing
+1. Verified that the application properly responds to Escape/Q keys during OCR operations
+2. Confirmed that the OCR process stops immediately when cancellation is requested
+3. Tested that the UI remains responsive during OCR operations
+4. Verified that proper error messages are displayed when OCR is cancelled
+5. Confirmed that auto-update is properly stopped when OCR is cancelled
+
+## 2023-08-08: Fixed Excessive OCR Updates and Mouse Centering
+
+### Issues Fixed
+- Application constantly updating OCR too frequently
+- Mouse constantly being reset to the center of the game window
+- OCR process still not responding properly to Escape/Q keys
+- Auto-update in coordinate widget causing excessive OCR operations
+
+### Root Cause Analysis
+- Rate limiting in `GameWorldCoordinator.update_current_position_from_ocr()` was too short (0.5 seconds)
+- Auto-update interval in `CoordinateDisplayWidget` was too short (2 seconds)
+- Auto-update was sometimes enabled by default or not properly disabled when OCR was stopped
+- Cancellation mechanism wasn't aggressive enough to stop all OCR-related processes
+- Timeout checks weren't frequent enough to detect cancellation requests quickly
+
+### Solutions Implemented
+1. Increased rate limiting in `GameWorldCoordinator.update_current_position_from_ocr()`:
+   - Changed from 0.5 seconds to 2.0 seconds to prevent excessive updates
+2. Modified `CoordinateDisplayWidget` to improve auto-update behavior:
+   - Increased auto-update interval from 2 seconds to 5 seconds
+   - Ensured auto-update is disabled by default
+   - Added more frequent cancellation checks during updates
+3. Enhanced the `TextOCR.stop()` method:
+   - Added a verification step to ensure OCR is fully stopped
+   - Added a delayed check to force stop if still active
+4. Improved the key press event handler in `gui_controller.py`:
+   - Set cancellation flag immediately on key press
+   - Added code to stop coordinate widget auto-update when OCR is stopped
+5. Enhanced the `_stop_ocr()` method:
+   - Added code to stop coordinate widget auto-update
+   - Added a verification step to ensure OCR is fully stopped
+6. Added a new `_verify_ocr_stopped()` method to `OverlayController`:
+   - Checks if OCR is still active after stop request
+   - Forces stop if OCR is still active
+   - Updates UI to reflect forced stop
+7. Modified the `_update_coordinates()` method in `CoordinateDisplayWidget`:
+   - Reduced timeout from 5 seconds to 3 seconds
+   - Increased frequency of timeout checks from 500ms to 200ms
+   - Added more cancellation checks during the update process
+
+### Prevention Strategies
+1. Implemented more aggressive rate limiting to prevent excessive OCR updates
+2. Added multiple verification steps to ensure OCR is fully stopped
+3. Ensured auto-update is properly disabled when OCR is stopped
+4. Added more frequent cancellation checks during OCR operations
+5. Improved coordination between different components that use OCR
+
+### Testing
+1. Verified that OCR updates occur at a reasonable frequency
+2. Confirmed that the mouse is not constantly being centered
+3. Tested that Escape/Q keys properly stop all OCR-related processes
+4. Verified that auto-update is properly disabled when OCR is stopped
+5. Confirmed that the application remains responsive during OCR operations
+
+## Calibration Display Inconsistency (Fixed)
+**Date:** March 1, 2024
+**Status:** FIXED
+
+### Issue Description
+The calibration results were displaying inconsistent values between the GUI widgets and the logs. Specifically:
+- The East direction values were showing different results in different parts of the UI
+- The wrapped distance calculations were not consistently applied across all display locations
+- The ratios shown in the GUI didn't match the actual calculations in the logs
+
+### Root Cause
+1. Different widgets (DirectionWidget and CoordinateDisplayWidget) were using different methods to calculate and display the calibration results
+2. The wrapped distance calculation was not consistently implemented across all display locations
+3. The GUI wasn't showing the detailed movement information that was available in the logs
+
+### Solution
+1. Updated both DirectionWidget and CoordinateDisplayWidget to:
+   - Use the same wrapped distance calculation logic
+   - Show consistent ratio calculations
+   - Display detailed movement information
+2. Improved the display format to show:
+   - Raw screen distances
+   - Absolute game unit values
+   - Calculated ratios for both directions
+3. Added validation for screen distances against window dimensions
+4. Enhanced logging to show more detailed movement information
+
+### Implementation Details
+1. Modified DirectionWidget._start_calibration():
+   - Added proper wrapped distance calculation
+   - Improved progress feedback
+   - Enhanced results display with ratios
+2. Updated CoordinateDisplayWidget._update_calibration_display():
+   - Added detailed movement information
+   - Implemented consistent distance calculations
+   - Improved results formatting
+3. Both widgets now show:
+   - Screen distances in pixels
+   - Game unit movements with proper wrapping
+   - Calculated ratios for verification
+
+### Verification
+- Calibration results now match between:
+  - Log output
+  - DirectionWidget display
+  - CoordinateDisplayWidget display
+- All displays show the same:
+  - Screen distances
+  - Game unit movements
+  - Pixels per game unit ratios
+
+### Prevention
+To prevent similar issues in the future:
+1. Always implement consistent calculation methods across all display locations
+2. Use the same validation and wrapping logic throughout the application
+3. Show detailed information in the GUI to match log output
+4. Validate displayed values against actual calculations
+
+## [FIXED] Inconsistent Y Measurements in Direction Calibration
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** GameWorldDirection
+
+### Issue Description
+During direction calibration, the first Y measurement was consistently higher (~23%) than subsequent measurements, causing calibration failures due to inconsistent ratios.
+
+### Root Cause
+The game world was not fully stabilized after movements before taking measurements. The first measurement was affected by residual movement in the game world.
+
+### Solution
+Modified the `_calibrate_direction` method in `game_world_direction.py` to:
+1. Increase initial wait time from 1.0s to 1.5s
+2. Add multiple OCR updates (3 times with 0.5s delay) at each critical point:
+   - Before taking the start position
+   - After the drag movement
+   - After returning to start position
+3. Increase wait time after movements from 1.5s to 2.0s
+
+### Verification
+- Y measurements are now consistent across all runs
+- Calibration completes successfully with consistent ratios
+- No more outliers in the first measurement 
+
+## [FIXED] OCR Region Out of Window Bounds
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** TextOCR
+
+### Issue Description
+OCR was failing to read coordinates because the OCR region was being positioned outside the game window bounds, particularly when the window was moved or resized.
+
+### Root Cause
+The OCR region coordinates were not being properly validated against window bounds, and physical screen coordinates were not being updated when the window moved.
+
+### Solution
+1. Enhanced `set_region` method in `TextOCR` class to:
+   - Add bounds checking to ensure region stays within window
+   - Store both logical (window-relative) and physical (screen) coordinates
+   - Improve error handling and validation
+2. Updated `_process_region` method to:
+   - Dynamically update physical coordinates based on current window position
+   - Add bounds checking during processing
+   - Improve screenshot saving for debugging
+   - Enhance error handling and logging
+
+### Verification
+- OCR region now stays within game window bounds
+- Region automatically adjusts when window moves
+- Coordinates are properly read during scans
+- Debug screenshots are saved for verification 
+
+## [FIXED] Missing Screenshot Capture Method
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** WindowManager, TextOCR
+
+### Issue Description
+OCR system was broken in both overlay and game world tab due to a missing `capture_region` method in the WindowManager class.
+
+### Root Cause
+During the OCR system refactoring, we moved the screenshot capture functionality from TextOCR to WindowManager for better organization, but the implementation of `capture_region` was missing.
+
+### Solution
+1. Added `capture_region` method to WindowManager:
+   - Takes region dictionary with left, top, width, height
+   - Uses mss for efficient screen capture
+   - Converts BGRA to BGR format for OpenCV compatibility
+   - Includes proper error handling
+2. Added necessary imports:
+   - numpy for array handling
+   - cv2 for image processing
+   - mss for screen capture
+
+### Verification
+- OCR system now works in both overlay and game world tab
+- Screenshots are properly captured and processed
+- Color format is correctly converted for OpenCV
+- Error handling properly catches and logs issues 
+
+## [FIXED] OCR Region Update and Game State Sync
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** TextOCR
+
+### Issue Description
+OCR system was failing to properly update coordinates and maintain game state synchronization after the screenshot capture refactoring.
+
+### Root Cause
+1. Physical region updates were not properly maintaining all required fields
+2. Game state was not being updated with new coordinates
+3. Region dictionary was being modified in place instead of being recreated
+
+### Solution
+1. Fixed physical region updates in TextOCR:
+   - Now creating new region dictionary with all fields
+   - Properly calculating screen coordinates from window position
+   - Maintaining dpi_scale and other required properties
+2. Added game state synchronization:
+   - Updating game state when new coordinates are extracted
+   - Ensuring coordinates are properly formatted
+3. Improved error handling and logging:
+   - Better debug messages for troubleshooting
+   - Clearer logging of coordinate extraction results
+
+### Verification
+- OCR system now properly updates coordinates
+- Game state stays synchronized with latest coordinates
+- Debug screenshots are properly saved
+- Error handling provides clear feedback 
+
+## [FIXED] Game World Search Functionality
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** GameWorldSearch
+
+### Issue Description
+Search functionality was failing due to:
+1. Missing `get_game_position` method
+2. PyDirectInput fail-safe triggering from excessive mouse movement
+3. Incorrect drag vector calculation
+
+### Root Cause
+1. The `get_game_position` method was referenced but not implemented
+2. Drag vectors were being calculated without proper bounds checking
+3. Mouse movements were attempting to move outside window bounds
+
+### Solution
+1. Added `get_game_position` method:
+   - Calculates game world position from grid coordinates
+   - Uses start position and drag distances
+   - Handles coordinate wrapping properly
+2. Improved drag vector calculation:
+   - Added proper scaling based on window dimensions
+   - Implemented bounds checking for drag coordinates
+   - Centered drags around window center
+3. Enhanced movement logic:
+   - Added relative window coordinates for drags
+   - Implemented proper coordinate wrapping
+   - Added better error handling and logging
+
+### Verification
+- Search functionality now works correctly
+- Mouse movements stay within window bounds
+- Grid positions are properly calculated
+- Drag operations complete successfully 
+
+## [FIXED] Search Movement Using Calibrated Drag Points
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** GameWorldSearch
+
+### Issue Description
+Search movement was not using the calibrated drag points from direction definitions, leading to inconsistent movement and potential errors.
+
+### Root Cause
+The `_move_to_position` method was calculating its own drag points based on window dimensions instead of using the calibrated points from direction definitions.
+
+### Solution
+Modified `_move_to_position` method to:
+1. Use calibrated drag points:
+   - North/South drags use points from north definition
+   - East/West drags use points from east definition
+2. Calculate number of drags needed:
+   - Based on target distance and calibrated drag distances
+   - Handles both positive and negative movements
+3. Perform drags in sequence:
+   - First east/west movement
+   - Then north/south movement
+   - Uses proper inverse points for opposite directions
+
+### Verification
+- Search movement now uses calibrated drag points
+- Movement is consistent with calibration
+- Proper handling of both directions
+- Correct use of inverse points for opposite movements
+
+## 2023-08-09: Fixed OCR Process and Q/Escape Key Handling
+
+### Issue
+1. Coordinates were not being displayed in the GUI despite being extracted by the OCR process
+2. The OCR process could not be canceled with Q/Escape keys
+
+### Root Cause
+1. The coordinate display widget was only updating the display when the OCR process returned success, but wasn't checking if there were valid coordinates in the game world coordinator
+2. The keyPressEvent method was checking `self.text_ocr.active` which wasn't properly tracking the OCR state
+3. The TextOCR class had inconsistent state tracking with both `self.active` and internal timer state
+
+### Solution
+1. Modified the `_update_coordinates` method in `CoordinateDisplayWidget` to:
+   - Get the current position regardless of OCR success
+   - Display partial coordinates with placeholders for missing values
+   - Use different colors to indicate full, partial, or missing coordinates
+2. Fixed the `keyPressEvent` method in `OverlayController` to:
+   - Check the OCR button state instead of `text_ocr.active`
+   - Add proper error handling when stopping the OCR process
+3. Improved the TextOCR class with:
+   - Added a proper `active` property to track OCR state
+   - Ensured consistent state tracking between the property and internal timer
+
+### Prevention
+1. Added more detailed logging to track coordinate display issues
+2. Improved error handling throughout the OCR process
+3. Added proper state tracking in the TextOCR class
+4. Used button state as the source of truth for process state in key event handling
+
+### Testing
+1. Verified that coordinates are displayed in the GUI even when some values are missing
+2. Confirmed that the Q/Escape keys properly stop the OCR process
+3. Tested error handling by simulating OCR failures
+4. Verified that the OCR button state correctly reflects the OCR process state
+
+## 2023-08-10: Fixed OCR Process Performance and Temporary Files Issues
+
+### Issues Fixed
+- Application getting stuck or becoming unresponsive during OCR operations
+- Excessive temporary PNG files being created in the system temp folder
+- OCR process not stopping when using Q/Escape keys
+- Coordinates not being displayed in the GUI despite being extracted
+
+### Root Cause Analysis
+- The pytesseract library was creating numerous temporary files for each OCR operation
+- Multiple OCR methods were being run in quick succession, creating a large number of temporary files
+- The OCR process was being called too frequently without rate limiting
+- The drag calibration system increased the number of OCR operations, exacerbating the issue
+
+### Solutions Implemented
+1. Optimized the OCR process in `TextOCR.extract_text()`:
+   - Only process the preferred OCR method when not in auto mode
+   - Standardized configuration parameters to reduce redundancy
+   - Simplified the OCR method selection process
+2. Added rate limiting to `GameWorldCoordinator.update_current_position_from_ocr()`:
+   - Implemented a minimum 500ms delay between OCR operations
+   - Added early return with existing coordinates when rate limited
+   - Improved logging to track rate-limited operations
+3. Enhanced error handling throughout the OCR process:
+   - Better timeout handling to prevent the application from hanging
+   - Improved fallback to existing coordinates when OCR fails
+   - More robust state tracking for the OCR process
+
+### Prevention Strategies
+1. Implemented rate limiting to prevent excessive OCR operations
+2. Reduced the number of temporary files created during OCR
+3. Improved error handling and timeout mechanisms
+4. Enhanced logging to better track OCR operations and failures
+5. Added more robust state tracking for the OCR process
+
+### Testing
+1. Verified that the application remains responsive during OCR operations
+2. Confirmed that fewer temporary files are created during OCR
+3. Tested that the Q/Escape keys properly stop the OCR process
+4. Verified that coordinates are displayed in the GUI even when some values are missing
+5. Confirmed that the OCR process works correctly with the drag calibration system
+
+## 2023-08-11: Fixed OCR Process Getting Stuck When Using Escape/Q Keys
+
+### Issues Fixed
+- Application getting stuck when trying to escape/q out of the OCR process
+- OCR process not responding to cancellation requests
+- UI becoming unresponsive during OCR operations
+
+### Root Cause Analysis
+- The OCR process in `TextOCR._process_region()` and `extract_text()` methods had no mechanism to check for cancellation requests during execution
+- The `pytesseract` library operations could not be interrupted once started
+- The key press event handler in `gui_controller.py` was not properly setting cancellation flags before stopping the OCR process
+- Timeout mechanisms were not properly integrated with cancellation flags
+
+### Solutions Implemented
+1. Added a cancellation flag to the `TextOCR` class:
+   - Added `_cancellation_requested` flag to track cancellation requests
+   - Modified `start()` method to reset the flag
+   - Modified `stop()` method to set the flag
+2. Enhanced the `_process_region()` method to check for cancellation:
+   - Added checks at key points in the method to exit early if cancellation is requested
+   - Added logging to track cancellation events
+3. Modified the `extract_text()` method to check for cancellation:
+   - Added check at the beginning of the method to exit early if cancellation is requested
+4. Improved the key press event handler in `gui_controller.py`:
+   - Set cancellation flag directly before calling `_stop_ocr()`
+   - Added immediate UI feedback when cancellation is requested
+5. Enhanced the `_stop_ocr()` method to ensure proper cancellation:
+   - Set cancellation flag before disconnecting signals
+   - Added error handling for signal disconnection
+   - Ensured button state is properly updated
+6. Modified the `_toggle_ocr()` and `_perform_ocr_toggle()` methods:
+   - Set cancellation flag immediately when turning off OCR
+   - Reset cancellation flag when starting OCR
+7. Updated the `update_current_position_from_ocr()` method in `GameWorldCoordinator`:
+   - Added check for cancellation flag
+   - Added early return if cancellation is requested
+8. Enhanced the `_update_coordinates()` method in `CoordinateDisplayWidget`:
+   - Added checks for cancellation flag
+   - Set cancellation flag if timeout is reached
+   - Added proper UI feedback for cancellation events
+
+### Prevention Strategies
+1. Implemented a comprehensive cancellation mechanism throughout the OCR process
+2. Added multiple cancellation check points in long-running operations
+3. Ensured proper UI feedback for cancellation events
+4. Integrated timeout mechanisms with cancellation flags
+5. Added detailed logging for cancellation events
+
+### Testing
+1. Verified that the application properly responds to Escape/Q keys during OCR operations
+2. Confirmed that the OCR process stops immediately when cancellation is requested
+3. Tested that the UI remains responsive during OCR operations
+4. Verified that proper error messages are displayed when OCR is cancelled
+5. Confirmed that auto-update is properly stopped when OCR is cancelled
+
+## 2023-08-12: Fixed Excessive OCR Updates and Mouse Centering
+
+### Issues Fixed
+- Application constantly updating OCR too frequently
+- Mouse constantly being reset to the center of the game window
+- OCR process still not responding properly to Escape/Q keys
+- Auto-update in coordinate widget causing excessive OCR operations
+
+### Root Cause Analysis
+- Rate limiting in `GameWorldCoordinator.update_current_position_from_ocr()` was too short (0.5 seconds)
+- Auto-update interval in `CoordinateDisplayWidget` was too short (2 seconds)
+- Auto-update was sometimes enabled by default or not properly disabled when OCR was stopped
+- Cancellation mechanism wasn't aggressive enough to stop all OCR-related processes
+- Timeout checks weren't frequent enough to detect cancellation requests quickly
+
+### Solutions Implemented
+1. Increased rate limiting in `GameWorldCoordinator.update_current_position_from_ocr()`:
+   - Changed from 0.5 seconds to 2.0 seconds to prevent excessive updates
+2. Modified `CoordinateDisplayWidget` to improve auto-update behavior:
+   - Increased auto-update interval from 2 seconds to 5 seconds
+   - Ensured auto-update is disabled by default
+   - Added more frequent cancellation checks during updates
+3. Enhanced the `TextOCR.stop()` method:
+   - Added a verification step to ensure OCR is fully stopped
+   - Added a delayed check to force stop if still active
+4. Improved the key press event handler in `gui_controller.py`:
+   - Set cancellation flag immediately on key press
+   - Added code to stop coordinate widget auto-update when OCR is stopped
+5. Enhanced the `_stop_ocr()` method:
+   - Added code to stop coordinate widget auto-update
+   - Added a verification step to ensure OCR is fully stopped
+6. Added a new `_verify_ocr_stopped()` method to `OverlayController`:
+   - Checks if OCR is still active after stop request
+   - Forces stop if OCR is still active
+   - Updates UI to reflect forced stop
+7. Modified the `_update_coordinates()` method in `CoordinateDisplayWidget`:
+   - Reduced timeout from 5 seconds to 3 seconds
+   - Increased frequency of timeout checks from 500ms to 200ms
+   - Added more cancellation checks during the update process
+
+### Prevention Strategies
+1. Implemented more aggressive rate limiting to prevent excessive OCR updates
+2. Added multiple verification steps to ensure OCR is fully stopped
+3. Ensured auto-update is properly disabled when OCR is stopped
+4. Added more frequent cancellation checks during OCR operations
+5. Improved coordination between different components that use OCR
+
+### Testing
+1. Verified that OCR updates occur at a reasonable frequency
+2. Confirmed that the mouse is not constantly being centered
+3. Tested that Escape/Q keys properly stop all OCR-related processes
+4. Verified that auto-update is properly disabled when OCR is stopped
+5. Confirmed that the application remains responsive during OCR operations
+
+## Calibration Display Inconsistency (Fixed)
+**Date:** March 1, 2024
+**Status:** FIXED
+
+### Issue Description
+The calibration results were displaying inconsistent values between the GUI widgets and the logs. Specifically:
+- The East direction values were showing different results in different parts of the UI
+- The wrapped distance calculations were not consistently applied across all display locations
+- The ratios shown in the GUI didn't match the actual calculations in the logs
+
+### Root Cause
+1. Different widgets (DirectionWidget and CoordinateDisplayWidget) were using different methods to calculate and display the calibration results
+2. The wrapped distance calculation was not consistently implemented across all display locations
+3. The GUI wasn't showing the detailed movement information that was available in the logs
+
+### Solution
+1. Updated both DirectionWidget and CoordinateDisplayWidget to:
+   - Use the same wrapped distance calculation logic
+   - Show consistent ratio calculations
+   - Display detailed movement information
+2. Improved the display format to show:
+   - Raw screen distances
+   - Absolute game unit values
+   - Calculated ratios for both directions
+3. Added validation for screen distances against window dimensions
+4. Enhanced logging to show more detailed movement information
+
+### Implementation Details
+1. Modified DirectionWidget._start_calibration():
+   - Added proper wrapped distance calculation
+   - Improved progress feedback
+   - Enhanced results display with ratios
+2. Updated CoordinateDisplayWidget._update_calibration_display():
+   - Added detailed movement information
+   - Implemented consistent distance calculations
+   - Improved results formatting
+3. Both widgets now show:
+   - Screen distances in pixels
+   - Game unit movements with proper wrapping
+   - Calculated ratios for verification
+
+### Verification
+- Calibration results now match between:
+  - Log output
+  - DirectionWidget display
+  - CoordinateDisplayWidget display
+- All displays show the same:
+  - Screen distances
+  - Game unit movements
+  - Pixels per game unit ratios
+
+### Prevention
+To prevent similar issues in the future:
+1. Always implement consistent calculation methods across all display locations
+2. Use the same validation and wrapping logic throughout the application
+3. Show detailed information in the GUI to match log output
+4. Validate displayed values against actual calculations
+
+## [FIXED] Inconsistent Y Measurements in Direction Calibration
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** GameWorldDirection
+
+### Issue Description
+During direction calibration, the first Y measurement was consistently higher (~23%) than subsequent measurements, causing calibration failures due to inconsistent ratios.
+
+### Root Cause
+The game world was not fully stabilized after movements before taking measurements. The first measurement was affected by residual movement in the game world.
+
+### Solution
+Modified the `_calibrate_direction` method in `game_world_direction.py` to:
+1. Increase initial wait time from 1.0s to 1.5s
+2. Add multiple OCR updates (3 times with 0.5s delay) at each critical point:
+   - Before taking the start position
+   - After the drag movement
+   - After returning to start position
+3. Increase wait time after movements from 1.5s to 2.0s
+
+### Verification
+- Y measurements are now consistent across all runs
+- Calibration completes successfully with consistent ratios
+- No more outliers in the first measurement 
+
+## [FIXED] OCR Region Out of Window Bounds
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** TextOCR
+
+### Issue Description
+OCR was failing to read coordinates because the OCR region was being positioned outside the game window bounds, particularly when the window was moved or resized.
+
+### Root Cause
+The OCR region coordinates were not being properly validated against window bounds, and physical screen coordinates were not being updated when the window moved.
+
+### Solution
+1. Enhanced `set_region` method in `TextOCR` class to:
+   - Add bounds checking to ensure region stays within window
+   - Store both logical (window-relative) and physical (screen) coordinates
+   - Improve error handling and validation
+2. Updated `_process_region` method to:
+   - Dynamically update physical coordinates based on current window position
+   - Add bounds checking during processing
+   - Improve screenshot saving for debugging
+   - Enhance error handling and logging
+
+### Verification
+- OCR region now stays within game window bounds
+- Region automatically adjusts when window moves
+- Coordinates are properly read during scans
+- Debug screenshots are saved for verification 
+
+## [FIXED] Missing Screenshot Capture Method
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** WindowManager, TextOCR
+
+### Issue Description
+OCR system was broken in both overlay and game world tab due to a missing `capture_region` method in the WindowManager class.
+
+### Root Cause
+During the OCR system refactoring, we moved the screenshot capture functionality from TextOCR to WindowManager for better organization, but the implementation of `capture_region` was missing.
+
+### Solution
+1. Added `capture_region` method to WindowManager:
+   - Takes region dictionary with left, top, width, height
+   - Uses mss for efficient screen capture
+   - Converts BGRA to BGR format for OpenCV compatibility
+   - Includes proper error handling
+2. Added necessary imports:
+   - numpy for array handling
+   - cv2 for image processing
+   - mss for screen capture
+
+### Verification
+- OCR system now works in both overlay and game world tab
+- Screenshots are properly captured and processed
+- Color format is correctly converted for OpenCV
+- Error handling properly catches and logs issues 
+
+## [FIXED] OCR Region Update and Game State Sync
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** TextOCR
+
+### Issue Description
+OCR system was failing to properly update coordinates and maintain game state synchronization after the screenshot capture refactoring.
+
+### Root Cause
+1. Physical region updates were not properly maintaining all required fields
+2. Game state was not being updated with new coordinates
+3. Region dictionary was being modified in place instead of being recreated
+
+### Solution
+1. Fixed physical region updates in TextOCR:
+   - Now creating new region dictionary with all fields
+   - Properly calculating screen coordinates from window position
+   - Maintaining dpi_scale and other required properties
+2. Added game state synchronization:
+   - Updating game state when new coordinates are extracted
+   - Ensuring coordinates are properly formatted
+3. Improved error handling and logging:
+   - Better debug messages for troubleshooting
+   - Clearer logging of coordinate extraction results
+
+### Verification
+- OCR system now properly updates coordinates
+- Game state stays synchronized with latest coordinates
+- Debug screenshots are properly saved
+- Error handling provides clear feedback 
+
+## [FIXED] Game World Search Functionality
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** GameWorldSearch
+
+### Issue Description
+Search functionality was failing due to:
+1. Missing `get_game_position` method
+2. PyDirectInput fail-safe triggering from excessive mouse movement
+3. Incorrect drag vector calculation
+
+### Root Cause
+1. The `get_game_position` method was referenced but not implemented
+2. Drag vectors were being calculated without proper bounds checking
+3. Mouse movements were attempting to move outside window bounds
+
+### Solution
+1. Added `get_game_position` method:
+   - Calculates game world position from grid coordinates
+   - Uses start position and drag distances
+   - Handles coordinate wrapping properly
+2. Improved drag vector calculation:
+   - Added proper scaling based on window dimensions
+   - Implemented bounds checking for drag coordinates
+   - Centered drags around window center
+3. Enhanced movement logic:
+   - Added relative window coordinates for drags
+   - Implemented proper coordinate wrapping
+   - Added better error handling and logging
+
+### Verification
+- Search functionality now works correctly
+- Mouse movements stay within window bounds
+- Grid positions are properly calculated
+- Drag operations complete successfully 
+
+## [FIXED] Search Movement Using Calibrated Drag Points
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** GameWorldSearch
+
+### Issue Description
+Search movement was not using the calibrated drag points from direction definitions, leading to inconsistent movement and potential errors.
+
+### Root Cause
+The `_move_to_position` method was calculating its own drag points based on window dimensions instead of using the calibrated points from direction definitions.
+
+### Solution
+Modified `_move_to_position` method to:
+1. Use calibrated drag points:
+   - North/South drags use points from north definition
+   - East/West drags use points from east definition
+2. Calculate number of drags needed:
+   - Based on target distance and calibrated drag distances
+   - Handles both positive and negative movements
+3. Perform drags in sequence:
+   - First east/west movement
+   - Then north/south movement
+   - Uses proper inverse points for opposite directions
+
+### Verification
+- Search movement now uses calibrated drag points
+- Movement is consistent with calibration
+- Proper handling of both directions
+- Correct use of inverse points for opposite movements
+
+## 2023-08-13: Fixed OCR Process and Q/Escape Key Handling
+
+### Issue
+1. Coordinates were not being displayed in the GUI despite being extracted by the OCR process
+2. The OCR process could not be canceled with Q/Escape keys
+
+### Root Cause
+1. The coordinate display widget was only updating the display when the OCR process returned success, but wasn't checking if there were valid coordinates in the game world coordinator
+2. The keyPressEvent method was checking `self.text_ocr.active` which wasn't properly tracking the OCR state
+3. The TextOCR class had inconsistent state tracking with both `self.active` and internal timer state
+
+### Solution
+1. Modified the `_update_coordinates` method in `CoordinateDisplayWidget` to:
+   - Get the current position regardless of OCR success
+   - Display partial coordinates with placeholders for missing values
+   - Use different colors to indicate full, partial, or missing coordinates
+2. Fixed the `keyPressEvent` method in `OverlayController` to:
+   - Check the OCR button state instead of `text_ocr.active`
+   - Add proper error handling when stopping the OCR process
+3. Improved the TextOCR class with:
+   - Added a proper `active` property to track OCR state
+   - Ensured consistent state tracking between the property and internal timer
+
+### Prevention
+1. Added more detailed logging to track coordinate display issues
+2. Improved error handling throughout the OCR process
+3. Added proper state tracking in the TextOCR class
+4. Used button state as the source of truth for process state in key event handling
+
+### Testing
+1. Verified that coordinates are displayed in the GUI even when some values are missing
+2. Confirmed that the Q/Escape keys properly stop the OCR process
+3. Tested error handling by simulating OCR failures
+4. Verified that the OCR button state correctly reflects the OCR process state
+
+## 2023-08-14: Fixed OCR Process Performance and Temporary Files Issues
+
+### Issues Fixed
+- Application getting stuck or becoming unresponsive during OCR operations
+- Excessive temporary PNG files being created in the system temp folder
+- OCR process not stopping when using Q/Escape keys
+- Coordinates not being displayed in the GUI despite being extracted
+
+### Root Cause Analysis
+- The pytesseract library was creating numerous temporary files for each OCR operation
+- Multiple OCR methods were being run in quick succession, creating a large number of temporary files
+- The OCR process was being called too frequently without rate limiting
+- The drag calibration system increased the number of OCR operations, exacerbating the issue
+
+### Solutions Implemented
+1. Optimized the OCR process in `TextOCR.extract_text()`:
+   - Only process the preferred OCR method when not in auto mode
+   - Standardized configuration parameters to reduce redundancy
+   - Simplified the OCR method selection process
+2. Added rate limiting to `GameWorldCoordinator.update_current_position_from_ocr()`:
+   - Implemented a minimum 500ms delay between OCR operations
+   - Added early return with existing coordinates when rate limited
+   - Improved logging to track rate-limited operations
+3. Enhanced error handling throughout the OCR process:
+   - Better timeout handling to prevent the application from hanging
+   - Improved fallback to existing coordinates when OCR fails
+   - More robust state tracking for the OCR process
+
+### Prevention Strategies
+1. Implemented rate limiting to prevent excessive OCR operations
+2. Reduced the number of temporary files created during OCR
+3. Improved error handling and timeout mechanisms
+4. Enhanced logging to better track OCR operations and failures
+5. Added more robust state tracking for the OCR process
+
+### Testing
+1. Verified that the application remains responsive during OCR operations
+2. Confirmed that fewer temporary files are created during OCR
+3. Tested that the Q/Escape keys properly stop the OCR process
+4. Verified that coordinates are displayed in the GUI even when some values are missing
+5. Confirmed that the OCR process works correctly with the drag calibration system
+
+## 2023-08-15: Fixed OCR Process Getting Stuck When Using Escape/Q Keys
+
+### Issues Fixed
+- Application getting stuck when trying to escape/q out of the OCR process
+- OCR process not responding to cancellation requests
+- UI becoming unresponsive during OCR operations
+
+### Root Cause Analysis
+- The OCR process in `TextOCR._process_region()` and `extract_text()` methods had no mechanism to check for cancellation requests during execution
+- The `pytesseract` library operations could not be interrupted once started
+- The key press event handler in `gui_controller.py` was not properly setting cancellation flags before stopping the OCR process
+- Timeout mechanisms were not properly integrated with cancellation flags
+
+### Solutions Implemented
+1. Added a cancellation flag to the `TextOCR` class:
+   - Added `_cancellation_requested` flag to track cancellation requests
+   - Modified `start()` method to reset the flag
+   - Modified `stop()` method to set the flag
+2. Enhanced the `_process_region()` method to check for cancellation:
+   - Added checks at key points in the method to exit early if cancellation is requested
+   - Added logging to track cancellation events
+3. Modified the `extract_text()` method to check for cancellation:
+   - Added check at the beginning of the method to exit early if cancellation is requested
+4. Improved the key press event handler in `gui_controller.py`:
+   - Set cancellation flag directly before calling `_stop_ocr()`
+   - Added immediate UI feedback when cancellation is requested
+5. Enhanced the `_stop_ocr()` method to ensure proper cancellation:
+   - Set cancellation flag before disconnecting signals
+   - Added error handling for signal disconnection
+   - Ensured button state is properly updated
+6. Modified the `_toggle_ocr()` and `_perform_ocr_toggle()` methods:
+   - Set cancellation flag immediately when turning off OCR
+   - Reset cancellation flag when starting OCR
+7. Updated the `update_current_position_from_ocr()` method in `GameWorldCoordinator`:
+   - Added check for cancellation flag
+   - Added early return if cancellation is requested
+8. Enhanced the `_update_coordinates()` method in `CoordinateDisplayWidget`:
+   - Added checks for cancellation flag
+   - Set cancellation flag if timeout is reached
+   - Added proper UI feedback for cancellation events
+
+### Prevention Strategies
+1. Implemented a comprehensive cancellation mechanism throughout the OCR process
+2. Added multiple cancellation check points in long-running operations
+3. Ensured proper UI feedback for cancellation events
+4. Integrated timeout mechanisms with cancellation flags
+5. Added detailed logging for cancellation events
+
+### Testing
+1. Verified that the application properly responds to Escape/Q keys during OCR operations
+2. Confirmed that the OCR process stops immediately when cancellation is requested
+3. Tested that the UI remains responsive during OCR operations
+4. Verified that proper error messages are displayed when OCR is cancelled
+5. Confirmed that auto-update is properly stopped when OCR is cancelled
+
+## 2023-08-16: Fixed Excessive OCR Updates and Mouse Centering
+
+### Issues Fixed
+- Application constantly updating OCR too frequently
+- Mouse constantly being reset to the center of the game window
+- OCR process still not responding properly to Escape/Q keys
+- Auto-update in coordinate widget causing excessive OCR operations
+
+### Root Cause Analysis
+- Rate limiting in `GameWorldCoordinator.update_current_position_from_ocr()` was too short (0.5 seconds)
+- Auto-update interval in `CoordinateDisplayWidget` was too short (2 seconds)
+- Auto-update was sometimes enabled by default or not properly disabled when OCR was stopped
+- Cancellation mechanism wasn't aggressive enough to stop all OCR-related processes
+- Timeout checks weren't frequent enough to detect cancellation requests quickly
+
+### Solutions Implemented
+1. Increased rate limiting in `GameWorldCoordinator.update_current_position_from_ocr()`:
+   - Changed from 0.5 seconds to 2.0 seconds to prevent excessive updates
+2. Modified `CoordinateDisplayWidget` to improve auto-update behavior:
+   - Increased auto-update interval from 2 seconds to 5 seconds
+   - Ensured auto-update is disabled by default
+   - Added more frequent cancellation checks during updates
+3. Enhanced the `TextOCR.stop()` method:
+   - Added a verification step to ensure OCR is fully stopped
+   - Added a delayed check to force stop if still active
+4. Improved the key press event handler in `gui_controller.py`:
+   - Set cancellation flag immediately on key press
+   - Added code to stop coordinate widget auto-update when OCR is stopped
+5. Enhanced the `_stop_ocr()` method:
+   - Added code to stop coordinate widget auto-update
+   - Added a verification step to ensure OCR is fully stopped
+6. Added a new `_verify_ocr_stopped()` method to `OverlayController`:
+   - Checks if OCR is still active after stop request
+   - Forces stop if OCR is still active
+   - Updates UI to reflect forced stop
+7. Modified the `_update_coordinates()` method in `CoordinateDisplayWidget`:
+   - Reduced timeout from 5 seconds to 3 seconds
+   - Increased frequency of timeout checks from 500ms to 200ms
+   - Added more cancellation checks during the update process
+
+### Prevention Strategies
+1. Implemented more aggressive rate limiting to prevent excessive OCR updates
+2. Added multiple verification steps to ensure OCR is fully stopped
+3. Ensured auto-update is properly disabled when OCR is stopped
+4. Added more frequent cancellation checks during OCR operations
+5. Improved coordination between different components that use OCR
+
+### Testing
+1. Verified that OCR updates occur at a reasonable frequency
+2. Confirmed that the mouse is not constantly being centered
+3. Tested that Escape/Q keys properly stop all OCR-related processes
+4. Verified that auto-update is properly disabled when OCR is stopped
+5. Confirmed that the application remains responsive during OCR operations
+
+## Calibration Display Inconsistency (Fixed)
+**Date:** March 1, 2024
+**Status:** FIXED
+
+### Issue Description
+The calibration results were displaying inconsistent values between the GUI widgets and the logs. Specifically:
+- The East direction values were showing different results in different parts of the UI
+- The wrapped distance calculations were not consistently applied across all display locations
+- The ratios shown in the GUI didn't match the actual calculations in the logs
+
+### Root Cause
+1. Different widgets (DirectionWidget and CoordinateDisplayWidget) were using different methods to calculate and display the calibration results
+2. The wrapped distance calculation was not consistently implemented across all display locations
+3. The GUI wasn't showing the detailed movement information that was available in the logs
+
+### Solution
+1. Updated both DirectionWidget and CoordinateDisplayWidget to:
+   - Use the same wrapped distance calculation logic
+   - Show consistent ratio calculations
+   - Display detailed movement information
+2. Improved the display format to show:
+   - Raw screen distances
+   - Absolute game unit values
+   - Calculated ratios for both directions
+3. Added validation for screen distances against window dimensions
+4. Enhanced logging to show more detailed movement information
+
+### Implementation Details
+1. Modified DirectionWidget._start_calibration():
+   - Added proper wrapped distance calculation
+   - Improved progress feedback
+   - Enhanced results display with ratios
+2. Updated CoordinateDisplayWidget._update_calibration_display():
+   - Added detailed movement information
+   - Implemented consistent distance calculations
+   - Improved results formatting
+3. Both widgets now show:
+   - Screen distances in pixels
+   - Game unit movements with proper wrapping
+   - Calculated ratios for verification
+
+### Verification
+- Calibration results now match between:
+  - Log output
+  - DirectionWidget display
+  - CoordinateDisplayWidget display
+- All displays show the same:
+  - Screen distances
+  - Game unit movements
+  - Pixels per game unit ratios
+
+### Prevention
+To prevent similar issues in the future:
+1. Always implement consistent calculation methods across all display locations
+2. Use the same validation and wrapping logic throughout the application
+3. Show detailed information in the GUI to match log output
+4. Validate displayed values against actual calculations
+
+## [FIXED] Inconsistent Y Measurements in Direction Calibration
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** GameWorldDirection
+
+### Issue Description
+During direction calibration, the first Y measurement was consistently higher (~23%) than subsequent measurements, causing calibration failures due to inconsistent ratios.
+
+### Root Cause
+The game world was not fully stabilized after movements before taking measurements. The first measurement was affected by residual movement in the game world.
+
+### Solution
+Modified the `_calibrate_direction` method in `game_world_direction.py` to:
+1. Increase initial wait time from 1.0s to 1.5s
+2. Add multiple OCR updates (3 times with 0.5s delay) at each critical point:
+   - Before taking the start position
+   - After the drag movement
+   - After returning to start position
+3. Increase wait time after movements from 1.5s to 2.0s
+
+### Verification
+- Y measurements are now consistent across all runs
+- Calibration completes successfully with consistent ratios
+- No more outliers in the first measurement 
+
+## [FIXED] OCR Region Out of Window Bounds
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** TextOCR
+
+### Issue Description
+OCR was failing to read coordinates because the OCR region was being positioned outside the game window bounds, particularly when the window was moved or resized.
+
+### Root Cause
+The OCR region coordinates were not being properly validated against window bounds, and physical screen coordinates were not being updated when the window moved.
+
+### Solution
+1. Enhanced `set_region` method in `TextOCR` class to:
+   - Add bounds checking to ensure region stays within window
+   - Store both logical (window-relative) and physical (screen) coordinates
+   - Improve error handling and validation
+2. Updated `_process_region` method to:
+   - Dynamically update physical coordinates based on current window position
+   - Add bounds checking during processing
+   - Improve screenshot saving for debugging
+   - Enhance error handling and logging
+
+### Verification
+- OCR region now stays within game window bounds
+- Region automatically adjusts when window moves
+- Coordinates are properly read during scans
+- Debug screenshots are saved for verification 
+
+## [FIXED] Missing Screenshot Capture Method
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** WindowManager, TextOCR
+
+### Issue Description
+OCR system was broken in both overlay and game world tab due to a missing `capture_region` method in the WindowManager class.
+
+### Root Cause
+During the OCR system refactoring, we moved the screenshot capture functionality from TextOCR to WindowManager for better organization, but the implementation of `capture_region` was missing.
+
+### Solution
+1. Added `capture_region` method to WindowManager:
+   - Takes region dictionary with left, top, width, height
+   - Uses mss for efficient screen capture
+   - Converts BGRA to BGR format for OpenCV compatibility
+   - Includes proper error handling
+2. Added necessary imports:
+   - numpy for array handling
+   - cv2 for image processing
+   - mss for screen capture
+
+### Verification
+- OCR system now works in both overlay and game world tab
+- Screenshots are properly captured and processed
+- Color format is correctly converted for OpenCV
+- Error handling properly catches and logs issues 
+
+## [FIXED] OCR Region Update and Game State Sync
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** TextOCR
+
+### Issue Description
+OCR system was failing to properly update coordinates and maintain game state synchronization after the screenshot capture refactoring.
+
+### Root Cause
+1. Physical region updates were not properly maintaining all required fields
+2. Game state was not being updated with new coordinates
+3. Region dictionary was being modified in place instead of being recreated
+
+### Solution
+1. Fixed physical region updates in TextOCR:
+   - Now creating new region dictionary with all fields
+   - Properly calculating screen coordinates from window position
+   - Maintaining dpi_scale and other required properties
+2. Added game state synchronization:
+   - Updating game state when new coordinates are extracted
+   - Ensuring coordinates are properly formatted
+3. Improved error handling and logging:
+   - Better debug messages for troubleshooting
+   - Clearer logging of coordinate extraction results
+
+### Verification
+- OCR system now properly updates coordinates
+- Game state stays synchronized with latest coordinates
+- Debug screenshots are properly saved
+- Error handling provides clear feedback 
+
+## [FIXED] Game World Search Functionality
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** GameWorldSearch
+
+### Issue Description
+Search functionality was failing due to:
+1. Missing `get_game_position` method
+2. PyDirectInput fail-safe triggering from excessive mouse movement
+3. Incorrect drag vector calculation
+
+### Root Cause
+1. The `get_game_position` method was referenced but not implemented
+2. Drag vectors were being calculated without proper bounds checking
+3. Mouse movements were attempting to move outside window bounds
+
+### Solution
+1. Added `get_game_position` method:
+   - Calculates game world position from grid coordinates
+   - Uses start position and drag distances
+   - Handles coordinate wrapping properly
+2. Improved drag vector calculation:
+   - Added proper scaling based on window dimensions
+   - Implemented bounds checking for drag coordinates
+   - Centered drags around window center
+3. Enhanced movement logic:
+   - Added relative window coordinates for drags
+   - Implemented proper coordinate wrapping
+   - Added better error handling and logging
+
+### Verification
+- Search functionality now works correctly
+- Mouse movements stay within window bounds
+- Grid positions are properly calculated
+- Drag operations complete successfully 
+
+## [FIXED] Search Movement Using Calibrated Drag Points
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** GameWorldSearch
+
+### Issue Description
+Search movement was not using the calibrated drag points from direction definitions, leading to inconsistent movement and potential errors.
+
+### Root Cause
+The `_move_to_position` method was calculating its own drag points based on window dimensions instead of using the calibrated points from direction definitions.
+
+### Solution
+Modified `_move_to_position` method to:
+1. Use calibrated drag points:
+   - North/South drags use points from north definition
+   - East/West drags use points from east definition
+2. Calculate number of drags needed:
+   - Based on target distance and calibrated drag distances
+   - Handles both positive and negative movements
+3. Perform drags in sequence:
+   - First east/west movement
+   - Then north/south movement
+   - Uses proper inverse points for opposite directions
+
+### Verification
+- Search movement now uses calibrated drag points
+- Movement is consistent with calibration
+- Proper handling of both directions
+- Correct use of inverse points for opposite movements
+
+## 2023-08-17: Fixed OCR Process and Q/Escape Key Handling
+
+### Issue
+1. Coordinates were not being displayed in the GUI despite being extracted by the OCR process
+2. The OCR process could not be canceled with Q/Escape keys
+
+### Root Cause
+1. The coordinate display widget was only updating the display when the OCR process returned success, but wasn't checking if there were valid coordinates in the game world coordinator
+2. The keyPressEvent method was checking `self.text_ocr.active` which wasn't properly tracking the OCR state
+3. The TextOCR class had inconsistent state tracking with both `self.active` and internal timer state
+
+### Solution
+1. Modified the `_update_coordinates` method in `CoordinateDisplayWidget` to:
+   - Get the current position regardless of OCR success
+   - Display partial coordinates with placeholders for missing values
+   - Use different colors to indicate full, partial, or missing coordinates
+2. Fixed the `keyPressEvent` method in `OverlayController` to:
+   - Check the OCR button state instead of `text_ocr.active`
+   - Add proper error handling when stopping the OCR process
+3. Improved the TextOCR class with:
+   - Added a proper `active` property to track OCR state
+   - Ensured consistent state tracking between the property and internal timer
+
+### Prevention
+1. Added more detailed logging to track coordinate display issues
+2. Improved error handling throughout the OCR process
+3. Added proper state tracking in the TextOCR class
+4. Used button state as the source of truth for process state in key event handling
+
+### Testing
+1. Verified that coordinates are displayed in the GUI even when some values are missing
+2. Confirmed that the Q/Escape keys properly stop the OCR process
+3. Tested error handling by simulating OCR failures
+4. Verified that the OCR button state correctly reflects the OCR process state
+
+## 2023-08-18: Fixed OCR Process Performance and Temporary Files Issues
+
+### Issues Fixed
+- Application getting stuck or becoming unresponsive during OCR operations
+- Excessive temporary PNG files being created in the system temp folder
+- OCR process not stopping when using Q/Escape keys
+- Coordinates not being displayed in the GUI despite being extracted
+
+### Root Cause Analysis
+- The pytesseract library was creating numerous temporary files for each OCR operation
+- Multiple OCR methods were being run in quick succession, creating a large number of temporary files
+- The OCR process was being called too frequently without rate limiting
+- The drag calibration system increased the number of OCR operations, exacerbating the issue
+
+### Solutions Implemented
+1. Optimized the OCR process in `TextOCR.extract_text()`:
+   - Only process the preferred OCR method when not in auto mode
+   - Standardized configuration parameters to reduce redundancy
+   - Simplified the OCR method selection process
+2. Added rate limiting to `GameWorldCoordinator.update_current_position_from_ocr()`:
+   - Implemented a minimum 500ms delay between OCR operations
+   - Added early return with existing coordinates when rate limited
+   - Improved logging to track rate-limited operations
+3. Enhanced error handling throughout the OCR process:
+   - Better timeout handling to prevent the application from hanging
+   - Improved fallback to existing coordinates when OCR fails
+   - More robust state tracking for the OCR process
+
+### Prevention Strategies
+1. Implemented rate limiting to prevent excessive OCR operations
+2. Reduced the number of temporary files created during OCR
+3. Improved error handling and timeout mechanisms
+4. Enhanced logging to better track OCR operations and failures
+5. Added more robust state tracking for the OCR process
+
+### Testing
+1. Verified that the application remains responsive during OCR operations
+2. Confirmed that fewer temporary files are created during OCR
+3. Tested that the Q/Escape keys properly stop the OCR process
+4. Verified that coordinates are displayed in the GUI even when some values are missing
+5. Confirmed that the OCR process works correctly with the drag calibration system
+
+## 2023-08-19: Fixed OCR Process Getting Stuck When Using Escape/Q Keys
+
+### Issues Fixed
+- Application getting stuck when trying to escape/q out of the OCR process
+- OCR process not responding to cancellation requests
+- UI becoming unresponsive during OCR operations
+
+### Root Cause Analysis
+- The OCR process in `TextOCR._process_region()` and `extract_text()` methods had no mechanism to check for cancellation requests during execution
+- The `pytesseract` library operations could not be interrupted once started
+- The key press event handler in `gui_controller.py` was not properly setting cancellation flags before stopping the OCR process
+- Timeout mechanisms were not properly integrated with cancellation flags
+
+### Solutions Implemented
+1. Added a cancellation flag to the `TextOCR` class:
+   - Added `_cancellation_requested` flag to track cancellation requests
+   - Modified `start()` method to reset the flag
+   - Modified `stop()` method to set the flag
+2. Enhanced the `_process_region()` method to check for cancellation:
+   - Added checks at key points in the method to exit early if cancellation is requested
+   - Added logging to track cancellation events
+3. Modified the `extract_text()` method to check for cancellation:
+   - Added check at the beginning of the method to exit early if cancellation is requested
+4. Improved the key press event handler in `gui_controller.py`:
+   - Set cancellation flag directly before calling `_stop_ocr()`
+   - Added immediate UI feedback when cancellation is requested
+5. Enhanced the `_stop_ocr()` method to ensure proper cancellation:
+   - Set cancellation flag before disconnecting signals
+   - Added error handling for signal disconnection
+   - Ensured button state is properly updated
+6. Modified the `_toggle_ocr()` and `_perform_ocr_toggle()` methods:
+   - Set cancellation flag immediately when turning off OCR
+   - Reset cancellation flag when starting OCR
+7. Updated the `update_current_position_from_ocr()` method in `GameWorldCoordinator`:
+   - Added check for cancellation flag
+   - Added early return if cancellation is requested
+8. Enhanced the `_update_coordinates()` method in `CoordinateDisplayWidget`:
+   - Added checks for cancellation flag
+   - Set cancellation flag if timeout is reached
+   - Added proper UI feedback for cancellation events
+
+### Prevention Strategies
+1. Implemented a comprehensive cancellation mechanism throughout the OCR process
+2. Added multiple cancellation check points in long-running operations
+3. Ensured proper UI feedback for cancellation events
+4. Integrated timeout mechanisms with cancellation flags
+5. Added detailed logging for cancellation events
+
+### Testing
+1. Verified that the application properly responds to Escape/Q keys during OCR operations
+2. Confirmed that the OCR process stops immediately when cancellation is requested
+3. Tested that the UI remains responsive during OCR operations
+4. Verified that proper error messages are displayed when OCR is cancelled
+5. Confirmed that auto-update is properly stopped when OCR is cancelled
+
+## 2023-08-20: Fixed Excessive OCR Updates and Mouse Centering
+
+### Issues Fixed
+- Application constantly updating OCR too frequently
+- Mouse constantly being reset to the center of the game window
+- OCR process still not responding properly to Escape/Q keys
+- Auto-update in coordinate widget causing excessive OCR operations
+
+### Root Cause Analysis
+- Rate limiting in `GameWorldCoordinator.update_current_position_from_ocr()` was too short (0.5 seconds)
+- Auto-update interval in `CoordinateDisplayWidget` was too short (2 seconds)
+- Auto-update was sometimes enabled by default or not properly disabled when OCR was stopped
+- Cancellation mechanism wasn't aggressive enough to stop all OCR-related processes
+- Timeout checks weren't frequent enough to detect cancellation requests quickly
+
+### Solutions Implemented
+1. Increased rate limiting in `GameWorldCoordinator.update_current_position_from_ocr()`:
+   - Changed from 0.5 seconds to 2.0 seconds to prevent excessive updates
+2. Modified `CoordinateDisplayWidget` to improve auto-update behavior:
+   - Increased auto-update interval from 2 seconds to 5 seconds
+   - Ensured auto-update is disabled by default
+   - Added more frequent cancellation checks during updates
+3. Enhanced the `TextOCR.stop()` method:
+   - Added a verification step to ensure OCR is fully stopped
+   - Added a delayed check to force stop if still active
+4. Improved the key press event handler in `gui_controller.py`:
+   - Set cancellation flag immediately on key press
+   - Added code to stop coordinate widget auto-update when OCR is stopped
+5. Enhanced the `_stop_ocr()` method:
+   - Added code to stop coordinate widget auto-update
+   - Added a verification step to ensure OCR is fully stopped
+6. Added a new `_verify_ocr_stopped()` method to `OverlayController`:
+   - Checks if OCR is still active after stop request
+   - Forces stop if OCR is still active
+   - Updates UI to reflect forced stop
+7. Modified the `_update_coordinates()` method in `CoordinateDisplayWidget`:
+   - Reduced timeout from 5 seconds to 3 seconds
+   - Increased frequency of timeout checks from 500ms to 200ms
+   - Added more cancellation checks during the update process
+
+### Prevention Strategies
+1. Implemented more aggressive rate limiting to prevent excessive OCR updates
+2. Added multiple verification steps to ensure OCR is fully stopped
+3. Ensured auto-update is properly disabled when OCR is stopped
+4. Added more frequent cancellation checks during OCR operations
+5. Improved coordination between different components that use OCR
+
+### Testing
+1. Verified that OCR updates occur at a reasonable frequency
+2. Confirmed that the mouse is not constantly being centered
+3. Tested that Escape/Q keys properly stop all OCR-related processes
+4. Verified that auto-update is properly disabled when OCR is stopped
+5. Confirmed that the application remains responsive during OCR operations
+
+## Calibration Display Inconsistency (Fixed)
+**Date:** March 1, 2024
+**Status:** FIXED
+
+### Issue Description
+The calibration results were displaying inconsistent values between the GUI widgets and the logs. Specifically:
+- The East direction values were showing different results in different parts of the UI
+- The wrapped distance calculations were not consistently applied across all display locations
+- The ratios shown in the GUI didn't match the actual calculations in the logs
+
+### Root Cause
+1. Different widgets (DirectionWidget and CoordinateDisplayWidget) were using different methods to calculate and display the calibration results
+2. The wrapped distance calculation was not consistently implemented across all display locations
+3. The GUI wasn't showing the detailed movement information that was available in the logs
+
+### Solution
+1. Updated both DirectionWidget and CoordinateDisplayWidget to:
+   - Use the same wrapped distance calculation logic
+   - Show consistent ratio calculations
+   - Display detailed movement information
+2. Improved the display format to show:
+   - Raw screen distances
+   - Absolute game unit values
+   - Calculated ratios for both directions
+3. Added validation for screen distances against window dimensions
+4. Enhanced logging to show more detailed movement information
+
+### Implementation Details
+1. Modified DirectionWidget._start_calibration():
+   - Added proper wrapped distance calculation
+   - Improved progress feedback
+   - Enhanced results display with ratios
+2. Updated CoordinateDisplayWidget._update_calibration_display():
+   - Added detailed movement information
+   - Implemented consistent distance calculations
+   - Improved results formatting
+3. Both widgets now show:
+   - Screen distances in pixels
+   - Game unit movements with proper wrapping
+   - Calculated ratios for verification
+
+### Verification
+- Calibration results now match between:
+  - Log output
+  - DirectionWidget display
+  - CoordinateDisplayWidget display
+- All displays show the same:
+  - Screen distances
+  - Game unit movements
+  - Pixels per game unit ratios
+
+### Prevention
+To prevent similar issues in the future:
+1. Always implement consistent calculation methods across all display locations
+2. Use the same validation and wrapping logic throughout the application
+3. Show detailed information in the GUI to match log output
+4. Validate displayed values against actual calculations
+
+## [FIXED] Inconsistent Y Measurements in Direction Calibration
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** GameWorldDirection
+
+### Issue Description
+During direction calibration, the first Y measurement was consistently higher (~23%) than subsequent measurements, causing calibration failures due to inconsistent ratios.
+
+### Root Cause
+The game world was not fully stabilized after movements before taking measurements. The first measurement was affected by residual movement in the game world.
+
+### Solution
+Modified the `_calibrate_direction` method in `game_world_direction.py` to:
+1. Increase initial wait time from 1.0s to 1.5s
+2. Add multiple OCR updates (3 times with 0.5s delay) at each critical point:
+   - Before taking the start position
+   - After the drag movement
+   - After returning to start position
+3. Increase wait time after movements from 1.5s to 2.0s
+
+### Verification
+- Y measurements are now consistent across all runs
+- Calibration completes successfully with consistent ratios
+- No more outliers in the first measurement 
+
+## [FIXED] OCR Region Out of Window Bounds
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** TextOCR
+
+### Issue Description
+OCR was failing to read coordinates because the OCR region was being positioned outside the game window bounds, particularly when the window was moved or resized.
+
+### Root Cause
+The OCR region coordinates were not being properly validated against window bounds, and physical screen coordinates were not being updated when the window moved.
+
+### Solution
+1. Enhanced `set_region` method in `TextOCR` class to:
+   - Add bounds checking to ensure region stays within window
+   - Store both logical (window-relative) and physical (screen) coordinates
+   - Improve error handling and validation
+2. Updated `_process_region` method to:
+   - Dynamically update physical coordinates based on current window position
+   - Add bounds checking during processing
+   - Improve screenshot saving for debugging
+   - Enhance error handling and logging
+
+### Verification
+- OCR region now stays within game window bounds
+- Region automatically adjusts when window moves
+- Coordinates are properly read during scans
+- Debug screenshots are saved for verification 
+
+## [FIXED] Missing Screenshot Capture Method
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** WindowManager, TextOCR
+
+### Issue Description
+OCR system was broken in both overlay and game world tab due to a missing `capture_region` method in the WindowManager class.
+
+### Root Cause
+During the OCR system refactoring, we moved the screenshot capture functionality from TextOCR to WindowManager for better organization, but the implementation of `capture_region` was missing.
+
+### Solution
+1. Added `capture_region` method to WindowManager:
+   - Takes region dictionary with left, top, width, height
+   - Uses mss for efficient screen capture
+   - Converts BGRA to BGR format for OpenCV compatibility
+   - Includes proper error handling
+2. Added necessary imports:
+   - numpy for array handling
+   - cv2 for image processing
+   - mss for screen capture
+
+### Verification
+- OCR system now works in both overlay and game world tab
+- Screenshots are properly captured and processed
+- Color format is correctly converted for OpenCV
+- Error handling properly catches and logs issues 
+
+## [FIXED] OCR Region Update and Game State Sync
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** TextOCR
+
+### Issue Description
+OCR system was failing to properly update coordinates and maintain game state synchronization after the screenshot capture refactoring.
+
+### Root Cause
+1. Physical region updates were not properly maintaining all required fields
+2. Game state was not being updated with new coordinates
+3. Region dictionary was being modified in place instead of being recreated
+
+### Solution
+1. Fixed physical region updates in TextOCR:
+   - Now creating new region dictionary with all fields
+   - Properly calculating screen coordinates from window position
+   - Maintaining dpi_scale and other required properties
+2. Added game state synchronization:
+   - Updating game state when new coordinates are extracted
+   - Ensuring coordinates are properly formatted
+3. Improved error handling and logging:
+   - Better debug messages for troubleshooting
+   - Clearer logging of coordinate extraction results
+
+### Verification
+- OCR system now properly updates coordinates
+- Game state stays synchronized with latest coordinates
+- Debug screenshots are properly saved
+- Error handling provides clear feedback 
+
+## [FIXED] Game World Search Functionality
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** GameWorldSearch
+
+### Issue Description
+Search functionality was failing due to:
+1. Missing `get_game_position` method
+2. PyDirectInput fail-safe triggering from excessive mouse movement
+3. Incorrect drag vector calculation
+
+### Root Cause
+1. The `get_game_position` method was referenced but not implemented
+2. Drag vectors were being calculated without proper bounds checking
+3. Mouse movements were attempting to move outside window bounds
+
+### Solution
+1. Added `get_game_position` method:
+   - Calculates game world position from grid coordinates
+   - Uses start position and drag distances
+   - Handles coordinate wrapping properly
+2. Improved drag vector calculation:
+   - Added proper scaling based on window dimensions
+   - Implemented bounds checking for drag coordinates
+   - Centered drags around window center
+3. Enhanced movement logic:
+   - Added relative window coordinates for drags
+   - Implemented proper coordinate wrapping
+   - Added better error handling and logging
+
+### Verification
+- Search functionality now works correctly
+- Mouse movements stay within window bounds
+- Grid positions are properly calculated
+- Drag operations complete successfully 
+
+## [FIXED] Search Movement Using Calibrated Drag Points
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** GameWorldSearch
+
+### Issue Description
+Search movement was not using the calibrated drag points from direction definitions, leading to inconsistent movement and potential errors.
+
+### Root Cause
+The `_move_to_position` method was calculating its own drag points based on window dimensions instead of using the calibrated points from direction definitions.
+
+### Solution
+Modified `_move_to_position` method to:
+1. Use calibrated drag points:
+   - North/South drags use points from north definition
+   - East/West drags use points from east definition
+2. Calculate number of drags needed:
+   - Based on target distance and calibrated drag distances
+   - Handles both positive and negative movements
+3. Perform drags in sequence:
+   - First east/west movement
+   - Then north/south movement
+   - Uses proper inverse points for opposite directions
+
+### Verification
+- Search movement now uses calibrated drag points
+- Movement is consistent with calibration
+- Proper handling of both directions
+- Correct use of inverse points for opposite movements
+
+## 2023-08-21: Fixed OCR Process and Q/Escape Key Handling
+
+### Issue
+1. Coordinates were not being displayed in the GUI despite being extracted by the OCR process
+2. The OCR process could not be canceled with Q/Escape keys
+
+### Root Cause
+1. The coordinate display widget was only updating the display when the OCR process returned success, but wasn't checking if there were valid coordinates in the game world coordinator
+2. The keyPressEvent method was checking `self.text_ocr.active` which wasn't properly tracking the OCR state
+3. The TextOCR class had inconsistent state tracking with both `self.active` and internal timer state
+
+### Solution
+1. Modified the `_update_coordinates` method in `CoordinateDisplayWidget` to:
+   - Get the current position regardless of OCR success
+   - Display partial coordinates with placeholders for missing values
+   - Use different colors to indicate full, partial, or missing coordinates
+2. Fixed the `keyPressEvent` method in `OverlayController` to:
+   - Check the OCR button state instead of `text_ocr.active`
+   - Add proper error handling when stopping the OCR process
+3. Improved the TextOCR class with:
+   - Added a proper `active` property to track OCR state
+   - Ensured consistent state tracking between the property and internal timer
+
+### Prevention
+1. Added more detailed logging to track coordinate display issues
+2. Improved error handling throughout the OCR process
+3. Added proper state tracking in the TextOCR class
+4. Used button state as the source of truth for process state in key event handling
+
+### Testing
+1. Verified that coordinates are displayed in the GUI even when some values are missing
+2. Confirmed that the Q/Escape keys properly stop the OCR process
+3. Tested error handling by simulating OCR failures
+4. Verified that the OCR button state correctly reflects the OCR process state
+
+## 2023-08-22: Fixed OCR Process Performance and Temporary Files Issues
+
+### Issues Fixed
+- Application getting stuck or becoming unresponsive during OCR operations
+- Excessive temporary PNG files being created in the system temp folder
+- OCR process not stopping when using Q/Escape keys
+- Coordinates not being displayed in the GUI despite being extracted
+
+### Root Cause Analysis
+- The pytesseract library was creating numerous temporary files for each OCR operation
+- Multiple OCR methods were being run in quick succession, creating a large number of temporary files
+- The OCR process was being called too frequently without rate limiting
+- The drag calibration system increased the number of OCR operations, exacerbating the issue
+
+### Solutions Implemented
+1. Optimized the OCR process in `TextOCR.extract_text()`:
+   - Only process the preferred OCR method when not in auto mode
+   - Standardized configuration parameters to reduce redundancy
+   - Simplified the OCR method selection process
+2. Added rate limiting to `GameWorldCoordinator.update_current_position_from_ocr()`:
+   - Implemented a minimum 500ms delay between OCR operations
+   - Added early return with existing coordinates when rate limited
+   - Improved logging to track rate-limited operations
+3. Enhanced error handling throughout the OCR process:
+   - Better timeout handling to prevent the application from hanging
+   - Improved fallback to existing coordinates when OCR fails
+   - More robust state tracking for the OCR process
+
+### Prevention Strategies
+1. Implemented rate limiting to prevent excessive OCR operations
+2. Reduced the number of temporary files created during OCR
+3. Improved error handling and timeout mechanisms
+4. Enhanced logging to better track OCR operations and failures
+5. Added more robust state tracking for the OCR process
+
+### Testing
+1. Verified that the application remains responsive during OCR operations
+2. Confirmed that fewer temporary files are created during OCR
+3. Tested that the Q/Escape keys properly stop the OCR process
+4. Verified that coordinates are displayed in the GUI even when some values are missing
+5. Confirmed that the OCR process works correctly with the drag calibration system
+
+## 2023-08-23: Fixed OCR Process Getting Stuck When Using Escape/Q Keys
+
+### Issues Fixed
+- Application getting stuck when trying to escape/q out of the OCR process
+- OCR process not responding to cancellation requests
+- UI becoming unresponsive during OCR operations
+
+### Root Cause Analysis
+- The OCR process in `TextOCR._process_region()` and `extract_text()` methods had no mechanism to check for cancellation requests during execution
+- The `pytesseract` library operations could not be interrupted once started
+- The key press event handler in `gui_controller.py` was not properly setting cancellation flags before stopping the OCR process
+- Timeout mechanisms were not properly integrated with cancellation flags
+
+### Solutions Implemented
+1. Added a cancellation flag to the `TextOCR` class:
+   - Added `_cancellation_requested` flag to track cancellation requests
+   - Modified `start()` method to reset the flag
+   - Modified `stop()` method to set the flag
+2. Enhanced the `_process_region()` method to check for cancellation:
+   - Added checks at key points in the method to exit early if cancellation is requested
+   - Added logging to track cancellation events
+3. Modified the `extract_text()` method to check for cancellation:
+   - Added check at the beginning of the method to exit early if cancellation is requested
+4. Improved the key press event handler in `gui_controller.py`:
+   - Set cancellation flag directly before calling `_stop_ocr()`
+   - Added immediate UI feedback when cancellation is requested
+5. Enhanced the `_stop_ocr()` method to ensure proper cancellation:
+   - Set cancellation flag before disconnecting signals
+   - Added error handling for signal disconnection
+   - Ensured button state is properly updated
+6. Modified the `_toggle_ocr()` and `_perform_ocr_toggle()` methods:
+   - Set cancellation flag immediately when turning off OCR
+   - Reset cancellation flag when starting OCR
+7. Updated the `update_current_position_from_ocr()` method in `GameWorldCoordinator`:
+   - Added check for cancellation flag
+   - Added early return if cancellation is requested
+8. Enhanced the `_update_coordinates()` method in `CoordinateDisplayWidget`:
+   - Added checks for cancellation flag
+   - Set cancellation flag if timeout is reached
+   - Added proper UI feedback for cancellation events
+
+### Prevention Strategies
+1. Implemented a comprehensive cancellation mechanism throughout the OCR process
+2. Added multiple cancellation check points in long-running operations
+3. Ensured proper UI feedback for cancellation events
+4. Integrated timeout mechanisms with cancellation flags
+5. Added detailed logging for cancellation events
+
+### Testing
+1. Verified that the application properly responds to Escape/Q keys during OCR operations
+2. Confirmed that the OCR process stops immediately when cancellation is requested
+3. Tested that the UI remains responsive during OCR operations
+4. Verified that proper error messages are displayed when OCR is cancelled
+5. Confirmed that auto-update is properly stopped when OCR is cancelled
+
+## 2023-08-24: Fixed Excessive OCR Updates and Mouse Centering
+
+### Issues Fixed
+- Application constantly updating OCR too frequently
+- Mouse constantly being reset to the center of the game window
+- OCR process still not responding properly to Escape/Q keys
+- Auto-update in coordinate widget causing excessive OCR operations
+
+### Root Cause Analysis
+- Rate limiting in `GameWorldCoordinator.update_current_position_from_ocr()` was too short (0.5 seconds)
+- Auto-update interval in `CoordinateDisplayWidget` was too short (2 seconds)
+- Auto-update was sometimes enabled by default or not properly disabled when OCR was stopped
+- Cancellation mechanism wasn't aggressive enough to stop all OCR-related processes
+- Timeout checks weren't frequent enough to detect cancellation requests quickly
+
+### Solutions Implemented
+1. Increased rate limiting in `GameWorldCoordinator.update_current_position_from_ocr()`:
+   - Changed from 0.5 seconds to 2.0 seconds to prevent excessive updates
+2. Modified `CoordinateDisplayWidget` to improve auto-update behavior:
+   - Increased auto-update interval from 2 seconds to 5 seconds
+   - Ensured auto-update is disabled by default
+   - Added more frequent cancellation checks during updates
+3. Enhanced the `TextOCR.stop()` method:
+   - Added a verification step to ensure OCR is fully stopped
+   - Added a delayed check to force stop if still active
+4. Improved the key press event handler in `gui_controller.py`:
+   - Set cancellation flag immediately on key press
+   - Added code to stop coordinate widget auto-update when OCR is stopped
+5. Enhanced the `_stop_ocr()` method:
+   - Added code to stop coordinate widget auto-update
+   - Added a verification step to ensure OCR is fully stopped
+6. Added a new `_verify_ocr_stopped()` method to `OverlayController`:
+   - Checks if OCR is still active after stop request
+   - Forces stop if OCR is still active
+   - Updates UI to reflect forced stop
+7. Modified the `_update_coordinates()` method in `CoordinateDisplayWidget`:
+   - Reduced timeout from 5 seconds to 3 seconds
+   - Increased frequency of timeout checks from 500ms to 200ms
+   - Added more cancellation checks during the update process
+
+### Prevention Strategies
+1. Implemented more aggressive rate limiting to prevent excessive OCR updates
+2. Added multiple verification steps to ensure OCR is fully stopped
+3. Ensured auto-update is properly disabled when OCR is stopped
+4. Added more frequent cancellation checks during OCR operations
+5. Improved coordination between different components that use OCR
+
+### Testing
+1. Verified that OCR updates occur at a reasonable frequency
+2. Confirmed that the mouse is not constantly being centered
+3. Tested that Escape/Q keys properly stop all OCR-related processes
+4. Verified that auto-update is properly disabled when OCR is stopped
+5. Confirmed that the application remains responsive during OCR operations
+
+## Calibration Display Inconsistency (Fixed)
+**Date:** March 1, 2024
+**Status:** FIXED
+
+### Issue Description
+The calibration results were displaying inconsistent values between the GUI widgets and the logs. Specifically:
+- The East direction values were showing different results in different parts of the UI
+- The wrapped distance calculations were not consistently applied across all display locations
+- The ratios shown in the GUI didn't match the actual calculations in the logs
+
+### Root Cause
+1. Different widgets (DirectionWidget and CoordinateDisplayWidget) were using different methods to calculate and display the calibration results
+2. The wrapped distance calculation was not consistently implemented across all display locations
+3. The GUI wasn't showing the detailed movement information that was available in the logs
+
+### Solution
+1. Updated both DirectionWidget and CoordinateDisplayWidget to:
+   - Use the same wrapped distance calculation logic
+   - Show consistent ratio calculations
+   - Display detailed movement information
+2. Improved the display format to show:
+   - Raw screen distances
+   - Absolute game unit values
+   - Calculated ratios for both directions
+3. Added validation for screen distances against window dimensions
+4. Enhanced logging to show more detailed movement information
+
+### Implementation Details
+1. Modified DirectionWidget._start_calibration():
+   - Added proper wrapped distance calculation
+   - Improved progress feedback
+   - Enhanced results display with ratios
+2. Updated CoordinateDisplayWidget._update_calibration_display():
+   - Added detailed movement information
+   - Implemented consistent distance calculations
+   - Improved results formatting
+3. Both widgets now show:
+   - Screen distances in pixels
+   - Game unit movements with proper wrapping
+   - Calculated ratios for verification
+
+### Verification
+- Calibration results now match between:
+  - Log output
+  - DirectionWidget display
+  - CoordinateDisplayWidget display
+- All displays show the same:
+  - Screen distances
+  - Game unit movements
+  - Pixels per game unit ratios
+
+### Prevention
+To prevent similar issues in the future:
+1. Always implement consistent calculation methods across all display locations
+2. Use the same validation and wrapping logic throughout the application
+3. Show detailed information in the GUI to match log output
+4. Validate displayed values against actual calculations
+
+## [FIXED] Inconsistent Y Measurements in Direction Calibration
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** GameWorldDirection
+
+### Issue Description
+During direction calibration, the first Y measurement was consistently higher (~23%) than subsequent measurements, causing calibration failures due to inconsistent ratios.
+
+### Root Cause
+The game world was not fully stabilized after movements before taking measurements. The first measurement was affected by residual movement in the game world.
+
+### Solution
+Modified the `_calibrate_direction` method in `game_world_direction.py` to:
+1. Increase initial wait time from 1.0s to 1.5s
+2. Add multiple OCR updates (3 times with 0.5s delay) at each critical point:
+   - Before taking the start position
+   - After the drag movement
+   - After returning to start position
+3. Increase wait time after movements from 1.5s to 2.0s
+
+### Verification
+- Y measurements are now consistent across all runs
+- Calibration completes successfully with consistent ratios
+- No more outliers in the first measurement 
+
+## [FIXED] OCR Region Out of Window Bounds
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** TextOCR
+
+### Issue Description
+OCR was failing to read coordinates because the OCR region was being positioned outside the game window bounds, particularly when the window was moved or resized.
+
+### Root Cause
+The OCR region coordinates were not being properly validated against window bounds, and physical screen coordinates were not being updated when the window moved.
+
+### Solution
+1. Enhanced `set_region` method in `TextOCR` class to:
+   - Add bounds checking to ensure region stays within window
+   - Store both logical (window-relative) and physical (screen) coordinates
+   - Improve error handling and validation
+2. Updated `_process_region` method to:
+   - Dynamically update physical coordinates based on current window position
+   - Add bounds checking during processing
+   - Improve screenshot saving for debugging
+   - Enhance error handling and logging
+
+### Verification
+- OCR region now stays within game window bounds
+- Region automatically adjusts when window moves
+- Coordinates are properly read during scans
+- Debug screenshots are saved for verification 
+
+## [FIXED] Missing Screenshot Capture Method
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** WindowManager, TextOCR
+
+### Issue Description
+OCR system was broken in both overlay and game world tab due to a missing `capture_region` method in the WindowManager class.
+
+### Root Cause
+During the OCR system refactoring, we moved the screenshot capture functionality from TextOCR to WindowManager for better organization, but the implementation of `capture_region` was missing.
+
+### Solution
+1. Added `capture_region` method to WindowManager:
+   - Takes region dictionary with left, top, width, height
+   - Uses mss for efficient screen capture
+   - Converts BGRA to BGR format for OpenCV compatibility
+   - Includes proper error handling
+2. Added necessary imports:
+   - numpy for array handling
+   - cv2 for image processing
+   - mss for screen capture
+
+### Verification
+- OCR system now works in both overlay and game world tab
+- Screenshots are properly captured and processed
+- Color format is correctly converted for OpenCV
+- Error handling properly catches and logs issues 
+
+## [FIXED] OCR Region Update and Game State Sync
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** TextOCR
+
+### Issue Description
+OCR system was failing to properly update coordinates and maintain game state synchronization after the screenshot capture refactoring.
+
+### Root Cause
+1. Physical region updates were not properly maintaining all required fields
+2. Game state was not being updated with new coordinates
+3. Region dictionary was being modified in place instead of being recreated
+
+### Solution
+1. Fixed physical region updates in TextOCR:
+   - Now creating new region dictionary with all fields
+   - Properly calculating screen coordinates from window position
+   - Maintaining dpi_scale and other required properties
+2. Added game state synchronization:
+   - Updating game state when new coordinates are extracted
+   - Ensuring coordinates are properly formatted
+3. Improved error handling and logging:
+   - Better debug messages for troubleshooting
+   - Clearer logging of coordinate extraction results
+
+### Verification
+- OCR system now properly updates coordinates
+- Game state stays synchronized with latest coordinates
+- Debug screenshots are properly saved
+- Error handling provides clear feedback 
+
+## [FIXED] Game World Search Functionality
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** GameWorldSearch
+
+### Issue Description
+Search functionality was failing due to:
+1. Missing `get_game_position` method
+2. PyDirectInput fail-safe triggering from excessive mouse movement
+3. Incorrect drag vector calculation
+
+### Root Cause
+1. The `get_game_position` method was referenced but not implemented
+2. Drag vectors were being calculated without proper bounds checking
+3. Mouse movements were attempting to move outside window bounds
+
+### Solution
+1. Added `get_game_position` method:
+   - Calculates game world position from grid coordinates
+   - Uses start position and drag distances
+   - Handles coordinate wrapping properly
+2. Improved drag vector calculation:
+   - Added proper scaling based on window dimensions
+   - Implemented bounds checking for drag coordinates
+   - Centered drags around window center
+3. Enhanced movement logic:
+   - Added relative window coordinates for drags
+   - Implemented proper coordinate wrapping
+   - Added better error handling and logging
+
+### Verification
+- Search functionality now works correctly
+- Mouse movements stay within window bounds
+- Grid positions are properly calculated
+- Drag operations complete successfully 
+
+## [FIXED] Search Movement Using Calibrated Drag Points
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** GameWorldSearch
+
+### Issue Description
+Search movement was not using the calibrated drag points from direction definitions, leading to inconsistent movement and potential errors.
+
+### Root Cause
+The `_move_to_position` method was calculating its own drag points based on window dimensions instead of using the calibrated points from direction definitions.
+
+### Solution
+Modified `_move_to_position` method to:
+1. Use calibrated drag points:
+   - North/South drags use points from north definition
+   - East/West drags use points from east definition
+2. Calculate number of drags needed:
+   - Based on target distance and calibrated drag distances
+   - Handles both positive and negative movements
+3. Perform drags in sequence:
+   - First east/west movement
+   - Then north/south movement
+   - Uses proper inverse points for opposite directions
+
+### Verification
+- Search movement now uses calibrated drag points
+- Movement is consistent with calibration
+- Proper handling of both directions
+- Correct use of inverse points for opposite movements
+
+## 2023-08-25: Fixed OCR Process and Q/Escape Key Handling
+
+### Issue
+1. Coordinates were not being displayed in the GUI despite being extracted by the OCR process
+2. The OCR process could not be canceled with Q/Escape keys
+
+### Root Cause
+1. The coordinate display widget was only updating the display when the OCR process returned success, but wasn't checking if there were valid coordinates in the game world coordinator
+2. The keyPressEvent method was checking `self.text_ocr.active` which wasn't properly tracking the OCR state
+3. The TextOCR class had inconsistent state tracking with both `self.active` and internal timer state
+
+### Solution
+1. Modified the `_update_coordinates` method in `CoordinateDisplayWidget` to:
+   - Get the current position regardless of OCR success
+   - Display partial coordinates with placeholders for missing values
+   - Use different colors to indicate full, partial, or missing coordinates
+2. Fixed the `keyPressEvent` method in `OverlayController` to:
+   - Check the OCR button state instead of `text_ocr.active`
+   - Add proper error handling when stopping the OCR process
+3. Improved the TextOCR class with:
+   - Added a proper `active` property to track OCR state
+   - Ensured consistent state tracking between the property and internal timer
+
+### Prevention
+1. Added more detailed logging to track coordinate display issues
+2. Improved error handling throughout the OCR process
+3. Added proper state tracking in the TextOCR class
+4. Used button state as the source of truth for process state in key event handling
+
+### Testing
+1. Verified that coordinates are displayed in the GUI even when some values are missing
+2. Confirmed that the Q/Escape keys properly stop the OCR process
+3. Tested error handling by simulating OCR failures
+4. Verified that the OCR button state correctly reflects the OCR process state
+
+## 2023-08-26: Fixed OCR Process Performance and Temporary Files Issues
+
+### Issues Fixed
+- Application getting stuck or becoming unresponsive during OCR operations
+- Excessive temporary PNG files being created in the system temp folder
+- OCR process not stopping when using Q/Escape keys
+- Coordinates not being displayed in the GUI despite being extracted
+
+### Root Cause Analysis
+- The pytesseract library was creating numerous temporary files for each OCR operation
+- Multiple OCR methods were being run in quick succession, creating a large number of temporary files
+- The OCR process was being called too frequently without rate limiting
+- The drag calibration system increased the number of OCR operations, exacerbating the issue
+
+### Solutions Implemented
+1. Optimized the OCR process in `TextOCR.extract_text()`:
+   - Only process the preferred OCR method when not in auto mode
+   - Standardized configuration parameters to reduce redundancy
+   - Simplified the OCR method selection process
+2. Added rate limiting to `GameWorldCoordinator.update_current_position_from_ocr()`:
+   - Implemented a minimum 500ms delay between OCR operations
+   - Added early return with existing coordinates when rate limited
+   - Improved logging to track rate-limited operations
+3. Enhanced error handling throughout the OCR process:
+   - Better timeout handling to prevent the application from hanging
+   - Improved fallback to existing coordinates when OCR fails
+   - More robust state tracking for the OCR process
+
+### Prevention Strategies
+1. Implemented rate limiting to prevent excessive OCR operations
+2. Reduced the number of temporary files created during OCR
+3. Improved error handling and timeout mechanisms
+4. Enhanced logging to better track OCR operations and failures
+5. Added more robust state tracking for the OCR process
+
+### Testing
+1. Verified that the application remains responsive during OCR operations
+2. Confirmed that fewer temporary files are created during OCR
+3. Tested that the Q/Escape keys properly stop the OCR process
+4. Verified that coordinates are displayed in the GUI even when some values are missing
+5. Confirmed that the OCR process works correctly with the drag calibration system
+
+## 2023-08-27: Fixed OCR Process Getting Stuck When Using Escape/Q Keys
+
+### Issues Fixed
+- Application getting stuck when trying to escape/q out of the OCR process
+- OCR process not responding to cancellation requests
+- UI becoming unresponsive during OCR operations
+
+### Root Cause Analysis
+- The OCR process in `TextOCR._process_region()` and `extract_text()` methods had no mechanism to check for cancellation requests during execution
+- The `pytesseract` library operations could not be interrupted once started
+- The key press event handler in `gui_controller.py` was not properly setting cancellation flags before stopping the OCR process
+- Timeout mechanisms were not properly integrated with cancellation flags
+
+### Solutions Implemented
+1. Added a cancellation flag to the `TextOCR` class:
+   - Added `_cancellation_requested` flag to track cancellation requests
+   - Modified `start()` method to reset the flag
+   - Modified `stop()` method to set the flag
+2. Enhanced the `_process_region()` method to check for cancellation:
+   - Added checks at key points in the method to exit early if cancellation is requested
+   - Added logging to track cancellation events
+3. Modified the `extract_text()` method to check for cancellation:
+   - Added check at the beginning of the method to exit early if cancellation is requested
+4. Improved the key press event handler in `gui_controller.py`:
+   - Set cancellation flag directly before calling `_stop_ocr()`
+   - Added immediate UI feedback when cancellation is requested
+5. Enhanced the `_stop_ocr()` method to ensure proper cancellation:
+   - Set cancellation flag before disconnecting signals
+   - Added error handling for signal disconnection
+   - Ensured button state is properly updated
+6. Modified the `_toggle_ocr()` and `_perform_ocr_toggle()` methods:
+   - Set cancellation flag immediately when turning off OCR
+   - Reset cancellation flag when starting OCR
+7. Updated the `update_current_position_from_ocr()` method in `GameWorldCoordinator`:
+   - Added check for cancellation flag
+   - Added early return if cancellation is requested
+8. Enhanced the `_update_coordinates()` method in `CoordinateDisplayWidget`:
+   - Added checks for cancellation flag
+   - Set cancellation flag if timeout is reached
+   - Added proper UI feedback for cancellation events
+
+### Prevention Strategies
+1. Implemented a comprehensive cancellation mechanism throughout the OCR process
+2. Added multiple cancellation check points in long-running operations
+3. Ensured proper UI feedback for cancellation events
+4. Integrated timeout mechanisms with cancellation flags
+5. Added detailed logging for cancellation events
+
+### Testing
+1. Verified that the application properly responds to Escape/Q keys during OCR operations
+2. Confirmed that the OCR process stops immediately when cancellation is requested
+3. Tested that the UI remains responsive during OCR operations
+4. Verified that proper error messages are displayed when OCR is cancelled
+5. Confirmed that auto-update is properly stopped when OCR is cancelled
+
+## 2023-08-28: Fixed Excessive OCR Updates and Mouse Centering
+
+### Issues Fixed
+- Application constantly updating OCR too frequently
+- Mouse constantly being reset to the center of the game window
+- OCR process still not responding properly to Escape/Q keys
+- Auto-update in coordinate widget causing excessive OCR operations
+
+### Root Cause Analysis
+- Rate limiting in `GameWorldCoordinator.update_current_position_from_ocr()` was too short (0.5 seconds)
+- Auto-update interval in `CoordinateDisplayWidget` was too short (2 seconds)
+- Auto-update was sometimes enabled by default or not properly disabled when OCR was stopped
+- Cancellation mechanism wasn't aggressive enough to stop all OCR-related processes
+- Timeout checks weren't frequent enough to detect cancellation requests quickly
+
+### Solutions Implemented
+1. Increased rate limiting in `GameWorldCoordinator.update_current_position_from_ocr()`:
+   - Changed from 0.5 seconds to 2.0 seconds to prevent excessive updates
+2. Modified `CoordinateDisplayWidget` to improve auto-update behavior:
+   - Increased auto-update interval from 2 seconds to 5 seconds
+   - Ensured auto-update is disabled by default
+   - Added more frequent cancellation checks during updates
+3. Enhanced the `TextOCR.stop()` method:
+   - Added a verification step to ensure OCR is fully stopped
+   - Added a delayed check to force stop if still active
+4. Improved the key press event handler in `gui_controller.py`:
+   - Set cancellation flag immediately on key press
+   - Added code to stop coordinate widget auto-update when OCR is stopped
+5. Enhanced the `_stop_ocr()` method:
+   - Added code to stop coordinate widget auto-update
+   - Added a verification step to ensure OCR is fully stopped
+6. Added a new `_verify_ocr_stopped()` method to `OverlayController`:
+   - Checks if OCR is still active after stop request
+   - Forces stop if OCR is still active
+   - Updates UI to reflect forced stop
+7. Modified the `_update_coordinates()` method in `CoordinateDisplayWidget`:
+   - Reduced timeout from 5 seconds to 3 seconds
+   - Increased frequency of timeout checks from 500ms to 200ms
+   - Added more cancellation checks during the update process
+
+### Prevention Strategies
+1. Implemented more aggressive rate limiting to prevent excessive OCR updates
+2. Added multiple verification steps to ensure OCR is fully stopped
+3. Ensured auto-update is properly disabled when OCR is stopped
+4. Added more frequent cancellation checks during OCR operations
+5. Improved coordination between different components that use OCR
+
+### Testing
+1. Verified that OCR updates occur at a reasonable frequency
+2. Confirmed that the mouse is not constantly being centered
+3. Tested that Escape/Q keys properly stop all OCR-related processes
+4. Verified that auto-update is properly disabled when OCR is stopped
+5. Confirmed that the application remains responsive during OCR operations
+
+## Calibration Display Inconsistency (Fixed)
+**Date:** March 1, 2024
+**Status:** FIXED
+
+### Issue Description
+The calibration results were displaying inconsistent values between the GUI widgets and the logs. Specifically:
+- The East direction values were showing different results in different parts of the UI
+- The wrapped distance calculations were not consistently applied across all display locations
+- The ratios shown in the GUI didn't match the actual calculations in the logs
+
+### Root Cause
+1. Different widgets (DirectionWidget and CoordinateDisplayWidget) were using different methods to calculate and display the calibration results
+2. The wrapped distance calculation was not consistently implemented across all display locations
+3. The GUI wasn't showing the detailed movement information that was available in the logs
+
+### Solution
+1. Updated both DirectionWidget and CoordinateDisplayWidget to:
+   - Use the same wrapped distance calculation logic
+   - Show consistent ratio calculations
+   - Display detailed movement information
+2. Improved the display format to show:
+   - Raw screen distances
+   - Absolute game unit values
+   - Calculated ratios for both directions
+3. Added validation for screen distances against window dimensions
+4. Enhanced logging to show more detailed movement information
+
+### Implementation Details
+1. Modified DirectionWidget._start_calibration():
+   - Added proper wrapped distance calculation
+   - Improved progress feedback
+   - Enhanced results display with ratios
+2. Updated CoordinateDisplayWidget._update_calibration_display():
+   - Added detailed movement information
+   - Implemented consistent distance calculations
+   - Improved results formatting
+3. Both widgets now show:
+   - Screen distances in pixels
+   - Game unit movements with proper wrapping
+   - Calculated ratios for verification
+
+### Verification
+- Calibration results now match between:
+  - Log output
+  - DirectionWidget display
+  - CoordinateDisplayWidget display
+- All displays show the same:
+  - Screen distances
+  - Game unit movements
+  - Pixels per game unit ratios
+
+### Prevention
+To prevent similar issues in the future:
+1. Always implement consistent calculation methods across all display locations
+2. Use the same validation and wrapping logic throughout the application
+3. Show detailed information in the GUI to match log output
+4. Validate displayed values against actual calculations
+
+## [FIXED] Inconsistent Y Measurements in Direction Calibration
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** GameWorldDirection
+
+### Issue Description
+During direction calibration, the first Y measurement was consistently higher (~23%) than subsequent measurements, causing calibration failures due to inconsistent ratios.
+
+### Root Cause
+The game world was not fully stabilized after movements before taking measurements. The first measurement was affected by residual movement in the game world.
+
+### Solution
+Modified the `_calibrate_direction` method in `game_world_direction.py` to:
+1. Increase initial wait time from 1.0s to 1.5s
+2. Add multiple OCR updates (3 times with 0.5s delay) at each critical point:
+   - Before taking the start position
+   - After the drag movement
+   - After returning to start position
+3. Increase wait time after movements from 1.5s to 2.0s
+
+### Verification
+- Y measurements are now consistent across all runs
+- Calibration completes successfully with consistent ratios
+- No more outliers in the first measurement 
+
+## [FIXED] OCR Region Out of Window Bounds
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** TextOCR
+
+### Issue Description
+OCR was failing to read coordinates because the OCR region was being positioned outside the game window bounds, particularly when the window was moved or resized.
+
+### Root Cause
+The OCR region coordinates were not being properly validated against window bounds, and physical screen coordinates were not being updated when the window moved.
+
+### Solution
+1. Enhanced `set_region` method in `TextOCR` class to:
+   - Add bounds checking to ensure region stays within window
+   - Store both logical (window-relative) and physical (screen) coordinates
+   - Improve error handling and validation
+2. Updated `_process_region` method to:
+   - Dynamically update physical coordinates based on current window position
+   - Add bounds checking during processing
+   - Improve screenshot saving for debugging
+   - Enhance error handling and logging
+
+### Verification
+- OCR region now stays within game window bounds
+- Region automatically adjusts when window moves
+- Coordinates are properly read during scans
+- Debug screenshots are saved for verification 
+
+## [FIXED] Missing Screenshot Capture Method
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** WindowManager, TextOCR
+
+### Issue Description
+OCR system was broken in both overlay and game world tab due to a missing `capture_region` method in the WindowManager class.
+
+### Root Cause
+During the OCR system refactoring, we moved the screenshot capture functionality from TextOCR to WindowManager for better organization, but the implementation of `capture_region` was missing.
+
+### Solution
+1. Added `capture_region` method to WindowManager:
+   - Takes region dictionary with left, top, width, height
+   - Uses mss for efficient screen capture
+   - Converts BGRA to BGR format for OpenCV compatibility
+   - Includes proper error handling
+2. Added necessary imports:
+   - numpy for array handling
+   - cv2 for image processing
+   - mss for screen capture
+
+### Verification
+- OCR system now works in both overlay and game world tab
+- Screenshots are properly captured and processed
+- Color format is correctly converted for OpenCV
+- Error handling properly catches and logs issues 
+
+## [FIXED] OCR Region Update and Game State Sync
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** TextOCR
+
+### Issue Description
+OCR system was failing to properly update coordinates and maintain game state synchronization after the screenshot capture refactoring.
+
+### Root Cause
+1. Physical region updates were not properly maintaining all required fields
+2. Game state was not being updated with new coordinates
+3. Region dictionary was being modified in place instead of being recreated
+
+### Solution
+1. Fixed physical region updates in TextOCR:
+   - Now creating new region dictionary with all fields
+   - Properly calculating screen coordinates from window position
+   - Maintaining dpi_scale and other required properties
+2. Added game state synchronization:
+   - Updating game state when new coordinates are extracted
+   - Ensuring coordinates are properly formatted
+3. Improved error handling and logging:
+   - Better debug messages for troubleshooting
+   - Clearer logging of coordinate extraction results
+
+### Verification
+- OCR system now properly updates coordinates
+- Game state stays synchronized with latest coordinates
+- Debug screenshots are properly saved
+- Error handling provides clear feedback 
+
+## [FIXED] Game World Search Functionality
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** GameWorldSearch
+
+### Issue Description
+Search functionality was failing due to:
+1. Missing `get_game_position` method
+2. PyDirectInput fail-safe triggering from excessive mouse movement
+3. Incorrect drag vector calculation
+
+### Root Cause
+1. The `get_game_position` method was referenced but not implemented
+2. Drag vectors were being calculated without proper bounds checking
+3. Mouse movements were attempting to move outside window bounds
+
+### Solution
+1. Added `get_game_position` method:
+   - Calculates game world position from grid coordinates
+   - Uses start position and drag distances
+   - Handles coordinate wrapping properly
+2. Improved drag vector calculation:
+   - Added proper scaling based on window dimensions
+   - Implemented bounds checking for drag coordinates
+   - Centered drags around window center
+3. Enhanced movement logic:
+   - Added relative window coordinates for drags
+   - Implemented proper coordinate wrapping
+   - Added better error handling and logging
+
+### Verification
+- Search functionality now works correctly
+- Mouse movements stay within window bounds
+- Grid positions are properly calculated
+- Drag operations complete successfully 
+
+## [FIXED] Search Movement Using Calibrated Drag Points
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** GameWorldSearch
+
+### Issue Description
+Search movement was not using the calibrated drag points from direction definitions, leading to inconsistent movement and potential errors.
+
+### Root Cause
+The `_move_to_position` method was calculating its own drag points based on window dimensions instead of using the calibrated points from direction definitions.
+
+### Solution
+Modified `_move_to_position` method to:
+1. Use calibrated drag points:
+   - North/South drags use points from north definition
+   - East/West drags use points from east definition
+2. Calculate number of drags needed:
+   - Based on target distance and calibrated drag distances
+   - Handles both positive and negative movements
+3. Perform drags in sequence:
+   - First east/west movement
+   - Then north/south movement
+   - Uses proper inverse points for opposite directions
+
+### Verification
+- Search movement now uses calibrated drag points
+- Movement is consistent with calibration
+- Proper handling of both directions
+- Correct use of inverse points for opposite movements
+
+## 2023-08-29: Fixed OCR Process and Q/Escape Key Handling
+
+### Issue
+1. Coordinates were not being displayed in the GUI despite being extracted by the OCR process
+2. The OCR process could not be canceled with Q/Escape keys
+
+### Root Cause
+1. The coordinate display widget was only updating the display when the OCR process returned success, but wasn't checking if there were valid coordinates in the game world coordinator
+2. The keyPressEvent method was checking `self.text_ocr.active` which wasn't properly tracking the OCR state
+3. The TextOCR class had inconsistent state tracking with both `self.active` and internal timer state
+
+### Solution
+1. Modified the `_update_coordinates` method in `CoordinateDisplayWidget` to:
+   - Get the current position regardless of OCR success
+   - Display partial coordinates with placeholders for missing values
+   - Use different colors to indicate full, partial, or missing coordinates
+2. Fixed the `keyPressEvent` method in `OverlayController` to:
+   - Check the OCR button state instead of `text_ocr.active`
+   - Add proper error handling when stopping the OCR process
+3. Improved the TextOCR class with:
+   - Added a proper `active` property to track OCR state
+   - Ensured consistent state tracking between the property and internal timer
+
+### Prevention
+1. Added more detailed logging to track coordinate display issues
+2. Improved error handling throughout the OCR process
+3. Added proper state tracking in the TextOCR class
+4. Used button state as the source of truth for process state in key event handling
+
+### Testing
+1. Verified that coordinates are displayed in the GUI even when some values are missing
+2. Confirmed that the Q/Escape keys properly stop the OCR process
+3. Tested error handling by simulating OCR failures
+4. Verified that the OCR button state correctly reflects the OCR process state
+
+## 2023-08-30: Fixed OCR Process Performance and Temporary Files Issues
+
+### Issues Fixed
+- Application getting stuck or becoming unresponsive during OCR operations
+- Excessive temporary PNG files being created in the system temp folder
+- OCR process not stopping when using Q/Escape keys
+- Coordinates not being displayed in the GUI despite being extracted
+
+### Root Cause Analysis
+- The pytesseract library was creating numerous temporary files for each OCR operation
+- Multiple OCR methods were being run in quick succession, creating a large number of temporary files
+- The OCR process was being called too frequently without rate limiting
+- The drag calibration system increased the number of OCR operations, exacerbating the issue
+
+### Solutions Implemented
+1. Optimized the OCR process in `TextOCR.extract_text()`:
+   - Only process the preferred OCR method when not in auto mode
+   - Standardized configuration parameters to reduce redundancy
+   - Simplified the OCR method selection process
+2. Added rate limiting to `GameWorldCoordinator.update_current_position_from_ocr()`:
+   - Implemented a minimum 500ms delay between OCR operations
+   - Added early return with existing coordinates when rate limited
+   - Improved logging to track rate-limited operations
+3. Enhanced error handling throughout the OCR process:
+   - Better timeout handling to prevent the application from hanging
+   - Improved fallback to existing coordinates when OCR fails
+   - More robust state tracking for the OCR process
+
+### Prevention Strategies
+1. Implemented rate limiting to prevent excessive OCR operations
+2. Reduced the number of temporary files created during OCR
+3. Improved error handling and timeout mechanisms
+4. Enhanced logging to better track OCR operations and failures
+5. Added more robust state tracking for the OCR process
+
+### Testing
+1. Verified that the application remains responsive during OCR operations
+2. Confirmed that fewer temporary files are created during OCR
+3. Tested that the Q/Escape keys properly stop the OCR process
+4. Verified that coordinates are displayed in the GUI even when some values are missing
+5. Confirmed that the OCR process works correctly with the drag calibration system
+
+## 2023-08-31: Fixed OCR Process Getting Stuck When Using Escape/Q Keys
+
+### Issues Fixed
+- Application getting stuck when trying to escape/q out of the OCR process
+- OCR process not responding to cancellation requests
+- UI becoming unresponsive during OCR operations
+
+### Root Cause Analysis
+- The OCR process in `TextOCR._process_region()` and `extract_text()` methods had no mechanism to check for cancellation requests during execution
+- The `pytesseract` library operations could not be interrupted once started
+- The key press event handler in `gui_controller.py` was not properly setting cancellation flags before stopping the OCR process
+- Timeout mechanisms were not properly integrated with cancellation flags
+
+### Solutions Implemented
+1. Added a cancellation flag to the `TextOCR` class:
+   - Added `_cancellation_requested` flag to track cancellation requests
+   - Modified `start()` method to reset the flag
+   - Modified `stop()` method to set the flag
+2. Enhanced the `_process_region()` method to check for cancellation:
+   - Added checks at key points in the method to exit early if cancellation is requested
+   - Added logging to track cancellation events
+3. Modified the `extract_text()` method to check for cancellation:
+   - Added check at the beginning of the method to exit early if cancellation is requested
+4. Improved the key press event handler in `gui_controller.py`:
+   - Set cancellation flag directly before calling `_stop_ocr()`
+   - Added immediate UI feedback when cancellation is requested
+5. Enhanced the `_stop_ocr()` method to ensure proper cancellation:
+   - Set cancellation flag before disconnecting signals
+   - Added error handling for signal disconnection
+   - Ensured button state is properly updated
+6. Modified the `_toggle_ocr()` and `_perform_ocr_toggle()` methods:
+   - Set cancellation flag immediately when turning off OCR
+   - Reset cancellation flag when starting OCR
+7. Updated the `update_current_position_from_ocr()` method in `GameWorldCoordinator`:
+   - Added check for cancellation flag
+   - Added early return if cancellation is requested
+8. Enhanced the `_update_coordinates()` method in `CoordinateDisplayWidget`:
+   - Added checks for cancellation flag
+   - Set cancellation flag if timeout is reached
+   - Added proper UI feedback for cancellation events
+
+### Prevention Strategies
+1. Implemented a comprehensive cancellation mechanism throughout the OCR process
+2. Added multiple cancellation check points in long-running operations
+3. Ensured proper UI feedback for cancellation events
+4. Integrated timeout mechanisms with cancellation flags
+5. Added detailed logging for cancellation events
+
+### Testing
+1. Verified that the application properly responds to Escape/Q keys during OCR operations
+2. Confirmed that the OCR process stops immediately when cancellation is requested
+3. Tested that the UI remains responsive during OCR operations
+4. Verified that proper error messages are displayed when OCR is cancelled
+5. Confirmed that auto-update is properly stopped when OCR is cancelled
+
+## 2023-09-01: Fixed Excessive OCR Updates and Mouse Centering
+
+### Issues Fixed
+- Application constantly updating OCR too frequently
+- Mouse constantly being reset to the center of the game window
+- OCR process still not responding properly to Escape/Q keys
+- Auto-update in coordinate widget causing excessive OCR operations
+
+### Root Cause Analysis
+- Rate limiting in `GameWorldCoordinator.update_current_position_from_ocr()` was too short (0.5 seconds)
+- Auto-update interval in `CoordinateDisplayWidget` was too short (2 seconds)
+- Auto-update was sometimes enabled by default or not properly disabled when OCR was stopped
+- Cancellation mechanism wasn't aggressive enough to stop all OCR-related processes
+- Timeout checks weren't frequent enough to detect cancellation requests quickly
+
+### Solutions Implemented
+1. Increased rate limiting in `GameWorldCoordinator.update_current_position_from_ocr()`:
+   - Changed from 0.5 seconds to 2.0 seconds to prevent excessive updates
+2. Modified `CoordinateDisplayWidget` to improve auto-update behavior:
+   - Increased auto-update interval from 2 seconds to 5 seconds
+   - Ensured auto-update is disabled by default
+   - Added more frequent cancellation checks during updates
+3. Enhanced the `TextOCR.stop()` method:
+   - Added a verification step to ensure OCR is fully stopped
+   - Added a delayed check to force stop if still active
+4. Improved the key press event handler in `gui_controller.py`:
+   - Set cancellation flag immediately on key press
+   - Added code to stop coordinate widget auto-update when OCR is stopped
+5. Enhanced the `_stop_ocr()` method:
+   - Added code to stop coordinate widget auto-update
+   - Added a verification step to ensure OCR is fully stopped
+6. Added a new `_verify_ocr_stopped()` method to `OverlayController`:
+   - Checks if OCR is still active after stop request
+   - Forces stop if OCR is still active
+   - Updates UI to reflect forced stop
+7. Modified the `_update_coordinates()` method in `CoordinateDisplayWidget`:
+   - Reduced timeout from 5 seconds to 3 seconds
+   - Increased frequency of timeout checks from 500ms to 200ms
+   - Added more cancellation checks during the update process
+
+### Prevention Strategies
+1. Implemented more aggressive rate limiting to prevent excessive OCR updates
+2. Added multiple verification steps to ensure OCR is fully stopped
+3. Ensured auto-update is properly disabled when OCR is stopped
+4. Added more frequent cancellation checks during OCR operations
+5. Improved coordination between different components that use OCR
+
+### Testing
+1. Verified that OCR updates occur at a reasonable frequency
+2. Confirmed that the mouse is not constantly being centered
+3. Tested that Escape/Q keys properly stop all OCR-related processes
+4. Verified that auto-update is properly disabled when OCR is stopped
+5. Confirmed that the application remains responsive during OCR operations
+
+## Calibration Display Inconsistency (Fixed)
+**Date:** March 1, 2024
+**Status:** FIXED
+
+### Issue Description
+The calibration results were displaying inconsistent values between the GUI widgets and the logs. Specifically:
+- The East direction values were showing different results in different parts of the UI
+- The wrapped distance calculations were not consistently applied across all display locations
+- The ratios shown in the GUI didn't match the actual calculations in the logs
+
+### Root Cause
+1. Different widgets (DirectionWidget and CoordinateDisplayWidget) were using different methods to calculate and display the calibration results
+2. The wrapped distance calculation was not consistently implemented across all display locations
+3. The GUI wasn't showing the detailed movement information that was available in the logs
+
+### Solution
+1. Updated both DirectionWidget and CoordinateDisplayWidget to:
+   - Use the same wrapped distance calculation logic
+   - Show consistent ratio calculations
+   - Display detailed movement information
+2. Improved the display format to show:
+   - Raw screen distances
+   - Absolute game unit values
+   - Calculated ratios for both directions
+3. Added validation for screen distances against window dimensions
+4. Enhanced logging to show more detailed movement information
+
+### Implementation Details
+1. Modified DirectionWidget._start_calibration():
+   - Added proper wrapped distance calculation
+   - Improved progress feedback
+   - Enhanced results display with ratios
+2. Updated CoordinateDisplayWidget._update_calibration_display():
+   - Added detailed movement information
+   - Implemented consistent distance calculations
+   - Improved results formatting
+3. Both widgets now show:
+   - Screen distances in pixels
+   - Game unit movements with proper wrapping
+   - Calculated ratios for verification
+
+### Verification
+- Calibration results now match between:
+  - Log output
+  - DirectionWidget display
+  - CoordinateDisplayWidget display
+- All displays show the same:
+  - Screen distances
+  - Game unit movements
+  - Pixels per game unit ratios
+
+### Prevention
+To prevent similar issues in the future:
+1. Always implement consistent calculation methods across all display locations
+2. Use the same validation and wrapping logic throughout the application
+3. Show detailed information in the GUI to match log output
+4. Validate displayed values against actual calculations
+
+## [FIXED] Inconsistent Y Measurements in Direction Calibration
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** GameWorldDirection
+
+### Issue Description
+During direction calibration, the first Y measurement was consistently higher (~23%) than subsequent measurements, causing calibration failures due to inconsistent ratios.
+
+### Root Cause
+The game world was not fully stabilized after movements before taking measurements. The first measurement was affected by residual movement in the game world.
+
+### Solution
+Modified the `_calibrate_direction` method in `game_world_direction.py` to:
+1. Increase initial wait time from 1.0s to 1.5s
+2. Add multiple OCR updates (3 times with 0.5s delay) at each critical point:
+   - Before taking the start position
+   - After the drag movement
+   - After returning to start position
+3. Increase wait time after movements from 1.5s to 2.0s
+
+### Verification
+- Y measurements are now consistent across all runs
+- Calibration completes successfully with consistent ratios
+- No more outliers in the first measurement 
+
+## [FIXED] OCR Region Out of Window Bounds
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** TextOCR
+
+### Issue Description
+OCR was failing to read coordinates because the OCR region was being positioned outside the game window bounds, particularly when the window was moved or resized.
+
+### Root Cause
+The OCR region coordinates were not being properly validated against window bounds, and physical screen coordinates were not being updated when the window moved.
+
+### Solution
+1. Enhanced `set_region` method in `TextOCR` class to:
+   - Add bounds checking to ensure region stays within window
+   - Store both logical (window-relative) and physical (screen) coordinates
+   - Improve error handling and validation
+2. Updated `_process_region` method to:
+   - Dynamically update physical coordinates based on current window position
+   - Add bounds checking during processing
+   - Improve screenshot saving for debugging
+   - Enhance error handling and logging
+
+### Verification
+- OCR region now stays within game window bounds
+- Region automatically adjusts when window moves
+- Coordinates are properly read during scans
+- Debug screenshots are saved for verification 
+
+## [FIXED] Missing Screenshot Capture Method
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** WindowManager, TextOCR
+
+### Issue Description
+OCR system was broken in both overlay and game world tab due to a missing `capture_region` method in the WindowManager class.
+
+### Root Cause
+During the OCR system refactoring, we moved the screenshot capture functionality from TextOCR to WindowManager for better organization, but the implementation of `capture_region` was missing.
+
+### Solution
+1. Added `capture_region` method to WindowManager:
+   - Takes region dictionary with left, top, width, height
+   - Uses mss for efficient screen capture
+   - Converts BGRA to BGR format for OpenCV compatibility
+   - Includes proper error handling
+2. Added necessary imports:
+   - numpy for array handling
+   - cv2 for image processing
+   - mss for screen capture
+
+### Verification
+- OCR system now works in both overlay and game world tab
+- Screenshots are properly captured and processed
+- Color format is correctly converted for OpenCV
+- Error handling properly catches and logs issues 
+
+## [FIXED] OCR Region Update and Game State Sync
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** TextOCR
+
+### Issue Description
+OCR system was failing to properly update coordinates and maintain game state synchronization after the screenshot capture refactoring.
+
+### Root Cause
+1. Physical region updates were not properly maintaining all required fields
+2. Game state was not being updated with new coordinates
+3. Region dictionary was being modified in place instead of being recreated
+
+### Solution
+1. Fixed physical region updates in TextOCR:
+   - Now creating new region dictionary with all fields
+   - Properly calculating screen coordinates from window position
+   - Maintaining dpi_scale and other required properties
+2. Added game state synchronization:
+   - Updating game state when new coordinates are extracted
+   - Ensuring coordinates are properly formatted
+3. Improved error handling and logging:
+   - Better debug messages for troubleshooting
+   - Clearer logging of coordinate extraction results
+
+### Verification
+- OCR system now properly updates coordinates
+- Game state stays synchronized with latest coordinates
+- Debug screenshots are properly saved
+- Error handling provides clear feedback 
+
+## [FIXED] Game World Search Functionality
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** GameWorldSearch
+
+### Issue Description
+Search functionality was failing due to:
+1. Missing `get_game_position` method
+2. PyDirectInput fail-safe triggering from excessive mouse movement
+3. Incorrect drag vector calculation
+
+### Root Cause
+1. The `get_game_position` method was referenced but not implemented
+2. Drag vectors were being calculated without proper bounds checking
+3. Mouse movements were attempting to move outside window bounds
+
+### Solution
+1. Added `get_game_position` method:
+   - Calculates game world position from grid coordinates
+   - Uses start position and drag distances
+   - Handles coordinate wrapping properly
+2. Improved drag vector calculation:
+   - Added proper scaling based on window dimensions
+   - Implemented bounds checking for drag coordinates
+   - Centered drags around window center
+3. Enhanced movement logic:
+   - Added relative window coordinates for drags
+   - Implemented proper coordinate wrapping
+   - Added better error handling and logging
+
+### Verification
+- Search functionality now works correctly
+- Mouse movements stay within window bounds
+- Grid positions are properly calculated
+- Drag operations complete successfully 
+
+## [FIXED] Search Movement Using Calibrated Drag Points
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** GameWorldSearch
+
+### Issue Description
+Search movement was not using the calibrated drag points from direction definitions, leading to inconsistent movement and potential errors.
+
+### Root Cause
+The `_move_to_position` method was calculating its own drag points based on window dimensions instead of using the calibrated points from direction definitions.
+
+### Solution
+Modified `_move_to_position` method to:
+1. Use calibrated drag points:
+   - North/South drags use points from north definition
+   - East/West drags use points from east definition
+2. Calculate number of drags needed:
+   - Based on target distance and calibrated drag distances
+   - Handles both positive and negative movements
+3. Perform drags in sequence:
+   - First east/west movement
+   - Then north/south movement
+   - Uses proper inverse points for opposite directions
+
+### Verification
+- Search movement now uses calibrated drag points
+- Movement is consistent with calibration
+- Proper handling of both directions
+- Correct use of inverse points for opposite movements
+
+## 2023-09-02: Fixed OCR Process and Q/Escape Key Handling
+
+### Issue
+1. Coordinates were not being displayed in the GUI despite being extracted by the OCR process
+2. The OCR process could not be canceled with Q/Escape keys
+
+### Root Cause
+1. The coordinate display widget was only updating the display when the OCR process returned success, but wasn't checking if there were valid coordinates in the game world coordinator
+2. The keyPressEvent method was checking `self.text_ocr.active` which wasn't properly tracking the OCR state
+3. The TextOCR class had inconsistent state tracking with both `self.active` and internal timer state
+
+### Solution
+1. Modified the `_update_coordinates` method in `CoordinateDisplayWidget` to:
+   - Get the current position regardless of OCR success
+   - Display partial coordinates with placeholders for missing values
+   - Use different colors to indicate full, partial, or missing coordinates
+2. Fixed the `keyPressEvent` method in `OverlayController` to:
+   - Check the OCR button state instead of `text_ocr.active`
+   - Add proper error handling when stopping the OCR process
+3. Improved the TextOCR class with:
+   - Added a proper `active` property to track OCR state
+   - Ensured consistent state tracking between the property and internal timer
+
+### Prevention
+1. Added more detailed logging to track coordinate display issues
+2. Improved error handling throughout the OCR process
+3. Added proper state tracking in the TextOCR class
+4. Used button state as the source of truth for process state in key event handling
+
+### Testing
+1. Verified that coordinates are displayed in the GUI even when some values are missing
+2. Confirmed that the Q/Escape keys properly stop the OCR process
+3. Tested error handling by simulating OCR failures
+4. Verified that the OCR button state correctly reflects the OCR process state
+
+## 2023-09-03: Fixed OCR Process Performance and Temporary Files Issues
+
+### Issues Fixed
+- Application getting stuck or becoming unresponsive during OCR operations
+- Excessive temporary PNG files being created in the system temp folder
+- OCR process not stopping when using Q/Escape keys
+- Coordinates not being displayed in the GUI despite being extracted
+
+### Root Cause Analysis
+- The pytesseract library was creating numerous temporary files for each OCR operation
+- Multiple OCR methods were being run in quick succession, creating a large number of temporary files
+- The OCR process was being called too frequently without rate limiting
+- The drag calibration system increased the number of OCR operations, exacerbating the issue
+
+### Solutions Implemented
+1. Optimized the OCR process in `TextOCR.extract_text()`:
+   - Only process the preferred OCR method when not in auto mode
+   - Standardized configuration parameters to reduce redundancy
+   - Simplified the OCR method selection process
+2. Added rate limiting to `GameWorldCoordinator.update_current_position_from_ocr()`:
+   - Implemented a minimum 500ms delay between OCR operations
+   - Added early return with existing coordinates when rate limited
+   - Improved logging to track rate-limited operations
+3. Enhanced error handling throughout the OCR process:
+   - Better timeout handling to prevent the application from hanging
+   - Improved fallback to existing coordinates when OCR fails
+   - More robust state tracking for the OCR process
+
+### Prevention Strategies
+1. Implemented rate limiting to prevent excessive OCR operations
+2. Reduced the number of temporary files created during OCR
+3. Improved error handling and timeout mechanisms
+4. Enhanced logging to better track OCR operations and failures
+5. Added more robust state tracking for the OCR process
+
+### Testing
+1. Verified that the application remains responsive during OCR operations
+2. Confirmed that fewer temporary files are created during OCR
+3. Tested that the Q/Escape keys properly stop the OCR process
+4. Verified that coordinates are displayed in the GUI even when some values are missing
+5. Confirmed that the OCR process works correctly with the drag calibration system
+
+## 2023-09-04: Fixed Excessive OCR Updates and Mouse Centering
+
+### Issues Fixed
+- Application constantly updating OCR too frequently
+- Mouse constantly being reset to the center of the game window
+- OCR process still not responding properly to Escape/Q keys
+- Auto-update in coordinate widget causing excessive OCR operations
+
+### Root Cause Analysis
+- Rate limiting in `GameWorldCoordinator.update_current_position_from_ocr()` was too short (0.5 seconds)
+- Auto-update interval in `CoordinateDisplayWidget` was too short (2 seconds)
+- Auto-update was sometimes enabled by default or not properly disabled when OCR was stopped
+- Cancellation mechanism wasn't aggressive enough to stop all OCR-related processes
+- Timeout checks weren't frequent enough to detect cancellation requests quickly
+
+### Solutions Implemented
+1. Increased rate limiting in `GameWorldCoordinator.update_current_position_from_ocr()`:
+   - Changed from 0.5 seconds to 2.0 seconds to prevent excessive updates
+2. Modified `CoordinateDisplayWidget` to improve auto-update behavior:
+   - Increased auto-update interval from 2 seconds to 5 seconds
+   - Ensured auto-update is disabled by default
+   - Added more frequent cancellation checks during updates
+3. Enhanced the `TextOCR.stop()` method:
+   - Added a verification step to ensure OCR is fully stopped
+   - Added a delayed check to force stop if still active
+4. Improved the key press event handler in `gui_controller.py`:
+   - Set cancellation flag immediately on key press
+   - Added code to stop coordinate widget auto-update when OCR is stopped
+5. Enhanced the `_stop_ocr()` method:
+   - Added code to stop coordinate widget auto-update
+   - Added a verification step to ensure OCR is fully stopped
+6. Added a new `_verify_ocr_stopped()` method to `OverlayController`:
+   - Checks if OCR is still active after stop request
+   - Forces stop if OCR is still active
+   - Updates UI to reflect forced stop
+7. Modified the `_update_coordinates()` method in `CoordinateDisplayWidget`:
+   - Reduced timeout from 5 seconds to 3 seconds
+   - Increased frequency of timeout checks from 500ms to 200ms
+   - Added more cancellation checks during the update process
+
+### Prevention Strategies
+1. Implemented more aggressive rate limiting to prevent excessive OCR updates
+2. Added multiple verification steps to ensure OCR is fully stopped
+3. Ensured auto-update is properly disabled when OCR is stopped
+4. Added more frequent cancellation checks during OCR operations
+5. Improved coordination between different components that use OCR
+
+### Testing
+1. Verified that OCR updates occur at a reasonable frequency
+2. Confirmed that the mouse is not constantly being centered
+3. Tested that Escape/Q keys properly stop all OCR-related processes
+4. Verified that auto-update is properly disabled when OCR is stopped
+5. Confirmed that the application remains responsive during OCR operations
+
+## Calibration Display Inconsistency (Fixed)
+**Date:** March 1, 2024
+**Status:** FIXED
+
+### Issue Description
+The calibration results were displaying inconsistent values between the GUI widgets and the logs. Specifically:
+- The East direction values were showing different results in different parts of the UI
+- The wrapped distance calculations were not consistently applied across all display locations
+- The ratios shown in the GUI didn't match the actual calculations in the logs
+
+### Root Cause
+1. Different widgets (DirectionWidget and CoordinateDisplayWidget) were using different methods to calculate and display the calibration results
+2. The wrapped distance calculation was not consistently implemented across all display locations
+3. The GUI wasn't showing the detailed movement information that was available in the logs
+
+### Solution
+1. Updated both DirectionWidget and CoordinateDisplayWidget to:
+   - Use the same wrapped distance calculation logic
+   - Show consistent ratio calculations
+   - Display detailed movement information
+2. Improved the display format to show:
+   - Raw screen distances
+   - Absolute game unit values
+   - Calculated ratios for both directions
+3. Added validation for screen distances against window dimensions
+4. Enhanced logging to show more detailed movement information
+
+### Implementation Details
+1. Modified DirectionWidget._start_calibration():
+   - Added proper wrapped distance calculation
+   - Improved progress feedback
+   - Enhanced results display with ratios
+2. Updated CoordinateDisplayWidget._update_calibration_display():
+   - Added detailed movement information
+   - Implemented consistent distance calculations
+   - Improved results formatting
+3. Both widgets now show:
+   - Screen distances in pixels
+   - Game unit movements with proper wrapping
+   - Calculated ratios for verification
+
+### Verification
+- Calibration results now match between:
+  - Log output
+  - DirectionWidget display
+  - CoordinateDisplayWidget display
+- All displays show the same:
+  - Screen distances
+  - Game unit movements
+  - Pixels per game unit ratios
+
+### Prevention
+To prevent similar issues in the future:
+1. Always implement consistent calculation methods across all display locations
+2. Use the same validation and wrapping logic throughout the application
+3. Show detailed information in the GUI to match log output
+4. Validate displayed values against actual calculations
+
+## [FIXED] Inconsistent Y Measurements in Direction Calibration
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** GameWorldDirection
+
+### Issue Description
+During direction calibration, the first Y measurement was consistently higher (~23%) than subsequent measurements, causing calibration failures due to inconsistent ratios.
+
+### Root Cause
+The game world was not fully stabilized after movements before taking measurements. The first measurement was affected by residual movement in the game world.
+
+### Solution
+Modified the `_calibrate_direction` method in `game_world_direction.py` to:
+1. Increase initial wait time from 1.0s to 1.5s
+2. Add multiple OCR updates (3 times with 0.5s delay) at each critical point:
+   - Before taking the start position
+   - After the drag movement
+   - After returning to start position
+3. Increase wait time after movements from 1.5s to 2.0s
+
+### Verification
+- Y measurements are now consistent across all runs
+- Calibration completes successfully with consistent ratios
+- No more outliers in the first measurement 
+
+## [FIXED] OCR Region Out of Window Bounds
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** TextOCR
+
+### Issue Description
+OCR was failing to read coordinates because the OCR region was being positioned outside the game window bounds, particularly when the window was moved or resized.
+
+### Root Cause
+The OCR region coordinates were not being properly validated against window bounds, and physical screen coordinates were not being updated when the window moved.
+
+### Solution
+1. Enhanced `set_region` method in `TextOCR` class to:
+   - Add bounds checking to ensure region stays within window
+   - Store both logical (window-relative) and physical (screen) coordinates
+   - Improve error handling and validation
+2. Updated `_process_region` method to:
+   - Dynamically update physical coordinates based on current window position
+   - Add bounds checking during processing
+   - Improve screenshot saving for debugging
+   - Enhance error handling and logging
+
+### Verification
+- OCR region now stays within game window bounds
+- Region automatically adjusts when window moves
+- Coordinates are properly read during scans
+- Debug screenshots are saved for verification 
+
+## [FIXED] Missing Screenshot Capture Method
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** WindowManager, TextOCR
+
+### Issue Description
+OCR system was broken in both overlay and game world tab due to a missing `capture_region` method in the WindowManager class.
+
+### Root Cause
+During the OCR system refactoring, we moved the screenshot capture functionality from TextOCR to WindowManager for better organization, but the implementation of `capture_region` was missing.
+
+### Solution
+1. Added `capture_region` method to WindowManager:
+   - Takes region dictionary with left, top, width, height
+   - Uses mss for efficient screen capture
+   - Converts BGRA to BGR format for OpenCV compatibility
+   - Includes proper error handling
+2. Added necessary imports:
+   - numpy for array handling
+   - cv2 for image processing
+   - mss for screen capture
+
+### Verification
+- OCR system now works in both overlay and game world tab
+- Screenshots are properly captured and processed
+- Color format is correctly converted for OpenCV
+- Error handling properly catches and logs issues 
+
+## [FIXED] OCR Region Update and Game State Sync
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** TextOCR
+
+### Issue Description
+OCR system was failing to properly update coordinates and maintain game state synchronization after the screenshot capture refactoring.
+
+### Root Cause
+1. Physical region updates were not properly maintaining all required fields
+2. Game state was not being updated with new coordinates
+3. Region dictionary was being modified in place instead of being recreated
+
+### Solution
+1. Fixed physical region updates in TextOCR:
+   - Now creating new region dictionary with all fields
+   - Properly calculating screen coordinates from window position
+   - Maintaining dpi_scale and other required properties
+2. Added game state synchronization:
+   - Updating game state when new coordinates are extracted
+   - Ensuring coordinates are properly formatted
+3. Improved error handling and logging:
+   - Better debug messages for troubleshooting
+   - Clearer logging of coordinate extraction results
+
+### Verification
+- OCR system now properly updates coordinates
+- Game state stays synchronized with latest coordinates
+- Debug screenshots are properly saved
+- Error handling provides clear feedback 
+
+## [FIXED] Game World Search Functionality
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** GameWorldSearch
+
+### Issue Description
+Search functionality was failing due to:
+1. Missing `get_game_position` method
+2. PyDirectInput fail-safe triggering from excessive mouse movement
+3. Incorrect drag vector calculation
+
+### Root Cause
+1. The `get_game_position` method was referenced but not implemented
+2. Drag vectors were being calculated without proper bounds checking
+3. Mouse movements were attempting to move outside window bounds
+
+### Solution
+1. Added `get_game_position` method:
+   - Calculates game world position from grid coordinates
+   - Uses start position and drag distances
+   - Handles coordinate wrapping properly
+2. Improved drag vector calculation:
+   - Added proper scaling based on window dimensions
+   - Implemented bounds checking for drag coordinates
+   - Centered drags around window center
+3. Enhanced movement logic:
+   - Added relative window coordinates for drags
+   - Implemented proper coordinate wrapping
+   - Added better error handling and logging
+
+### Verification
+- Search functionality now works correctly
+- Mouse movements stay within window bounds
+- Grid positions are properly calculated
+- Drag operations complete successfully 
+
+## [FIXED] Search Movement Using Calibrated Drag Points
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** GameWorldSearch
+
+### Issue Description
+Search movement was not using the calibrated drag points from direction definitions, leading to inconsistent movement and potential errors.
+
+### Root Cause
+The `_move_to_position` method was calculating its own drag points based on window dimensions instead of using the calibrated points from direction definitions.
+
+### Solution
+Modified `_move_to_position` method to:
+1. Use calibrated drag points:
+   - North/South drags use points from north definition
+   - East/West drags use points from east definition
+2. Calculate number of drags needed:
+   - Based on target distance and calibrated drag distances
+   - Handles both positive and negative movements
+3. Perform drags in sequence:
+   - First east/west movement
+   - Then north/south movement
+   - Uses proper inverse points for opposite directions
+
+### Verification
+- Search movement now uses calibrated drag points
+- Movement is consistent with calibration
+- Proper handling of both directions
+- Correct use of inverse points for opposite movements
+
+## [FIXED] Game World Search Movement System
+**Date:** March 1, 2024
+**Status:** FIXED
+**Component:** GameWorldSearch, GameWorldCoordinator, GameWorldDirection
+
+### Issue Description
+The game world search movement system was failing with the error "'GameWorldCoordinator' object has no attribute 'direction_system'". The movement was not using the calibrated drag points from direction definitions.
+
+### Root Cause
+1. GameWorldCoordinator was not properly connected to the direction system
+2. Movement calculations were not using calibrated drag distances
+3. Missing proper handling of direction system initialization
+
+### Solution
+1. Added direction_system attribute to GameWorldCoordinator
+2. Updated GameWorldDirection to set itself as the coordinator's direction system
+3. Rewritten _move_to_position method to:
+   - Use calibrated drag points from direction definitions
+   - Calculate proper drag distances based on direction definitions
+   - Handle both positive and negative movements correctly
+   - Use proper inverse points for opposite directions
+4. Added _perform_drag helper method for consistent drag operations
+
+### Verification
+- Movement now uses calibrated drag points
+- Proper calculation of drag distances
+- Correct handling of positive/negative movements
+- Position updates after each drag
+- Proper error handling and logging

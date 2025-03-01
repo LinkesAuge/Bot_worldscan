@@ -91,8 +91,19 @@ class GameWorldSearchTab(QWidget):
         self.config_manager = config_manager
         self.game_state = game_state
         
-        # Create game world coordinator and search
+        # Create direction system first
+        self.direction_system = GameWorldDirection(
+            window_manager=window_manager,
+            text_ocr=text_ocr,
+            game_actions=game_actions,
+            config_manager=config_manager
+        )
+        
+        # Create game world coordinator and set direction system
         self.game_coordinator = GameWorldCoordinator(window_manager, text_ocr, game_state, game_actions)
+        self.game_coordinator.direction_system = self.direction_system
+        
+        # Create game world search
         self.game_search = GameWorldSearch(
             window_manager,
             template_matcher,
@@ -124,6 +135,12 @@ class GameWorldSearchTab(QWidget):
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self._check_calibration)
         self.is_calibration_check_active = False
+        
+        # Connect direction widget to grid
+        self.direction_widget.direction_manager = self.direction_system
+        
+        # Initialize grid with current calibration if available
+        self._update_grid_calibration()
         
     def _load_settings(self):
         """Load search settings from config."""
@@ -414,22 +431,26 @@ class GameWorldSearchTab(QWidget):
                 progress = min(100, int((positions_checked / total_cells) * 100))
                 self.progress_bar.setValue(progress)
             
-            # Update grid
-            self.grid_widget.set_current_position(*current_pos)
-            self.grid_widget.add_searched_position(*current_pos)
-            
-            # Add path point
-            self.grid_widget.add_path_point(*current_pos)
-            
-            # Update matches
-            if matches:
-                for match in matches:
-                    if match.game_position:
-                        self.grid_widget.set_cell_matches(
-                            current_pos[0], current_pos[1],
-                            1,  # Count of matches in cell
-                            match.game_position
-                        )
+            # Update grid visualization
+            if current_pos:
+                # Update current position
+                self.grid_widget.set_current_position(*current_pos)
+                
+                # Add to searched positions
+                self.grid_widget.add_searched_position(*current_pos)
+                
+                # Add to path
+                self.grid_widget.add_path_point(*current_pos)
+                
+                # Update matches
+                if matches:
+                    for match in matches:
+                        if match.game_position:
+                            self.grid_widget.set_cell_matches(
+                                current_pos[0], current_pos[1],
+                                1,  # Count of matches in cell
+                                match.game_position
+                            )
             
             # Check if search is complete
             if not self.game_search.is_searching:
@@ -463,6 +484,46 @@ class GameWorldSearchTab(QWidget):
         except Exception as e:
             logger.error(f"Error stopping search: {e}")
 
+    def _update_grid_calibration(self):
+        """Update grid with current calibration data."""
+        try:
+            if not self.direction_system:
+                return
+                
+            # Get current position
+            current_pos = self.direction_system.get_current_position()
+            if not current_pos:
+                logger.warning("No current position available for grid")
+                return
+                
+            # Get drag distances
+            drag_distances = self.direction_system.get_drag_distances()
+            if not all(drag_distances):
+                logger.warning("Invalid drag distances for grid")
+                return
+                
+            # Calculate grid size
+            east_distance, south_distance = drag_distances
+            grid_width = (self.WORLD_SIZE + 1) // east_distance
+            if (self.WORLD_SIZE + 1) % east_distance:
+                grid_width += 1
+                
+            grid_height = grid_width // 2
+            if grid_width % 2:
+                grid_height += 1
+                
+            # Update grid widget
+            self.grid_widget.set_grid_parameters(
+                grid_size=(grid_width, grid_height),
+                start_pos=current_pos,
+                drag_distances=drag_distances
+            )
+            
+            logger.info(f"Updated grid calibration - Size: {grid_width}x{grid_height}, Start: {current_pos}, Drags: {drag_distances}")
+            
+        except Exception as e:
+            logger.error(f"Error updating grid calibration: {e}")
+
     def _check_calibration(self):
         """Check if calibration has changed and update grid if needed."""
         try:
@@ -483,34 +544,8 @@ class GameWorldSearchTab(QWidget):
                 self.last_calibration_state['position'] = current_pos
                 self.last_calibration_state['drag_distances'] = drag_distances
                 
-                # Only update grid if we have valid calibration
-                if current_pos and all(drag_distances):
-                    east_distance, south_distance = drag_distances
-                    
-                    # Calculate grid size
-                    grid_width = (self.WORLD_SIZE + 1) // east_distance
-                    if (self.WORLD_SIZE + 1) % east_distance:
-                        grid_width += 1
-                        
-                    # Height should maintain 2:1 ratio with width
-                    grid_height = grid_width // 2
-                    if grid_width % 2:
-                        grid_height += 1
-                        
-                    # Update grid widget
-                    self.grid_widget.set_grid_parameters(
-                        (grid_width, grid_height),
-                        current_pos,
-                        drag_distances
-                    )
-                    
-                    # Update drag info label
-                    self.drag_info_label.setText(
-                        f"Each drag covers:\n"
-                        f"East: {east_distance} game units\n"
-                        f"South: {south_distance} game units\n"
-                        f"Grid size: {grid_width}x{grid_height} cells"
-                    )
-                    
+                # Update grid calibration
+                self._update_grid_calibration()
+                
         except Exception as e:
             logger.error(f"Error checking calibration: {e}")
