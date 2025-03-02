@@ -17,6 +17,9 @@ import time
 import cv2
 import win32api
 import win32con
+import win32gui
+from ctypes import windll, wintypes
+import ctypes
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -24,8 +27,12 @@ from PyQt6.QtWidgets import (
     QFormLayout, QTabWidget, QSplitter, QFileDialog, QMessageBox,
     QListWidget, QListWidgetItem, QTextEdit, QProgressBar
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer
+from PyQt6.QtCore import (
+    Qt, pyqtSignal, QTimer, QObject, QEvent, QAbstractNativeEventFilter,
+    QThread, pyqtSlot
+)
 from PyQt6.QtGui import QPixmap, QImage, QKeyEvent
+from PyQt6.QtWidgets import QApplication
 
 from scout.window_manager import WindowManager
 from scout.template_matcher import TemplateMatcher
@@ -44,6 +51,81 @@ from scout.gui.game_world_search_preview import SearchPreviewWidget
 from scout.gui.game_world_grid import GameWorldGrid
 
 logger = logging.getLogger(__name__)
+
+class SearchWorker(QObject):
+    """Worker class that runs the search process in a separate thread."""
+    
+    # Signals for communication with main thread
+    progress = pyqtSignal(int, int)  # positions_checked, total_cells
+    position_updated = pyqtSignal(tuple, object)  # current_pos, game_pos
+    matches_found = pyqtSignal(tuple, list)  # current_pos, matches
+    search_complete = pyqtSignal()
+    error_occurred = pyqtSignal(str)
+    screenshot_ready = pyqtSignal(object)  # screenshot data
+    
+    def __init__(
+        self,
+        game_search: GameWorldSearch,
+        window_manager: WindowManager,
+        text_ocr: TextOCR,
+        game_coordinator: GameWorldCoordinator
+    ):
+        """Initialize the search worker."""
+        super().__init__()
+        self.game_search = game_search
+        self.window_manager = window_manager
+        self.text_ocr = text_ocr
+        self.game_coordinator = game_coordinator
+        self.stop_requested = False
+
+    def run_search(self):
+        """Run the search process in the worker thread."""
+        try:
+            # Start OCR for coordinate tracking
+            self.text_ocr._cancellation_requested = False
+            self.text_ocr.start()
+
+            # Start the actual search
+            self.game_search.start()
+
+            # Process search steps
+            while not self.stop_requested and self.game_search.is_searching:
+                # Get current position and game position
+                current_pos = self.game_search.current_position
+                game_pos = self.game_search.get_game_position(current_pos[0], current_pos[1])
+
+                # Update progress
+                self.progress.emit(self.game_search.positions_checked, self.game_search.total_cells)
+
+                # Update position
+                if game_pos:
+                    self.position_updated.emit(current_pos, game_pos)
+
+                # Check for matches
+                if self.game_search.matches:
+                    self.matches_found.emit(current_pos, self.game_search.matches)
+
+                # Take screenshot for preview
+                screenshot = self.window_manager.capture_screenshot()
+                if screenshot is not None:
+                    self.screenshot_ready.emit(screenshot)
+
+                # Process a single search step
+                self.game_search._search_at_position(game_pos)
+
+                # Small delay to prevent CPU overload
+                time.sleep(0.1)
+
+            # Signal completion
+            self.search_complete.emit()
+
+        except Exception as e:
+            logger.error(f"Error in search worker: {e}", exc_info=True)
+            self.error_occurred.emit(str(e))
+        finally:
+            # Stop OCR
+            self.text_ocr._cancellation_requested = True
+            self.text_ocr.stop()
 
 class GameWorldSearchTab(QWidget):
     """
@@ -65,6 +147,10 @@ class GameWorldSearchTab(QWidget):
     # World size (999x999)
     WORLD_SIZE = 999
     
+    # Add constants for hotkeys
+    STOP_VKEY = win32con.VK_ESCAPE  # Use Escape key
+    ALT_STOP_VKEY = ord('Q')        # Use Q key as alternative
+    
     def __init__(
         self,
         window_manager: WindowManager,
@@ -85,7 +171,13 @@ class GameWorldSearchTab(QWidget):
             config_manager: The configuration manager instance
             game_state: Optional GameState instance for coordinate tracking
         """
+        # Initialize QWidget
         super().__init__()
+        
+        # Initialize state variables for key checking
+        self.last_key_check_time = time.time()
+        self.key_check_interval = 0.05  # Check every 50ms for more responsiveness
+        self.stop_requested = False
         
         # Store components
         self.window_manager = window_manager
@@ -94,6 +186,11 @@ class GameWorldSearchTab(QWidget):
         self.game_actions = game_actions
         self.config_manager = config_manager
         self.game_state = game_state
+        
+        # Create key check timer with higher frequency
+        self.key_check_timer = QTimer()
+        self.key_check_timer.timeout.connect(self._check_stop_keys)
+        self.key_check_timer.setInterval(50)  # Check every 50ms
         
         # Create direction system first
         self.direction_system = GameWorldDirection(
@@ -124,7 +221,6 @@ class GameWorldSearchTab(QWidget):
         self.is_searching = False
         self.search_timer = QTimer()
         self.search_timer.timeout.connect(self._update_search_status)
-        self.stop_requested = False
         
         # Load settings
         self._load_settings()
@@ -146,23 +242,11 @@ class GameWorldSearchTab(QWidget):
         # Initialize grid with default size and empty state
         self._initialize_grid()
         
-        # Start periodic grid updates only when searching
-        self.grid_update_timer = QTimer()
-        self.grid_update_timer.timeout.connect(self._check_calibration)
-        
         # Update drag info label
         self._update_drag_info()
         
         # Enable key events for the whole tab
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        
-        # Create a timer to check for stop keys
-        self.key_check_timer = QTimer()
-        self.key_check_timer.timeout.connect(self._check_stop_keys)
-        self.key_check_timer.setInterval(100)  # Check every 100ms
-        
-        # Update search timer interval for smoother updates
-        self.search_timer.setInterval(100)  # Update every 100ms
         
         # Store last screenshot for preview
         self.last_screenshot = None
@@ -171,6 +255,14 @@ class GameWorldSearchTab(QWidget):
         self.text_ocr._cancellation_requested = True
         self.text_ocr.stop()
         
+    def __del__(self):
+        """Clean up registered hotkeys."""
+        try:
+            win32api.UnregisterHotKey(None, 1)  # Unregister Escape
+            win32api.UnregisterHotKey(None, 2)  # Unregister Q
+        except:
+            pass
+            
     def _load_settings(self):
         """Load search settings from config."""
         settings = self.config_manager.get_search_settings()
@@ -384,20 +476,6 @@ class GameWorldSearchTab(QWidget):
         if self.use_all_templates_check.isChecked():
             self.template_list.selectAll()
             
-    def start_calibration_check(self):
-        """Start the calibration check timer."""
-        if not self.is_calibration_check_active:
-            self.update_timer.start(1000)  # Check every second
-            self.is_calibration_check_active = True
-            logger.info("Started calibration check timer")
-
-    def stop_calibration_check(self):
-        """Stop the calibration check timer."""
-        if self.is_calibration_check_active:
-            self.update_timer.stop()
-            self.is_calibration_check_active = False
-            logger.info("Stopped calibration check timer")
-
     def _initialize_grid(self) -> None:
         """Initialize grid with default size and empty state."""
         # Set initial grid size (can be adjusted based on screen size)
@@ -421,9 +499,101 @@ class GameWorldSearchTab(QWidget):
             current_cell=(0, 0)
         )
         
+        # Connect grid status signal
+        self.grid_widget.status_updated.connect(self._on_grid_status_updated)
+        
+        # Connect grid to game state
+        if self.game_state:
+            self.grid_widget.set_game_state(self.game_state)
+        
         # Update grid status
         self.grid_widget._update_status()
         
+        # Force initial update and repaint
+        self.grid_widget.update()
+        self.grid_widget.repaint()
+        
+    def _on_grid_status_updated(self, status: str) -> None:
+        """Handle grid status updates."""
+        try:
+            # Update status label
+            self.grid_status_label.setText(status)
+            
+            # Force grid to repaint
+            self.grid_widget.update()
+            
+        except Exception as e:
+            logger.error(f"Error updating grid status: {e}")
+            
+    def _update_grid_calibration(self):
+        """Update grid with current calibration data."""
+        try:
+            if not self.direction_system or not self.game_state:
+                logger.warning("Missing direction system or game state for grid calibration")
+                return
+                
+            # Get current position from GameState
+            coords = self.game_state.get_coordinates()
+            if not coords:
+                logger.warning("No current position available for grid")
+                return
+                
+            # Convert coordinates to GameWorldPosition
+            current_pos = GameWorldPosition(
+                k=coords.k,
+                x=coords.x,
+                y=coords.y
+            )
+            logger.debug(f"Current game position for calibration: {current_pos}")
+                
+            # Get drag distances
+            drag_distances = self.direction_system.get_drag_distances()
+            if not all(drag_distances):
+                logger.warning("Invalid drag distances")
+                return
+                
+            logger.debug(f"Current drag distances: {drag_distances}")
+                
+            # Calculate grid size
+            east_distance, south_distance = drag_distances
+            
+            grid_width = (self.WORLD_SIZE + 1) // east_distance
+            if (self.WORLD_SIZE + 1) % east_distance:
+                grid_width += 1
+                
+            grid_height = (self.WORLD_SIZE + 1) // south_distance
+            if (self.WORLD_SIZE + 1) % south_distance:
+                grid_height += 1
+                
+            # Calculate current cell based on position
+            current_cell_x = current_pos.x // east_distance
+            current_cell_y = current_pos.y // south_distance
+            
+            logger.info(f"Updating grid calibration: size={grid_width}x{grid_height}, "
+                       f"current_pos={current_pos}, current_cell=({current_cell_x}, {current_cell_y})")
+            
+            # Update grid widget
+            self.grid_widget.set_grid_parameters(
+                grid_size=(grid_width, grid_height),
+                start_pos=current_pos,
+                drag_distances=drag_distances,
+                current_cell=(current_cell_x, current_cell_y)
+            )
+            
+            # Force immediate update
+            self.grid_widget.update()
+            
+            # Force repaint
+            self.grid_widget.repaint()
+            
+            # Update drag info label
+            self._update_drag_info()
+            
+            logger.debug("Grid calibration update completed")
+            
+        except Exception as e:
+            logger.error(f"Error updating grid calibration: {e}", exc_info=True)
+
     def _start_search(self):
         """Start the search process."""
         try:
@@ -432,49 +602,50 @@ class GameWorldSearchTab(QWidget):
             self.text_ocr._cancellation_requested = True
             self.text_ocr.stop()
             time.sleep(0.5)  # Give it time to fully stop
-            
+
+            # Reset stop flags
+            self.stop_requested = False
+            self.game_search.stop_requested = False
+
+            # Start key check timer with high frequency
+            self.key_check_timer.start()
+
             # Take a screenshot of the OCR region
             if not self.text_ocr.region:
                 logger.error("No OCR region set")
                 QMessageBox.warning(self, "Error", "No OCR region set. Please set an OCR region in the Overlay tab.")
                 return
-            
+
             # Capture and process the region directly
             screenshot = self.window_manager.capture_region(self.text_ocr.region)
             if screenshot is None:
                 logger.error("Failed to capture screenshot of OCR region")
                 QMessageBox.warning(self, "Error", "Failed to capture OCR region. Please ensure the game window is visible.")
                 return
-            
+
             # Extract text from screenshot
             text = self.text_ocr.extract_text(screenshot)
             if not text:
                 logger.error("No text extracted from OCR region")
                 QMessageBox.warning(self, "Error", "Could not read coordinates. Please ensure:\n\n1. The game window is visible\n2. OCR region is correctly positioned\n3. Coordinates are visible in game")
                 return
-            
+
             # Extract coordinates from text
             coords = self.text_ocr._extract_coordinates(text)
             if not coords or not coords.is_valid():
                 logger.error("Failed to get valid coordinates")
                 QMessageBox.warning(self, "Error", "Could not get valid coordinates. Please ensure:\n\n1. The game window is visible\n2. OCR region is correctly positioned\n3. Coordinates are visible in game")
                 return
-            
+
             logger.info(f"Got valid coordinates: K:{coords.k} X:{coords.x} Y:{coords.y}")
-            
-            # Start key check timer when search starts
-            self.key_check_timer.start()
-            
-            # Start calibration check
-            self.start_calibration_check()
-            
+
             # Get direction definitions
             direction_manager = self.direction_widget.direction_manager
             if not direction_manager:
                 logger.error("No direction manager available")
                 self._stop_search()
                 return
-            
+
             # Convert coordinates to GameWorldPosition
             current_pos = GameWorldPosition(
                 k=coords.k,
@@ -482,42 +653,45 @@ class GameWorldSearchTab(QWidget):
                 y=coords.y
             )
             logger.info(f"Got initial position: {current_pos}")
-            
-            # Get drag distances from direction manager
+
+            # Update game coordinator with initial position
+            self.game_coordinator.update_position(current_pos)
+
+            # Get drag distances
             drag_distances = direction_manager.get_drag_distances()
             if not all(drag_distances):
                 logger.warning("Invalid drag distances")
                 QMessageBox.warning(self, "Error", "Invalid drag distances. Please calibrate the directions first.")
                 self._stop_search()
                 return
-            
+
             # Calculate grid size based on game world dimensions
             east_distance, south_distance = drag_distances
-            
+
             # Calculate cells needed for each axis independently
             grid_width = (self.WORLD_SIZE + 1) // east_distance
             if (self.WORLD_SIZE + 1) % east_distance:
                 grid_width += 1
-            
+
             grid_height = (self.WORLD_SIZE + 1) // south_distance
             if (self.WORLD_SIZE + 1) % south_distance:
                 grid_height += 1
-            
+
             logger.info(f"Calculated grid size: {grid_width}x{grid_height} based on drag distances: {drag_distances}")
-            
+
             # Calculate starting cell based on current position
             start_cell_x = current_pos.x // east_distance
             start_cell_y = current_pos.y // south_distance
-            
+
             logger.info(f"Starting at cell ({start_cell_x}, {start_cell_y}) based on position {current_pos}")
-            
+
             # Get selected templates
             selected_templates = [item.text() for item in self.template_list.selectedItems()]
             if not selected_templates:
                 logger.error("No templates selected")
                 self._stop_search()
                 return
-            
+
             # Configure search
             self.game_search.configure(
                 templates=selected_templates,
@@ -528,43 +702,79 @@ class GameWorldSearchTab(QWidget):
                 start_cell=(start_cell_x, start_cell_y),
                 drag_distances=drag_distances
             )
-            
+
             # Clear previous search data
             self.grid_widget.clear_search_data()
             self.results_widget.clear_results()
             self.results_preview_widget.clear_preview()
-            
+
+            # Initialize grid with search parameters
+            self.grid_widget.set_grid_parameters(
+                grid_size=(grid_width, grid_height),
+                start_pos=current_pos,
+                drag_distances=drag_distances,
+                current_cell=(start_cell_x, start_cell_y)
+            )
+
+            # Set search in progress
+            self.grid_widget.set_search_in_progress(True)
+
             # Update UI state
             self.start_search_btn.setEnabled(False)
             self.stop_search_btn.setEnabled(True)
             self.progress_bar.setVisible(True)
             self.progress_bar.setRange(0, grid_width * grid_height)
             self.progress_bar.setValue(0)
-            
+
+            # Create worker thread
+            self.search_thread = QThread()
+            self.search_worker = SearchWorker(
+                self.game_search,
+                self.window_manager,
+                self.text_ocr,
+                self.game_coordinator
+            )
+
+            # Move worker to thread
+            self.search_worker.moveToThread(self.search_thread)
+
+            # Connect signals
+            self.search_thread.started.connect(self.search_worker.run_search)
+            self.search_worker.progress.connect(self._update_progress)
+            self.search_worker.position_updated.connect(self._update_position)
+            self.search_worker.matches_found.connect(self._update_matches)
+            self.search_worker.search_complete.connect(self._on_search_complete)
+            self.search_worker.error_occurred.connect(self._on_search_error)
+            self.search_worker.screenshot_ready.connect(self._update_preview)
+
             # Start OCR for continuous updates during search
             self.text_ocr._cancellation_requested = False
             self.text_ocr.start()
-            
+
             # Start search
             self.is_searching = True
-            self.stop_requested = False
-            self.search_timer.start()
-            
-            # Start grid updates
-            self.grid_update_timer.start(500)  # Update every 500ms
-            
-            # Start search in background
-            self.game_search.start()
-            
+
+            # Start the thread
+            self.search_thread.start()
+
+            # Ensure our window stays visible but doesn't steal focus
+            if self.window():
+                self.window().show()
+                self.window().raise_()
+
         except Exception as e:
             logger.error(f"Error starting search: {e}", exc_info=True)
             self._stop_search()  # Ensure cleanup happens
             QMessageBox.critical(self, "Error", f"Failed to start search: {str(e)}")
-            
+
     def _update_search_status(self):
         """Update the UI with current search status."""
         try:
             if not self.is_searching:
+                return
+                
+            # Check for stop request
+            if self._check_stop_keys():
                 return
                 
             # Get current search state
@@ -573,35 +783,44 @@ class GameWorldSearchTab(QWidget):
             current_pos = self.game_search.current_position
             matches = self.game_search.matches
             
+            logger.debug(f"Search status - Checked: {positions_checked}/{total_cells}, "
+                        f"Current position: {current_pos}, Matches: {len(matches) if matches else 0}")
+            
             # Update progress bar
             if total_cells > 0:
                 progress = min(100, int((positions_checked / total_cells) * 100))
                 self.progress_bar.setValue(progress)
+                logger.debug(f"Progress updated: {progress}%")
             
             # Update grid visualization
             if current_pos is not None:
                 # Get current game position
                 game_pos = self.game_search.get_game_position(current_pos[0], current_pos[1])
+                logger.debug(f"Current game position: {game_pos}")
+                
                 if game_pos:
+                    # Update game coordinator position
+                    logger.debug("Updating game coordinator position")
+                    self.game_coordinator.update_position(game_pos)
+                    
                     # Update current position in grid
+                    logger.debug(f"Updating grid position to: {current_pos}")
                     self.grid_widget.set_current_position(current_pos[0], current_pos[1])
                     
                     # Add to searched positions
+                    logger.debug(f"Adding searched position: {current_pos}")
                     self.grid_widget.add_searched_position(current_pos[0], current_pos[1])
                     
                     # Add to path
+                    logger.debug(f"Adding path point: {current_pos}")
                     self.grid_widget.add_path_point(current_pos[0], current_pos[1])
-                    
-                    # Update grid status with current position
-                    self.grid_widget._update_status()
-                    
-                    # Force grid to update
-                    self.grid_widget.update()
                     
                     # Update matches
                     if matches:
+                        logger.debug(f"Processing {len(matches)} matches")
                         for match in matches:
                             if match.game_position:
+                                logger.debug(f"Adding match at {current_pos} with game position: {match.game_position}")
                                 self.grid_widget.set_cell_matches(
                                     current_pos[0], current_pos[1],
                                     1,  # Count of matches in cell
@@ -610,18 +829,28 @@ class GameWorldSearchTab(QWidget):
                                 
                                 # Add match to results
                                 self.results_widget.add_result(match)
+                    
+                    # Single update for all grid changes
+                    self.grid_widget.update()
+                    self.grid_widget.repaint()
+                else:
+                    logger.warning(f"Failed to get game position for grid coordinates: {current_pos}")
             
             # Update preview with current screenshot
             screenshot = self.window_manager.capture_screenshot()
             if screenshot is not None:
+                logger.debug("Updating preview with new screenshot")
                 # Update preview directly with OpenCV image
                 self.preview_widget.set_preview(screenshot)
                 
                 # Store last screenshot
                 self.last_screenshot = screenshot
+            else:
+                logger.warning("Failed to capture screenshot for preview")
             
             # Check if search is complete
             if not self.game_search.is_searching or self.stop_requested:
+                logger.info("Search completion detected")
                 self._stop_search()
                 
         except Exception as e:
@@ -631,48 +860,76 @@ class GameWorldSearchTab(QWidget):
     def _stop_search(self):
         """Stop the search process."""
         try:
+            # Set stop flags first
+            self.stop_requested = True
+            if hasattr(self, 'search_worker'):
+                self.search_worker.stop_requested = True
+            if hasattr(self, 'game_search'):
+                self.game_search.stop_requested = True
+
             # Stop key check timer
-            self.key_check_timer.stop()
-            
+            if hasattr(self, 'key_check_timer'):
+                self.key_check_timer.stop()
+
             # Stop calibration check when search stops
-            self.stop_calibration_check()
-            
-            # Stop grid updates
-            self.grid_update_timer.stop()
-            
+            self._check_calibration()
+
             if not self.is_searching:
                 return
-            
+
             logger.info("Stopping search...")
-            
-            # Set flag to stop search
-            self.stop_requested = True
-            self.game_search.stop_requested = True
-            
+
             # Stop OCR
-            self.text_ocr._cancellation_requested = True
-            self.text_ocr.stop()
-            
-            # Update UI
-            self.is_searching = False
-            self.start_search_btn.setEnabled(True)
-            self.stop_search_btn.setEnabled(False)
-            self.progress_bar.setVisible(False)
-            self.grid_widget.set_search_in_progress(False)
-            self.search_timer.stop()
-            
-            # Show final screenshot in preview if available
-            if self.last_screenshot is not None:
-                self.preview_widget.set_preview(self.last_screenshot)
-            
+            if hasattr(self, 'text_ocr'):
+                self.text_ocr._cancellation_requested = True
+                self.text_ocr.stop()
+
+            # Clean up thread if it exists
+            if hasattr(self, 'search_thread') and self.search_thread.isRunning():
+                # Give the thread a chance to finish cleanly
+                self.search_thread.quit()
+                if not self.search_thread.wait(1000):  # Wait up to 1 second
+                    logger.warning("Search thread did not stop cleanly, forcing termination")
+                    self.search_thread.terminate()
+                    self.search_thread.wait()
+
+            # Update UI in a separate timer to avoid lockup
+            QTimer.singleShot(0, self._update_ui_after_stop)
+
             logger.info("Search stopped")
-            
+
         except Exception as e:
             logger.error(f"Error stopping search: {e}")
             # Try to ensure UI is in a good state
-            self.start_search_btn.setEnabled(True)
-            self.stop_search_btn.setEnabled(False)
-            self.progress_bar.setVisible(False)
+            QTimer.singleShot(0, self._update_ui_after_stop)
+
+    def _update_ui_after_stop(self):
+        """Update UI elements after search is stopped."""
+        try:
+            # Update UI state
+            self.is_searching = False
+            if hasattr(self, 'start_search_btn'):
+                self.start_search_btn.setEnabled(True)
+            if hasattr(self, 'stop_search_btn'):
+                self.stop_search_btn.setEnabled(False)
+            if hasattr(self, 'progress_bar'):
+                self.progress_bar.setVisible(False)
+            if hasattr(self, 'grid_widget'):
+                self.grid_widget.set_search_in_progress(False)
+            if hasattr(self, 'search_timer'):
+                self.search_timer.stop()
+
+            # Show final screenshot in preview if available
+            if hasattr(self, 'preview_widget') and self.last_screenshot is not None:
+                self.preview_widget.set_preview(self.last_screenshot)
+
+            # Ensure our window is visible but don't force focus
+            if self.window():
+                self.window().show()
+                self.window().raise_()
+
+        except Exception as e:
+            logger.error(f"Error updating UI after stop: {e}")
 
     def _update_drag_info(self):
         """Update the drag distances info label."""
@@ -706,69 +963,16 @@ class GameWorldSearchTab(QWidget):
         except Exception as e:
             logger.error(f"Error updating drag info: {e}")
 
-    def _update_grid_calibration(self):
-        """Update grid with current calibration data."""
-        try:
-            if not self.direction_system or not self.game_state:
-                return
-                
-            # Get current position from GameState
-            coords = self.game_state.get_coordinates()
-            if not coords:
-                logger.warning("No current position available for grid")
-                return
-                
-            # Convert coordinates to GameWorldPosition
-            current_pos = GameWorldPosition(
-                k=coords.k,
-                x=coords.x,
-                y=coords.y
-            )
-                
-            # Get drag distances
-            drag_distances = self.direction_system.get_drag_distances()
-            if not all(drag_distances):
-                logger.warning("Invalid drag distances")
-                return
-                
-            # Calculate grid size
-            east_distance, south_distance = drag_distances
-            
-            grid_width = (self.WORLD_SIZE + 1) // east_distance
-            if (self.WORLD_SIZE + 1) % east_distance:
-                grid_width += 1
-                
-            grid_height = (self.WORLD_SIZE + 1) // south_distance
-            if (self.WORLD_SIZE + 1) % south_distance:
-                grid_height += 1
-                
-            # Calculate current cell based on position
-            current_cell_x = current_pos.x // east_distance
-            current_cell_y = current_pos.y // south_distance
-            
-            logger.info(f"Updating grid calibration: size={grid_width}x{grid_height}, "
-                       f"current_pos={current_pos}, current_cell=({current_cell_x}, {current_cell_y})")
-            
-            # Update grid widget
-            self.grid_widget.set_grid_parameters(
-                grid_size=(grid_width, grid_height),
-                start_pos=current_pos,
-                drag_distances=drag_distances,
-                current_cell=(current_cell_x, current_cell_y)
-            )
-            
-            # Update drag info label
-            self._update_drag_info()
-            
-        except Exception as e:
-            logger.error(f"Error updating grid calibration: {e}")
-
     def _check_calibration(self):
         """Check if calibration has changed and update grid if needed."""
         try:
+            # Only check calibration if we're actively searching
+            if not self.is_searching:
+                return
+
             if not self.direction_widget or not self.direction_widget.direction_manager:
                 return
-                
+            
             direction_manager = self.direction_widget.direction_manager
             
             # Get current calibration state
@@ -779,53 +983,86 @@ class GameWorldSearchTab(QWidget):
             coords = None
             if self.game_state:
                 coords = self.game_state.get_coordinates()
+                if coords and coords.is_valid():
+                    logger.debug(f"Valid coordinates from game state: K:{coords.k} X:{coords.x} Y:{coords.y}")
             
             # Check if calibration state has changed or we have new coordinates
-            if (current_pos != self.last_calibration_state['position'] or
+            state_changed = (
+                current_pos != self.last_calibration_state['position'] or
                 drag_distances != self.last_calibration_state['drag_distances'] or
-                (coords and coords.is_valid())):
+                (coords and coords.is_valid() and coords != self.last_calibration_state.get('coords'))
+            )
+            
+            if state_changed:
+                logger.info("Calibration state change detected")
+                logger.debug(f"Old state - Position: {self.last_calibration_state['position']}, "
+                           f"Distances: {self.last_calibration_state['drag_distances']}")
+                logger.debug(f"New state - Position: {current_pos}, Distances: {drag_distances}")
                 
                 # Update calibration state
                 self.last_calibration_state['position'] = current_pos
                 self.last_calibration_state['drag_distances'] = drag_distances
+                if coords and coords.is_valid():
+                    self.last_calibration_state['coords'] = coords
                 
                 # Update grid calibration
                 self._update_grid_calibration()
                 
-                # Force grid to update
-                self.grid_widget.update()
+                # Update drag info label
+                self._update_drag_info()
                 
         except Exception as e:
-            logger.error(f"Error checking calibration: {e}")
+            logger.error(f"Error checking calibration: {e}", exc_info=True)
 
-    def _check_stop_keys(self):
-        """Check if Q or Escape is pressed, even when game window has focus."""
+    def _check_stop_keys(self) -> bool:
+        """Check if any stop keys are pressed.
+        
+        Returns:
+            bool: True if stop keys are pressed
+        """
         try:
-            if not self.is_searching:
-                return
-                
-            # Check for Q or Escape using GetAsyncKeyState
+            # Check if enough time has passed since last check
+            current_time = time.time()
+            if current_time - self.last_key_check_time < self.key_check_interval:
+                return False
+
+            # Update last check time
+            self.last_key_check_time = current_time
+
+            # Check for Escape key
+            escape_pressed = win32api.GetAsyncKeyState(win32con.VK_ESCAPE) & 0x8000
+            # Check for Q key
             q_pressed = win32api.GetAsyncKeyState(ord('Q')) & 0x8000
-            esc_pressed = win32api.GetAsyncKeyState(win32con.VK_ESCAPE) & 0x8000
-            
-            if q_pressed or esc_pressed:
-                logger.info("Stop key detected (Q/Escape)")
-                self._stop_search()
-                
+
+            if escape_pressed or q_pressed:
+                logger.info(f"Stop key detected: {'Escape' if escape_pressed else 'Q'}")
+                # Use QTimer.singleShot to stop search in a non-blocking way
+                QTimer.singleShot(0, self._stop_search)
+                return True
+
+            return False
+
         except Exception as e:
             logger.error(f"Error checking stop keys: {e}")
+            return False
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         """Handle key press events."""
         try:
-            if self.is_searching and (event.key() == Qt.Key.Key_Q or event.key() == Qt.Key.Key_Escape):
-                logger.info("Search stop requested via keyboard (Q/Escape)")
-                self._stop_search()
-            else:
-                super().keyPressEvent(event)
+            # Check for Escape or Q key
+            if event.key() in (Qt.Key.Key_Escape, Qt.Key.Key_Q):
+                logger.info(f"Stop key pressed: {event.key()}")
+                # Use QTimer.singleShot to stop search in a non-blocking way
+                QTimer.singleShot(0, self._stop_search)
+                event.accept()
+                return
+
+            super().keyPressEvent(event)
+
         except Exception as e:
-            logger.error(f"Error handling key press: {e}")
-            
+            logger.error(f"Error in keyPressEvent: {e}")
+            event.ignore()
+
     def showEvent(self, event) -> None:
         """Handle show events."""
         super().showEvent(event)
@@ -837,3 +1074,66 @@ class GameWorldSearchTab(QWidget):
         super().hideEvent(event)
         # Release keyboard when hidden
         self.releaseKeyboard()
+
+    @pyqtSlot(int, int)
+    def _update_progress(self, positions_checked: int, total_cells: int):
+        """Update progress bar with search progress."""
+        if total_cells > 0:
+            progress = min(100, int((positions_checked / total_cells) * 100))
+            self.progress_bar.setValue(progress)
+
+    @pyqtSlot(tuple, object)
+    def _update_position(self, current_pos: tuple, game_pos: GameWorldPosition):
+        """Update grid with current position."""
+        try:
+            # Update game coordinator position
+            self.game_coordinator.update_position(game_pos)
+            
+            # Update grid
+            self.grid_widget.set_current_position(current_pos[0], current_pos[1])
+            self.grid_widget.add_searched_position(current_pos[0], current_pos[1])
+            self.grid_widget.add_path_point(current_pos[0], current_pos[1])
+            
+            # Single update for all grid changes
+            self.grid_widget.update()
+            self.grid_widget.repaint()
+            
+        except Exception as e:
+            logger.error(f"Error updating position: {e}")
+
+    @pyqtSlot(tuple, list)
+    def _update_matches(self, current_pos: tuple, matches: List[SearchResult]):
+        """Update grid and results with matches."""
+        try:
+            for match in matches:
+                if match.game_position:
+                    self.grid_widget.set_cell_matches(
+                        current_pos[0], current_pos[1],
+                        1,  # Count of matches in cell
+                        match.game_position
+                    )
+                    self.results_widget.add_result(match)
+        except Exception as e:
+            logger.error(f"Error updating matches: {e}")
+
+    @pyqtSlot(object)
+    def _update_preview(self, screenshot):
+        """Update preview with new screenshot."""
+        try:
+            self.preview_widget.set_preview(screenshot)
+            self.last_screenshot = screenshot
+        except Exception as e:
+            logger.error(f"Error updating preview: {e}")
+
+    @pyqtSlot()
+    def _on_search_complete(self):
+        """Handle search completion."""
+        logger.info("Search completed")
+        self._stop_search()
+
+    @pyqtSlot(str)
+    def _on_search_error(self, error_msg: str):
+        """Handle search errors."""
+        logger.error(f"Search error: {error_msg}")
+        QMessageBox.critical(self, "Error", f"Search error: {error_msg}")
+        self._stop_search()

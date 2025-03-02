@@ -4320,3 +4320,53 @@ The game world search movement system was failing with the error "'GameWorldCoor
 - Grid now updates correctly during search
 - Position tracking is more accurate
 - Grid status reflects current search state
+
+### Key Handling and Grid Update Improvements - March 1, 2024
+
+**Issue 1**: Q/Escape key not reliably stopping search when game window has focus
+**Issue 2**: Search grid widget not updating properly during search
+
+**Root Cause**:
+1. Key Handling:
+   - Key check interval too long
+   - Window focus issues when game window active
+   - Inconsistent cleanup of timers
+
+2. Grid Updates:
+   - Updates not properly synchronized with search status
+   - Grid state not properly initialized at search start
+   - Update frequency too low during search
+
+**Fix**:
+1. Key Handling Improvements:
+   - Reduced key check timer interval to 50ms for better responsiveness
+   - Added periodic window focus management
+   - Added forced window focus when stopping search
+   - Improved timer cleanup
+
+2. Grid Update Enhancements:
+   - Connected grid status_updated signal to UI updates
+   - Increased grid update frequency during search (250ms)
+   - Added proper grid parameter initialization at search start
+   - Added forced grid updates at key points
+   - Improved grid state management
+   - Enhanced error handling and logging
+
+**Verification**:
+1. Key Handling:
+   - Q/Escape keys now respond more quickly
+   - Search can be stopped even when game window has focus
+   - Window focus properly managed during search
+
+2. Grid Updates:
+   - Grid now updates consistently during search
+   - Grid state properly reflects current search progress
+   - Grid updates more responsive
+   - Grid status properly displayed
+
+**Next Steps**:
+1. Monitor key handling performance
+2. Consider adding visual feedback when stop keys are pressed
+3. Consider adding configurable key check interval
+4. Monitor grid update performance
+5. Consider adding grid animation for smoother updates

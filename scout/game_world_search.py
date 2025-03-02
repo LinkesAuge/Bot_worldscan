@@ -241,95 +241,87 @@ class GameWorldSearch:
             radius += step_radius
             
     def _move_to_position(self, target_x: float, target_y: float) -> bool:
-        """
-        Move to a target position using calibrated drag operations.
+        """Move to a target position in the game world.
         
         Args:
-            target_x: Target X coordinate in game world units
-            target_y: Target Y coordinate in game world units
+            target_x: Target X coordinate
+            target_y: Target Y coordinate
             
         Returns:
             bool: True if movement was successful
         """
         try:
-            # Get current position
+            # Get current position from game coordinator
             current_pos = self.game_coordinator.current_position
             if not current_pos:
-                logger.error("Failed to get current position")
+                logger.error("No current position available")
                 return False
                 
-            # Get direction system
+            # Calculate distances to target
+            dx = target_x - current_pos.x
+            dy = target_y - current_pos.y
+            
+            # Get drag distances from direction system
             if not self.game_coordinator.direction_system:
                 logger.error("No direction system available")
                 return False
                 
-            # Calculate distances using direction system's method
-            dx, dy = self.game_coordinator.direction_system.calculate_wrapped_distance(
-                current_pos,
-                GameWorldPosition(current_pos.k, target_x, target_y)
-            )
-            
-            # Get direction definitions
-            north_def = self.game_coordinator.direction_system.north_definition
-            east_def = self.game_coordinator.direction_system.east_definition
-            
-            if not north_def or not east_def:
-                logger.error("Missing direction definitions")
-                return False
-                
-            # Get drag distances from direction system
-            east_drag_dist, north_drag_dist = self.game_coordinator.direction_system.get_drag_distances()
-            if not east_drag_dist or not north_drag_dist:
+            east_drag_dist, south_drag_dist = self.game_coordinator.direction_system.get_drag_distances()
+            if not east_drag_dist or not south_drag_dist:
                 logger.error("Invalid drag distances")
                 return False
-            
+                
             # Calculate number of drags needed
-            east_drags = int(abs(dx) / east_drag_dist) if east_drag_dist > 0 else 0
-            north_drags = int(abs(dy) / north_drag_dist) if north_drag_dist > 0 else 0
+            east_drags = int(abs(dx) / east_drag_dist)
+            north_drags = int(abs(dy) / south_drag_dist)
             
             logger.info(f"Moving to ({target_x}, {target_y}) - Drags needed: E:{east_drags}, N:{north_drags}")
             
-            # Perform east/west movement
-            if abs(dx) > 0.1:  # Only move if significant distance
-                for _ in range(east_drags):
-                    if dx > 0:
-                        # Move east
-                        if not self._perform_drag(east_def.screen_start, east_def.screen_end):
-                            return False
-                    else:
-                        # Move west (inverse of east)
-                        if not self._perform_drag(east_def.screen_end, east_def.screen_start):
-                            return False
-                    time.sleep(self.drag_delay)
-                    
-                    # Wait for coordinates to update
-                    time.sleep(0.5)
-                    
-                    # Update game coordinator position
-                    self.game_coordinator.update_position()
+            # Create target position
+            target_pos = GameWorldPosition(
+                k=current_pos.k,
+                x=target_x,
+                y=target_y
+            )
             
-            # Perform north/south movement
-            if abs(dy) > 0.1:  # Only move if significant distance
-                for _ in range(north_drags):
-                    if dy > 0:
-                        # Move north
-                        if not self._perform_drag(north_def.screen_start, north_def.screen_end):
-                            return False
-                    else:
-                        # Move south (inverse of north)
-                        if not self._perform_drag(north_def.screen_end, north_def.screen_start):
-                            return False
-                    time.sleep(self.drag_delay)
-                    
-                    # Wait for coordinates to update
-                    time.sleep(0.5)
-                    
-                    # Update game coordinator position
-                    self.game_coordinator.update_position()
+            # Update coordinator with target position
+            self.game_coordinator.update_position(target_pos)
             
-            # Final position update
-            self.game_coordinator.update_position()
-            
+            # Perform drags
+            for _ in range(east_drags):
+                if self.stop_requested:
+                    return False
+                    
+                # Drag east/west
+                if dx > 0:
+                    if not self.game_coordinator.direction_system.perform_drag("East"):
+                        logger.error("Failed to perform East drag")
+                        return False
+                else:
+                    if not self.game_coordinator.direction_system.perform_drag("West"):
+                        logger.error("Failed to perform West drag")
+                        return False
+                    
+                # Wait for movement to complete
+                time.sleep(0.5)
+                
+            for _ in range(north_drags):
+                if self.stop_requested:
+                    return False
+                    
+                # Drag north/south
+                if dy < 0:
+                    if not self.game_coordinator.direction_system.perform_drag("North"):
+                        logger.error("Failed to perform North drag")
+                        return False
+                else:
+                    if not self.game_coordinator.direction_system.perform_drag("South"):
+                        logger.error("Failed to perform South drag")
+                        return False
+                    
+                # Wait for movement to complete
+                time.sleep(0.5)
+                
             return True
             
         except Exception as e:

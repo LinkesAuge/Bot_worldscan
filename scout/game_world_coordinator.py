@@ -972,4 +972,26 @@ class GameWorldCoordinator:
                 return None
         except Exception as e:
             logger.error(f"Error getting calibration point: {e}", exc_info=True)
-            return None 
+            return None
+
+    def update_position(self, game_pos: GameWorldPosition) -> None:
+        """Update the current position and notify game state.
+        
+        Args:
+            game_pos: New game world position
+        """
+        if not game_pos:
+            return
+        
+        # Update game state if available
+        if self.game_state:
+            self.game_state.update_coordinates(
+                k=game_pos.k,
+                x=game_pos.x,
+                y=game_pos.y
+            )
+        
+        # Store current position
+        self.current_position = game_pos
+        
+        logger.info(f"Updated position to: {game_pos}") 

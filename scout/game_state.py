@@ -15,7 +15,7 @@ import time
 import logging
 import win32api
 import win32con
-from PyQt6.QtCore import QDateTime
+from PyQt6.QtCore import QDateTime, QObject, pyqtSignal
 from scout.window_manager import WindowManager
 from scout.game_world_position import GameWorldPosition, GameCoordinates
 
@@ -50,7 +50,7 @@ class TemplateMatchState:
         if self.locations is None:
             self.locations = []
 
-class GameState:
+class GameState(QObject):
     """
     Tracks the current state of the game including mouse operations and template matches.
     
@@ -63,6 +63,10 @@ class GameState:
     It uses the Win32 API to track mouse events within the game window.
     """
     
+    # Signals
+    coordinates_updated = pyqtSignal(GameWorldPosition)  # Emitted when coordinates change
+    coordinates_reset = pyqtSignal()  # Emitted when coordinates are reset
+    
     def __init__(self, window_manager: WindowManager):
         """
         Initialize game state tracking.
@@ -70,6 +74,7 @@ class GameState:
         Args:
             window_manager: WindowManager instance for window state tracking
         """
+        super().__init__()
         self.window_manager = window_manager
         self.drag_state = DragState()
         self.template_state = TemplateMatchState()
@@ -219,6 +224,12 @@ class GameState:
             # Log validity state
             if self._coordinates.is_valid():
                 logger.debug("Coordinates are now valid")
+                # Emit signal with current position
+                self.coordinates_updated.emit(GameWorldPosition(
+                    k=self._coordinates.k,
+                    x=self._coordinates.x,
+                    y=self._coordinates.y
+                ))
             else:
                 logger.warning("Coordinates are still incomplete or invalid")
         
@@ -244,6 +255,7 @@ class GameState:
         """
         self._coordinates = GameCoordinates()
         logger.info("Reset game coordinates to None")
+        self.coordinates_reset.emit()  # Emit reset signal
         
     def is_dragging(self) -> bool:
         """Check if drag operation is in progress."""
