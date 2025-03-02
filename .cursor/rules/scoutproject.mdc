@@ -7,7 +7,7 @@ alwaysApply: true
 
 ---
 TTHE TOP PRIORITY IS TO FOLLOW THE scoutproject.mdc in the rules and keept the Scout/TB_Scout_Application_Report.md always updated with all relevant information, so add/update/remove any new relevant information/context regarding the app like it's features, core components, file structure, code flow etc., !!!
-You must also use the the memory.mdc file as your memory and reference it as well as keep it updated with your current task status and the relevant context.
+You must also use the the scout/memory.mdc file as your memory and reference it as well as keep it updated with your current task status and the relevant context.
 The file must be referenced and updated with any progress or changes!
 You must also always first check the bugfixing.mdc and memory.mdc for any requests, questions, issues, errors or other problems you encounter before you do anything else and keep relevant information and context in there after you did something.
 

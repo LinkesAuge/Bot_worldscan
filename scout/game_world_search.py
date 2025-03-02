@@ -301,6 +301,12 @@ class GameWorldSearch:
                         if not self._perform_drag(east_def.screen_end, east_def.screen_start):
                             return False
                     time.sleep(self.drag_delay)
+                    
+                    # Wait for coordinates to update
+                    time.sleep(0.5)
+                    
+                    # Update game coordinator position
+                    self.game_coordinator.update_position()
             
             # Perform north/south movement
             if abs(dy) > 0.1:  # Only move if significant distance
@@ -314,6 +320,15 @@ class GameWorldSearch:
                         if not self._perform_drag(north_def.screen_end, north_def.screen_start):
                             return False
                     time.sleep(self.drag_delay)
+                    
+                    # Wait for coordinates to update
+                    time.sleep(0.5)
+                    
+                    # Update game coordinator position
+                    self.game_coordinator.update_position()
+            
+            # Final position update
+            self.game_coordinator.update_position()
             
             return True
             

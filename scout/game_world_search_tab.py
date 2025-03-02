@@ -579,31 +579,37 @@ class GameWorldSearchTab(QWidget):
                 self.progress_bar.setValue(progress)
             
             # Update grid visualization
-            if current_pos:
-                # Update current position
-                self.grid_widget.set_current_position(*current_pos)
-                
-                # Add to searched positions
-                self.grid_widget.add_searched_position(*current_pos)
-                
-                # Add to path
-                self.grid_widget.add_path_point(*current_pos)
-                
-                # Force grid to update
-                self.grid_widget.update()
-                
-                # Update matches
-                if matches:
-                    for match in matches:
-                        if match.game_position:
-                            self.grid_widget.set_cell_matches(
-                                current_pos[0], current_pos[1],
-                                1,  # Count of matches in cell
-                                match.game_position
-                            )
-                            
-                            # Add match to results
-                            self.results_widget.add_result(match)
+            if current_pos is not None:
+                # Get current game position
+                game_pos = self.game_search.get_game_position(current_pos[0], current_pos[1])
+                if game_pos:
+                    # Update current position in grid
+                    self.grid_widget.set_current_position(current_pos[0], current_pos[1])
+                    
+                    # Add to searched positions
+                    self.grid_widget.add_searched_position(current_pos[0], current_pos[1])
+                    
+                    # Add to path
+                    self.grid_widget.add_path_point(current_pos[0], current_pos[1])
+                    
+                    # Update grid status with current position
+                    self.grid_widget._update_status()
+                    
+                    # Force grid to update
+                    self.grid_widget.update()
+                    
+                    # Update matches
+                    if matches:
+                        for match in matches:
+                            if match.game_position:
+                                self.grid_widget.set_cell_matches(
+                                    current_pos[0], current_pos[1],
+                                    1,  # Count of matches in cell
+                                    match.game_position
+                                )
+                                
+                                # Add match to results
+                                self.results_widget.add_result(match)
             
             # Update preview with current screenshot
             screenshot = self.window_manager.capture_screenshot()
