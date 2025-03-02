@@ -493,6 +493,65 @@ The coordinate reading system has been simplified and improved by unifying the O
 
 This unification simplifies the user experience, reduces code complexity, and ensures consistent coordinate reading across all application features. Users now only need to select the OCR region once in the overlay tab, and that region will be used for all coordinate-related operations including calibration.
 
+## Game World Visualization
+
+The game world visualization system has been updated to use a view-based approach instead of a grid-based system. This change better represents the actual search pattern and screenshot areas:
+
+### Key Features
+
+1. **View Rectangles**
+   - Each rectangle represents an actual screenshot area
+   - Overlapping rectangles show true search coverage
+   - Size based on actual drag distances
+   - Coordinates displayed in X,Y format
+
+2. **State Visualization**
+   - Current view: Orange with full opacity
+   - Visited views: Light purple with reduced opacity
+   - Match views: Dark red with full opacity
+   - Path views: Connected with glowing lines and direction arrows
+
+3. **Movement Visualization**
+   - Path between views shown with glowing lines
+   - Direction arrows indicate movement pattern
+   - View centering biased towards movement direction
+   - Overlapping areas shown with varying opacity
+
+4. **Controls**
+   - Zoom slider for detail control
+   - Pan support for navigation
+   - Status display showing current position and view size
+
+### Technical Implementation
+
+The visualization is implemented in `scout/gui/game_world_grid.py` and includes:
+
+1. **State Management**
+   - ViewState enum for tracking view states
+   - Direction enum for movement tracking
+   - Dictionaries for view positions and states
+   - Path sequence tracking with directions
+
+2. **Rendering**
+   - QPainter-based rendering with antialiasing
+   - Layer-based drawing for proper overlap
+   - Glow effects for path visualization
+   - Dynamic opacity handling
+
+3. **Interaction**
+   - Mouse-based pan support
+   - Zoom control with slider
+   - Dynamic view centering with direction bias
+   - Status updates via signals
+
+### Future Considerations
+
+1. Performance optimization for large numbers of views
+2. View transition animations
+3. View cleanup/garbage collection
+4. Additional metadata display options
+5. Enhanced path visualization options
+
 ## Conclusion
 
 TB Scout is a sophisticated application that combines computer vision, automation, and GUI technologies to provide a powerful tool for interacting with the Total Battle game. Its modular design allows for easy extension and maintenance, while its feature set provides comprehensive capabilities for game automation.

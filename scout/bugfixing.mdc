@@ -4370,3 +4370,24 @@ The game world search movement system was failing with the error "'GameWorldCoor
 3. Consider adding configurable key check interval
 4. Monitor grid update performance
 5. Consider adding grid animation for smoother updates
+
+## Game World Grid Initialization Error (Fixed)
+
+**Issue**: KeyError when trying to access view position during initialization
+- Error occurred in `_center_on_current_view` when trying to access `view_positions[self.current_view]`
+- Root cause: View position wasn't properly initialized before centering attempt
+
+**Fix**:
+1. Added validation in `_center_on_current_view` to check if view position exists
+2. Modified initialization flow in `set_grid_parameters` and `update_grid_parameters`
+3. Ensured proper view state and position initialization
+4. Removed grid-based code and updated to view-based approach
+
+**Changes**:
+- Added position existence check before access
+- Updated initialization methods to properly set up view state
+- Removed unused grid-based code
+- Improved error handling and validation
+
+**Status**: Fixed
+**Date**: [Current Date]
